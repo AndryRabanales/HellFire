@@ -77,10 +77,10 @@ async function renderTicket(ticket, ev, imgOverride) {
   const variant = ticket.type_is_vip ? 'vip' : 'gen';   // cada tipo usa SU flyer
   const flyer = imgOverride !== undefined ? imgOverride
     : await loadFlyer(variant, ev['flyer_' + variant]);
-  // Boleto = pantalla de celular (800×1730). El flyer LLENA su zona por completo
-  // (cover), sin bordes/marcos. Abajo, una banda SEPARADA (línea punteada) con el
-  // nombre + QR, que diferencia la info del boleto del diseño del flyer.
-  const W = 800, BAND = 280, H = 1730, FLY = H - BAND;
+  // Boleto más corto para que quepa cómodo al descargarlo en el celular (no tan largo).
+  // El flyer LLENA su zona por completo (cover), sin bordes/marcos. Abajo, una banda
+  // SEPARADA (línea punteada) con el nombre + QR, que diferencia la info del flyer.
+  const W = 800, BAND = 280, H = 1300, FLY = H - BAND;   // 800×1300, más compacto
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
