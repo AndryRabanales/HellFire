@@ -78,12 +78,21 @@ Todo queda escrito en **`data/CREDENCIALES_INICIALES.txt`**.
 1. Conecta este repo de GitHub a un servicio de Railway (deploy automático en cada push).
 2. Agrega una base de datos: **+ New → Database → PostgreSQL**.
 3. En el servicio de la app → **Variables** → agrega:
-   `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (referencia a la base creada).
+   - `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (referencia a la base creada)
+   - `ADMIN_USER` = tu usuario o correo (ej. `andry@correo.com`)
+   - `ADMIN_PASSWORD` = la contraseña que tú elijas
 4. Genera el dominio público (Settings → Networking → Generate Domain).
 
 El `Procfile` arranca con gunicorn. En el primer arranque la app crea las tablas,
-el admin inicial (`admin` / `onfire2026` — cámbiala) y 4 vendedores con códigos
-nuevos (se ven en los logs de Railway y en el panel Admin → Vendedores).
+el **admin inicial con TUS credenciales** (`ADMIN_USER` / `ADMIN_PASSWORD`) y 4
+vendedores con códigos nuevos (se ven en los logs y en el panel Admin → Vendedores).
+
+- Si NO defines `ADMIN_USER`/`ADMIN_PASSWORD`, se crea uno por defecto
+  `admin` / `onfire2026` (solo conveniente en local; cámbialo en producción).
+- `ADMIN_USER` acepta un **correo** como nombre de usuario.
+- Puedes agregar esas variables incluso después del primer despliegue: en el
+  siguiente reinicio, la app crea ese administrador sin borrar nada.
+- Desde el panel (Admin → Admins) puedes crear y eliminar administradores.
 
 ## Detalles clave del funcionamiento
 

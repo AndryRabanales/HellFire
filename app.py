@@ -306,11 +306,19 @@ def init_db():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
     db.commit()
 
-    # "fresh" = todavía no hay administradores → sembrar datos iniciales
-    fresh = db.execute("SELECT COUNT(*) AS c FROM admins").fetchone()["c"] == 0
-    if fresh:
+    # Admin inicial: si defines ADMIN_USER + ADMIN_PASSWORD (en Railway → Variables),
+    # el admin arranca con TUS credenciales. Si no, usa el admin por defecto solo en local.
+    env_user = (os.environ.get("ADMIN_USER") or "").strip()
+    env_pass = os.environ.get("ADMIN_PASSWORD") or ""
+    use_env = bool(env_user and env_pass)
+    init_user = env_user if use_env else "admin"
+    init_pass = env_pass if use_env else "onfire2026"
+
+    n_admins = db.execute("SELECT COUNT(*) AS c FROM admins").fetchone()["c"]
+    if n_admins == 0:
+        # primera vez: crear admin inicial + catálogo + 4 vendedores
         db.execute("INSERT INTO admins(username, pass_hash, created_at) VALUES(?,?,?)",
-                   ("admin", hash_password("onfire2026"), now_iso()))
+                   (init_user, hash_password(init_pass), now_iso()))
         for t in [("General", 25000, 0), ("VIP", 50000, 1)]:
             db.execute("INSERT INTO ticket_types(name, price_cents, is_vip) VALUES(?,?,?)", t)
         for f in ["Ingeniería", "Medicina", "Derecho", "Economía", "Arquitectura", "Externo"]:
@@ -328,19 +336,26 @@ def init_db():
                        (f"Vendedor {i}", code, now_iso()))
         db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
                    ("sistema", "inicializacion",
-                    "Sistema inicializado con admin inicial y 4 vendedores", now_iso()))
+                    f"Sistema inicializado. Admin inicial: {init_user}", now_iso()))
         db.commit()
-        try:
-            creds = os.path.join(DATA, "CREDENCIALES_INICIALES.txt")
-            with open(creds, "w") as f:
-                f.write("OnFire — credenciales iniciales\n================================\n\n")
-                f.write("Administrador:  usuario: admin   contraseña: onfire2026\n")
-                f.write("(cámbiala creando otro admin y borrando este, o guárdala bien)\n\n")
-                for i, c in enumerate(codes, 1):
-                    f.write(f"Vendedor {i}: código {c}\n")
-        except OSError:
-            pass
-        print(f"[OnFire] Base creada. Admin: admin/onfire2026 · Códigos vendedor: {', '.join(codes)}")
+        if not use_env:   # solo guardamos la contraseña en archivo cuando es la de por defecto (local)
+            try:
+                with open(os.path.join(DATA, "CREDENCIALES_INICIALES.txt"), "w") as f:
+                    f.write("OnFire — credenciales iniciales\n================================\n\n")
+                    f.write(f"Administrador:  usuario: {init_user}   contraseña: {init_pass}\n\n")
+                    for i, c in enumerate(codes, 1):
+                        f.write(f"Vendedor {i}: código {c}\n")
+            except OSError:
+                pass
+        print(f"[OnFire] Base creada. Admin: '{init_user}'"
+              + ("" if use_env else f"/{init_pass}")
+              + f" · Códigos vendedor: {', '.join(codes)}")
+    elif use_env and not db.execute("SELECT 1 FROM admins WHERE username=?", (env_user,)).fetchone():
+        # ya había datos, pero definiste un admin por variables que aún no existía → crearlo
+        db.execute("INSERT INTO admins(username, pass_hash, created_at) VALUES(?,?,?)",
+                   (env_user, hash_password(env_pass), now_iso()))
+        db.commit()
+        print(f"[OnFire] Admin '{env_user}' creado desde ADMIN_USER/ADMIN_PASSWORD.")
     db.commit()
     db.close()
 
