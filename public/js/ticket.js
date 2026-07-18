@@ -77,25 +77,26 @@ async function renderTicket(ticket, ev, imgOverride) {
   const variant = ticket.type_is_vip ? 'vip' : 'gen';   // cada tipo usa SU flyer
   const flyer = imgOverride !== undefined ? imgOverride
     : await loadFlyer(variant, ev['flyer_' + variant]);
-  // El alto del flyer se adapta a la proporción REAL de la imagen subida, para que
-  // se aprecie completa sin recortes (en vez de forzarla a una caja fija con "cover").
-  // El boleto queda "estirado" verticalmente según esa proporción; el footer es fijo.
-  const W = 800, BAND = 280;
-  const FLY = flyer
-    ? clamp(Math.round(W * flyer.height / flyer.width), 700, 2400)
-    : 1450;   // sin flyer: placeholder con proporción de celular por defecto
-  const H = FLY + BAND;
+  // Proporción FIJA de pantalla de celular → el boleto llena el móvil sin barras
+  // laterales. El flyer LLENA el ancho (borde a borde); el sobrante o recorte queda
+  // arriba/abajo, nunca a los lados. Un pequeño margen arriba deja "aire" de diseño.
+  const W = 800, BAND = 280, H = 1730, FLY = H - BAND;   // 800×1730 ≈ pantalla de celular
+  const TOP_MARGIN = 26;                                  // borde superior visible
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
 
-  // ---- zona del flyer (grande, imagen completa sin recortar a escala 1)
+  // ---- zona del flyer
   const focusY = clamp(ev['flyer_focus_' + variant] ?? ev.flyer_focus ?? 0.5, 0, 1);
   const scale = clamp(ev['flyer_scale_' + variant] ?? ev.flyer_scale ?? 1, 1, 3);
   if (flyer) {
-    const s = (W / flyer.width) * scale;   // ajuste exacto al ancho; con scale=1 no recorta nada
+    const areaTop = TOP_MARGIN, areaH = FLY - TOP_MARGIN;
+    const s = (W / flyer.width) * scale;                 // llena el ANCHO siempre
     const dw = flyer.width * s, dh = flyer.height * s;
-    ctx.drawImage(flyer, (W - dw) / 2, (FLY - dh) * focusY, dw, dh);   // focusY mueve en vertical si hay zoom
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, areaTop, W, areaH); ctx.clip();   // no invade el footer
+    ctx.drawImage(flyer, (W - dw) / 2, areaTop + (areaH - dh) * focusY, dw, dh);
+    ctx.restore();
   } else {
     // placeholder con el nombre del evento (estilo del mockup de acceso)
     const g = ctx.createRadialGradient(W / 2, 60, 40, W / 2, FLY * 0.42, FLY);
