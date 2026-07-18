@@ -10,33 +10,37 @@
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Manrope:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/hellfire.css">
 <style>
-  #cam-wrap{position:relative;border-radius:18px;overflow:hidden;background:#000;
-    border:1px solid var(--line-strong);aspect-ratio:1/1}
+  /* pantalla completa, sin scroll */
+  #view-scan{position:fixed;inset:0;z-index:1;display:flex;flex-direction:column;overflow:hidden}
+  .scan-top{flex:none;display:flex;align-items:center;justify-content:space-between;padding:11px 15px}
+  .scan-top .who{font:700 14px Manrope;color:var(--cream)}
+  .live{display:flex;align-items:center;gap:6px;font:600 10px Manrope;color:var(--ok)}
+  .live .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .live.off{color:var(--danger)} .live.off .dot{background:var(--danger);box-shadow:none}
+  #cam-wrap{position:relative;flex:1;min-height:0;background:#000;overflow:hidden;
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
   #cam{width:100%;height:100%;object-fit:cover;display:block}
-  #cam-frame{position:absolute;inset:15%;border:2.5px solid rgba(255,150,80,.8);border-radius:16px;
-    box-shadow:0 0 0 2000px rgba(0,0,0,.35);pointer-events:none}
-  .result{border-radius:20px;padding:28px 20px;text-align:center;animation:pop .15s ease}
-  .result .r-title{font:800 40px/1 Cinzel}
-  .result .r-name{font:800 24px/1.2 Manrope;color:var(--cream);margin-top:14px}
-  .result .r-meta{font:500 13px Manrope;color:var(--cream-60);margin-top:10px}
-  .result.ok{background:rgba(126,226,168,.14);border:3px solid rgba(126,226,168,.7)}
-  .result.ok .r-title{color:var(--ok)}
-  .result.bad{background:rgba(232,112,106,.14);border:3px solid rgba(232,112,106,.75)}
-  .result.bad .r-title{color:var(--danger)}
-  .result.warn{background:rgba(255,150,80,.1);border:2px solid var(--line-strong)}
-  .result.warn .r-title{font-size:22px;color:var(--ember-soft)}
-  /* distintivo de tipo: VIP dorado gigante / General discreto */
-  .r-type{display:inline-block;margin-top:14px;padding:10px 26px;border-radius:14px;
-    font:800 22px "Space Grotesk";letter-spacing:.08em}
-  .r-type.vip{background:linear-gradient(150deg,#f3d27a,#d9a53a);color:#3a1e00;
-    box-shadow:0 0 26px rgba(243,210,122,.45)}
-  .r-type.gen{background:rgba(255,255,255,.07);border:1px solid var(--line-strong);color:var(--cream-60)}
-  .netbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;font:600 11px Manrope}
-  .netbar .dot{width:9px;height:9px;border-radius:50%}
-  .online{background:rgba(126,226,168,.08);border:1px solid rgba(126,226,168,.35);color:var(--ok)}
-  .online .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
-  .offline{background:rgba(232,112,106,.1);border:1px solid rgba(232,112,106,.5);color:var(--danger)}
-  .offline .dot{background:var(--danger)}
+  #cam-frame{position:absolute;inset:17%;border:2.5px solid rgba(255,150,80,.85);border-radius:20px;
+    box-shadow:0 0 0 2000px rgba(0,0,0,.28);pointer-events:none}
+  #cam-status{position:absolute;left:0;right:0;bottom:16px;text-align:center;
+    font:500 12px Manrope;color:rgba(255,255,255,.72);text-shadow:0 1px 4px #000;padding:0 20px}
+  /* mensaje de resultado: compacto, encima de la cámara */
+  #result{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+    justify-content:center;gap:11px;padding:26px;text-align:center;animation:pop .12s ease}
+  #result.show{display:flex}
+  #result.ok{background:rgba(12,38,25,.95)}
+  #result.bad{background:rgba(46,13,15,.95)}
+  #result .r-title{font:800 30px/1 Cinzel}
+  #result.ok .r-title{color:var(--ok)}
+  #result.bad .r-title{color:var(--danger)}
+  #result .r-name{font:700 18px/1.25 Manrope;color:#fff;max-width:90%}
+  #result .r-meta{font:500 12px Manrope;color:rgba(255,255,255,.6)}
+  .r-type{padding:7px 20px;border-radius:11px;font:800 15px "Space Grotesk";letter-spacing:.06em}
+  .r-type.vip{background:linear-gradient(150deg,#f3d27a,#d9a53a);color:#3a1e00;box-shadow:0 0 20px rgba(243,210,122,.5)}
+  .r-type.gen{background:rgba(255,255,255,.1);color:rgba(255,255,255,.72)}
+  #btn-accept{margin-top:8px;padding:13px 46px;border:none;border-radius:14px;
+    background:#f6f1e7;color:#141210;font:800 16px Manrope;cursor:pointer}
+  #btn-accept:active{transform:scale(.97)}
 </style>
 </head>
 <body>
@@ -58,28 +62,19 @@
 </div>
 
 <!-- escáner -->
-<div id="view-scan" class="wrap hidden">
-  <div class="topbar">
+<div id="view-scan" class="hidden">
+  <div class="scan-top">
     <div class="row"><div class="avatar">▣</div><div class="who">Puerta</div></div>
-    <button class="linkout" id="btn-logout"><span style="font-size:13px">⏻</span>Salir</button>
+    <div class="row" style="gap:16px">
+      <div class="live" id="live"><span class="dot"></span><span id="live-text">En vivo</span></div>
+      <button class="linkout" id="btn-logout" style="padding:4px 2px"><span style="font-size:13px">⏻</span>&nbsp;Salir</button>
+    </div>
   </div>
-
-  <div class="netbar online mt12" id="netbar"><span class="dot"></span><span id="net-text">Conectado — validando en vivo</span></div>
-
-  <div id="cam-wrap" class="mt12">
+  <div id="cam-wrap">
     <video id="cam" muted playsinline></video>
     <div id="cam-frame"></div>
-  </div>
-  <div class="muted mt8" style="text-align:center" id="cam-status">Apunta al código QR del boleto</div>
-
-  <div id="result" class="mt12"></div>
-
-  <div class="mt12">
-    <div class="label">O escribe el folio a mano</div>
-    <div class="row">
-      <input class="input grow" id="manual" placeholder="HF-0001" autocomplete="off" style="text-transform:uppercase">
-      <button class="btn sm" id="btn-manual" style="padding:14px 18px">Validar</button>
-    </div>
+    <div id="cam-status">Apunta la cámara al código QR</div>
+    <div id="result"></div>
   </div>
 </div>
 
