@@ -77,10 +77,10 @@ async function renderTicket(ticket, ev, imgOverride) {
   const variant = ticket.type_is_vip ? 'vip' : 'gen';   // cada tipo usa SU flyer
   const flyer = imgOverride !== undefined ? imgOverride
     : await loadFlyer(variant, ev['flyer_' + variant]);
-  // Boleto = pantalla de celular COMPLETA (800×1730). El flyer llena TODO el fondo
-  // (sin bordes ni barras). El nombre + QR van en una franja translúcida abajo que
-  // deja ver el diseño detrás, sin tapar la info del flyer.
-  const W = 800, H = 1730;
+  // Boleto = pantalla de celular (800×1730). El flyer LLENA su zona por completo
+  // (cover), sin bordes/marcos. Abajo, una banda SEPARADA (línea punteada) con el
+  // nombre + QR, que diferencia la info del boleto del diseño del flyer.
+  const W = 800, BAND = 280, H = 1730, FLY = H - BAND;
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
@@ -88,48 +88,55 @@ async function renderTicket(ticket, ev, imgOverride) {
   const focusY = clamp(ev['flyer_focus_' + variant] ?? ev.flyer_focus ?? 0.5, 0, 1);
   const scale = clamp(ev['flyer_scale_' + variant] ?? ev.flyer_scale ?? 1, 1, 3);
   if (flyer) {
-    const s = Math.max(W / flyer.width, H / flyer.height) * scale;   // "cover": llena todo
+    const s = Math.max(W / flyer.width, FLY / flyer.height) * scale;   // cover: llena la zona sin bordes
     const dw = flyer.width * s, dh = flyer.height * s;
-    ctx.drawImage(flyer, (W - dw) / 2, (H - dh) * focusY, dw, dh);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, FLY); ctx.clip();               // no invade la banda
+    ctx.drawImage(flyer, (W - dw) / 2, (FLY - dh) * focusY, dw, dh);
+    ctx.restore();
   } else {
     // placeholder con el nombre del evento (estilo del mockup de acceso)
-    const g = ctx.createRadialGradient(W / 2, 90, 40, W / 2, H * 0.4, H);
+    const g = ctx.createRadialGradient(W / 2, 80, 40, W / 2, FLY * 0.42, FLY);
     g.addColorStop(0, '#3a0f04'); g.addColorStop(0.45, '#160603'); g.addColorStop(1, '#050302');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, FLY);
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,150,80,.7)';
     ctx.font = '400 28px "Space Grotesk", monospace';
-    letterSpaced(ctx, (ev.event_subtitle || '').toUpperCase(), W / 2, H * 0.38 - 70, 14);
+    letterSpaced(ctx, (ev.event_subtitle || '').toUpperCase(), W / 2, FLY * 0.42 - 70, 14);
     ctx.fillStyle = '#ff7a2e';
     ctx.shadowColor = 'rgba(255,110,30,.75)'; ctx.shadowBlur = 34;
     ctx.font = '800 104px Cinzel, serif';
-    ctx.fillText(ev.event_name || 'EVENTO', W / 2, H * 0.38 + 30);
+    ctx.fillText(ev.event_name || 'EVENTO', W / 2, FLY * 0.42 + 30);
     ctx.shadowBlur = 0;
   }
+  // degradado suave hacia la banda
+  const fade = ctx.createLinearGradient(0, FLY - 160, 0, FLY);
+  fade.addColorStop(0, 'rgba(5,3,2,0)'); fade.addColorStop(1, '#050302');
+  ctx.fillStyle = fade; ctx.fillRect(0, FLY - 160, W, 160);
 
-  // ---- franja inferior translúcida (nombre + QR) SOBRE el flyer, sin tapar el diseño
-  const oH = 330, oy = H - oH;
-  const grad = ctx.createLinearGradient(0, oy, 0, H);
-  grad.addColorStop(0, 'rgba(5,3,2,0)');
-  grad.addColorStop(0.42, 'rgba(5,3,2,0.82)');
-  grad.addColorStop(1, 'rgba(5,3,2,0.97)');
-  ctx.fillStyle = grad; ctx.fillRect(0, oy, W, oH);
+  // ---- banda inferior SEPARADA (línea punteada + nombre + QR)
+  ctx.fillStyle = '#050302';
+  ctx.fillRect(0, FLY, W, BAND);
+  ctx.strokeStyle = 'rgba(255,120,40,.35)';
+  ctx.lineWidth = 2; ctx.setLineDash([10, 8]);
+  ctx.beginPath(); ctx.moveTo(0, FLY + 1); ctx.lineTo(W, FLY + 1); ctx.stroke();
+  ctx.setLineDash([]);
 
   const padX = 44;
-  const qrSize = 210;                                  // QR grande, fácil de escanear
-  const qrX = W - padX - qrSize, qrY = H - qrSize - 62;
-  ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 26;
+  const qrSize = 224;                                  // QR grande, fácil de escanear
+  const qrX = W - padX - qrSize, qrY = FLY + 28;
+  ctx.shadowColor = 'rgba(255,110,30,.35)'; ctx.shadowBlur = 24;
   drawQR(ctx, ticket.qr_payload || ticket.qr_token, qrX, qrY, qrSize);
   ctx.shadowBlur = 0;
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(255,180,120,.85)';
+  ctx.fillStyle = 'rgba(255,150,80,.6)';
   ctx.font = '600 13px "Space Grotesk", monospace';
-  letterSpaced(ctx, 'ESCANÉALO EN LA PUERTA', qrX + qrSize / 2, qrY + qrSize + 24, 1.6);
+  letterSpaced(ctx, 'ESCANÉALO EN LA PUERTA', qrX + qrSize / 2, qrY + qrSize + 22, 1.6);
 
-  // texto: a nombre de · nombre · facultad · tipo (sin precio)
+  // texto de la banda: a nombre de · nombre · facultad · tipo (sin precio)
   ctx.textAlign = 'left';
-  let ty = H - 214;
-  ctx.fillStyle = 'rgba(255,180,120,.75)';
+  let ty = FLY + 66;
+  ctx.fillStyle = 'rgba(255,150,80,.6)';
   ctx.font = '600 15px "Space Grotesk", monospace';
   letterSpaced(ctx, 'A NOMBRE DE', padX, ty, 2.6);
   if (ticket.type_is_vip) {
@@ -142,20 +149,18 @@ async function renderTicket(ticket, ev, imgOverride) {
     ctx.font = '800 17px "Space Grotesk", monospace';
     ctx.fillText('★ VIP', bx + 16, by + 22);
   }
-  ty += 56;
-  ctx.fillStyle = '#fff';
-  ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 8;
+  ty += 54;
+  ctx.fillStyle = '#f6f1e7';
   const nameFont = nameFontFor(ticket.buyer_name);
-  fitText(ctx, ticket.buyer_name, padX, ty, W - padX * 2 - qrSize - 30, 44, '800 %px ' + nameFont);
-  ty += 46;
-  ctx.fillStyle = 'rgba(246,241,231,.72)';
-  ctx.font = '600 22px Manrope, sans-serif';
+  fitText(ctx, ticket.buyer_name, padX, ty, W - padX * 2 - qrSize - 30, 42, '800 %px ' + nameFont);
+  ty += 44;
+  ctx.fillStyle = 'rgba(246,241,231,.55)';
+  ctx.font = '600 21px Manrope, sans-serif';
   ctx.fillText(ticket.faculty_name, padX, ty);
-  ty += 38;
+  ty += 36;
   ctx.fillStyle = '#ffb27a';
-  ctx.font = '700 25px Manrope, sans-serif';
+  ctx.font = '700 24px Manrope, sans-serif';
   ctx.fillText(ticket.type_name, padX, ty);
-  ctx.shadowBlur = 0;
 
   return cv;
 }
