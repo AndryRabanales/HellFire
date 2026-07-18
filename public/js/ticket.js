@@ -77,10 +77,11 @@ async function renderTicket(ticket, ev, imgOverride) {
   const variant = ticket.type_is_vip ? 'vip' : 'gen';   // cada tipo usa SU flyer
   const flyer = imgOverride !== undefined ? imgOverride
     : await loadFlyer(variant, ev['flyer_' + variant]);
-  // Boleto más corto para que quepa cómodo al descargarlo en el celular (no tan largo).
-  // El flyer LLENA su zona por completo (cover), sin bordes/marcos. Abajo, una banda
-  // SEPARADA (línea punteada) con el nombre + QR, que diferencia la info del flyer.
-  const W = 800, BAND = 280, H = 1300, FLY = H - BAND;   // 800×1300, más compacto
+  // Boleto de alto medio (800×1550): cómodo al descargarlo, sin verse "zoom".
+  // El flyer se ajusta al ANCHO a escala natural (no se agranda), llenando de borde a
+  // borde; el sobrante o recorte queda arriba/abajo (nunca a los lados). Abajo, una
+  // banda SEPARADA (línea punteada) con el nombre + QR.
+  const W = 800, BAND = 280, H = 1550, FLY = H - BAND;   // 800×1550
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
@@ -88,7 +89,7 @@ async function renderTicket(ticket, ev, imgOverride) {
   const focusY = clamp(ev['flyer_focus_' + variant] ?? ev.flyer_focus ?? 0.5, 0, 1);
   const scale = clamp(ev['flyer_scale_' + variant] ?? ev.flyer_scale ?? 1, 1, 3);
   if (flyer) {
-    const s = Math.max(W / flyer.width, FLY / flyer.height) * scale;   // cover: llena la zona sin bordes
+    const s = (W / flyer.width) * scale;   // llena el ANCHO a escala natural (sin zoom)
     const dw = flyer.width * s, dh = flyer.height * s;
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, W, FLY); ctx.clip();               // no invade la banda
