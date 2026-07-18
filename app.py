@@ -59,13 +59,18 @@ def money(cents):
     return float(cents or 0) / 100.0
 
 # ------------------------------------------------------- contenido del QR
-def build_qr_text(folio, buyer, type_name, faculty):
-    """Contenido del QR: TEXTO LEGIBLE. Cualquier lector del celular (Google, cámara)
-    lo muestra sin internet; el guardia compara el nombre con la INE.
-    Ej.:  Laura Sofía Jiménez Robles
-          VIP · Ingeniería
-          Folio HF-0427"""
-    return f"{buyer}\n{type_name} · {faculty}\nFolio {folio}"
+# El QR lleva un token aleatorio de 96 bits imposible de adivinar. El escáner lo
+# valida contra la base en tiempo real; nadie puede fabricar un QR válido.
+# Los datos legibles (nombre, tipo, folio) van IMPRESOS en el boleto, no en el QR.
+
+def folio_from_scan(raw):
+    """Del texto escaneado saca el identificador para buscar el boleto:
+    el token tal cual, o el folio si se escribió/escaneó 'Folio HF-0001'."""
+    raw = (raw or "").strip()
+    m = re.search(r"[Ff]olio\s+(\S+)", raw)
+    if m:
+        return m.group(1)
+    return raw
 
 # ---------------------------------------------------------------- base de datos
 # Funciona con SQLite (local, por defecto) o PostgreSQL (si existe DATABASE_URL,
@@ -193,7 +198,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   folio TEXT NOT NULL UNIQUE,
   qr_token TEXT NOT NULL UNIQUE,
-  qr_payload TEXT,                 -- QR firmado autocontenido (validación offline)
+  qr_payload TEXT,                 -- lo que va dentro del QR (token secreto)
   buyer_name TEXT NOT NULL,
   faculty_id INTEGER,
   faculty_name TEXT NOT NULL,      -- congelado al generar
@@ -204,8 +209,9 @@ CREATE TABLE IF NOT EXISTS tickets (
   seller_id INTEGER,
   seller_name TEXT NOT NULL,       -- congelado (se conserva si se elimina al vendedor)
   seller_code TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active',  -- active | void
+  status TEXT NOT NULL DEFAULT 'active',  -- active | used | void
   created_at TEXT NOT NULL,
+  used_at TEXT,                    -- cuándo entró (primer escaneo en la puerta)
   voided_at TEXT,
   voided_by TEXT,
   void_reason TEXT
@@ -297,11 +303,17 @@ def init_db():
         raise RuntimeError("no se pudo conectar a la base de datos")
 
     db.executescript(_schema_for_backend())
-    # migración suave (solo SQLite antiguo): agregar qr_payload si falta
-    if not IS_PG:
+    # migración suave: agregar columnas nuevas si la base viene de una versión anterior
+    if IS_PG:
+        for col in ("qr_payload TEXT", "used_at TEXT"):
+            db.execute(f"ALTER TABLE tickets ADD COLUMN IF NOT EXISTS {col}")
+    else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
             db.execute("ALTER TABLE tickets ADD COLUMN qr_payload TEXT")
+        if "used_at" not in cols:
+            db.execute("ALTER TABLE tickets ADD COLUMN used_at TEXT")
+    db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
     db.commit()
@@ -363,15 +375,16 @@ def init_db():
 
 HEADERS = ["Folio", "Comprador", "Facultad", "Tipo de boleto", "Precio",
            "Vendedor", "Código vendedor", "Fecha de venta", "Estado",
-           "Anulado por", "Motivo anulación"]
+           "Ingresó", "Hora de ingreso", "Anulado por", "Motivo anulación"]
 
-STATUS_ES = {"active": "ACTIVO", "void": "ANULADO"}
+STATUS_ES = {"active": "ACTIVO", "used": "INGRESÓ", "void": "ANULADO"}
 
 def _ticket_row(t):
     return [
         t["folio"], t["buyer_name"], t["faculty_name"], t["type_name"],
         money(t["price_cents"]), t["seller_name"], t["seller_code"],
         t["created_at"], STATUS_ES.get(t["status"], t["status"]),
+        "Sí" if t["used_at"] else "No", t["used_at"] or "",
         t["voided_by"] or "", t["void_reason"] or "",
     ]
 
@@ -387,7 +400,7 @@ def build_workbook(rows, summary=None):
         c.alignment = Alignment(horizontal="center")
     for t in rows:
         ws.append(_ticket_row(t))
-    for i, w in enumerate([10, 28, 16, 14, 10, 22, 14, 19, 10, 16, 26], 1):
+    for i, w in enumerate([10, 28, 16, 14, 10, 22, 14, 19, 10, 9, 19, 16, 26], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     for row in ws.iter_rows(min_row=2, min_col=5, max_col=5):
         for c in row:
@@ -614,7 +627,7 @@ def ticket_public(t):
             "buyer_name": t["buyer_name"], "faculty_name": t["faculty_name"],
             "type_name": t["type_name"], "type_is_vip": t["type_is_vip"],
             "price": money(t["price_cents"]), "status": t["status"],
-            "created_at": t["created_at"],
+            "created_at": t["created_at"], "used_at": t["used_at"],
             "seller_name": t["seller_name"], "seller_code": t["seller_code"]}
 
 @app.post("/api/tickets")
@@ -651,7 +664,7 @@ def create_ticket():
             n = base + 1 + attempt
             folio = f"{prefix}{n:04d}"
             token = secrets.token_urlsafe(12)   # RF-46: no adivinable ni secuencial
-            qr_payload = build_qr_text(folio, buyer, tt["name"], fac["name"])
+            qr_payload = token                  # el QR lleva el token secreto
             try:
                 cur = db.execute("""INSERT INTO tickets
                     (folio, qr_token, qr_payload, buyer_name, faculty_id, faculty_name,
@@ -703,6 +716,38 @@ def get_ticket(tid):
     if s["role"] == "seller" and t["seller_id"] != s["seller"]["id"]:
         return jsonify(error="no existe"), 404   # RF-74: nunca boletos de otro
     return jsonify(ticket=ticket_public(t))
+
+# ---------------------------------------------------------------- API: escaneo en la puerta
+
+@app.post("/api/scan")
+def scan():
+    """Valida un boleto en tiempo real y lo marca como INGRESÓ en el primer escaneo.
+    Cierra el boleto: cualquier copia o falso sale en rojo."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    ident = folio_from_scan((request.json or {}).get("code", ""))
+    if not ident:
+        return jsonify(result="no_existe")
+    t = db.execute("SELECT * FROM tickets WHERE qr_token=? OR folio=?",
+                   (ident, ident.upper())).fetchone()
+    if not t:
+        return jsonify(result="no_existe")   # QR falso / folio inexistente
+    if t["status"] == "void":
+        return jsonify(result="anulado", ticket=ticket_public(t))
+    if t["status"] == "used":
+        return jsonify(result="usado", used_at=t["used_at"], ticket=ticket_public(t))
+    # primer escaneo → marcar ingreso (condición de carrera cubierta por WHERE status='active')
+    when = now_iso()
+    db.execute("UPDATE tickets SET status='used', used_at=? WHERE id=? AND status='active'",
+               (when, t["id"]))
+    db.commit()
+    t2 = db.execute("SELECT * FROM tickets WHERE id=?", (t["id"],)).fetchone()
+    if t2["used_at"] != when:   # otro escáner ganó la carrera por milésimas
+        return jsonify(result="usado", used_at=t2["used_at"], ticket=ticket_public(t2))
+    sync_excel_async()
+    return jsonify(result="valido", ticket=ticket_public(t2))
 
 # ---------------------------------------------------------------- API: administrador
 
@@ -1190,6 +1235,10 @@ def index():
 @app.get("/admin")
 def admin_page():
     return send_from_directory(PUBLIC, "admin.html")
+
+@app.get("/scan")
+def scan_page():
+    return send_from_directory(PUBLIC, "scan.html")
 
 @app.get("/sw.js")
 def service_worker():

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OnFire · Escáner de puerta</title>
+<meta name="theme-color" content="#050302">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Manrope:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/hellfire.css">
+<style>
+  #cam-wrap{position:relative;border-radius:18px;overflow:hidden;background:#000;
+    border:1px solid var(--line-strong);aspect-ratio:1/1}
+  #cam{width:100%;height:100%;object-fit:cover;display:block}
+  #cam-frame{position:absolute;inset:15%;border:2.5px solid rgba(255,150,80,.8);border-radius:16px;
+    box-shadow:0 0 0 2000px rgba(0,0,0,.35);pointer-events:none}
+  .result{border-radius:18px;padding:26px 20px;text-align:center;animation:pop .15s ease}
+  .result .r-icon{font-size:52px;line-height:1}
+  .result .r-title{font:800 30px Cinzel;margin-top:6px}
+  .result .r-info{font:700 15px Manrope;color:var(--cream);margin-top:12px}
+  .result .r-meta{font:500 12px Manrope;color:var(--cream-60);margin-top:6px}
+  .result.ok{background:rgba(126,226,168,.12);border:2px solid rgba(126,226,168,.6)}
+  .result.ok .r-title{color:var(--ok)}
+  .result.bad{background:rgba(232,112,106,.12);border:2px solid rgba(232,112,106,.65)}
+  .result.bad .r-title{color:var(--danger)}
+  .result.warn{background:rgba(255,150,80,.1);border:2px solid var(--line-strong)}
+  .result.warn .r-title{color:var(--ember-soft)}
+  .netbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;font:600 11px Manrope}
+  .netbar .dot{width:9px;height:9px;border-radius:50%}
+  .online{background:rgba(126,226,168,.08);border:1px solid rgba(126,226,168,.35);color:var(--ok)}
+  .online .dot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .offline{background:rgba(232,112,106,.1);border:1px solid rgba(232,112,106,.5);color:var(--danger)}
+  .offline .dot{background:var(--danger)}
+</style>
+</head>
+<body>
+<div class="glow-orb"></div>
+
+<!-- login (staff usa una cuenta de administrador) -->
+<div id="view-login" class="wrap hidden">
+  <div style="margin-top:9dvh;text-align:center">
+    <div class="brand" style="font-size:34px">ESCÁNER</div>
+    <div class="sub" style="margin-top:12px">Validación en la puerta</div>
+  </div>
+  <div style="margin-top:auto;display:flex;flex-direction:column;gap:12px">
+    <div class="hint" style="text-align:center">Entra con una cuenta de administrador</div>
+    <input class="input" id="lg-user" placeholder="Usuario o correo" autocomplete="username">
+    <input class="input" id="lg-pass" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <div class="err" id="lg-err"></div>
+    <button class="btn" id="btn-login">ENTRAR&nbsp;&nbsp;⟶</button>
+  </div>
+</div>
+
+<!-- escáner -->
+<div id="view-scan" class="wrap hidden">
+  <div class="topbar">
+    <div class="row"><div class="avatar">▣</div><div class="who">Puerta</div></div>
+    <button class="linkout" id="btn-logout"><span style="font-size:13px">⏻</span>Salir</button>
+  </div>
+
+  <div class="netbar online mt12" id="netbar"><span class="dot"></span><span id="net-text">Conectado — validando en vivo</span></div>
+
+  <div id="cam-wrap" class="mt12">
+    <video id="cam" muted playsinline></video>
+    <div id="cam-frame"></div>
+  </div>
+  <div class="muted mt8" style="text-align:center" id="cam-status">Apunta al código QR del boleto</div>
+
+  <div id="result" class="mt12"></div>
+
+  <div class="mt12">
+    <div class="label">O escribe el folio a mano</div>
+    <div class="row">
+      <input class="input grow" id="manual" placeholder="HF-0001" autocomplete="off" style="text-transform:uppercase">
+      <button class="btn sm" id="btn-manual" style="padding:14px 18px">Validar</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/jsQR.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/scan.js"></script>
+</body>
+</html>

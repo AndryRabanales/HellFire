@@ -25,28 +25,28 @@ El servidor queda en el puerto **8756**:
 Para que los vendedores entren desde su celular, deben estar en la misma red Wi-Fi
 y usar la IP de esta computadora (se ve con `ipconfig getifaddr en0`).
 
-## Control en la puerta: el celular escanea + cotejo con INE
+## Control en la puerta: escáner en tiempo real (`/scan`)
 
-**El sistema NO trae escáner.** En la puerta, el guardia usa **cualquier app de QR del
-celular** (Google Lens, la app de cámara, cualquier "QR Scanner") — leer un QR es
-offline siempre, no necesita wifi ni instalar nada del sistema.
+El staff abre `tu-dominio.railway.app/scan` en el celular (entra con una cuenta de
+administrador; conviene crear una cuenta "puerta" y borrarla al terminar). Apunta la
+cámara al QR y **valida contra la base en tiempo real**:
 
-El **QR del boleto contiene texto legible**:
+- 🟢 **VÁLIDO — PASA** → el boleto es real y no se había usado. Queda marcado como
+  *ingresó* en ese momento.
+- 🔴 **YA INGRESÓ** → ese boleto ya entró (muestra la hora). No dejar pasar.
+- 🔴 **NO EXISTE / FALSO** → el código no corresponde a ningún boleto vendido.
+- 🔴 **ANULADO** → lo canceló el administrador.
 
-```
-Ángela Muñoz Peña
-VIP · Ingeniería
-Folio HF-0006
-```
+Así cada boleto sirve **una sola vez** y los QR falsos se rechazan solos, sin revisar
+listas a mano. Un escaneo toma ~1 segundo, más rápido que comparar nombres.
 
-Flujo: el guardia escanea → aparece el nombre, tipo y facultad (o "Externo") →
-lo compara con la **INE** → si no coincide, se niega el acceso. Esto resuelve la
-reventa/transferencia: aunque alguien reenvíe su boleto, el nombre no coincidirá con
-la INE de quien lo presente.
+**Seguridad:** el QR lleva un **token aleatorio de 96 bits imposible de adivinar** (no
+el folio). Nadie puede fabricar un QR válido. Los datos legibles (nombre, tipo, folio)
+van impresos en el boleto para el cotejo con INE, que se usa como revisión adicional.
 
-> Un QR de texto es legible por cualquiera, así que en teoría alguien podría fabricar
-> uno con su propio nombre; la INE no lo detecta porque el nombre sí es suyo. Para el
-> control por INE —que es el caso de este evento— el QR legible es suficiente.
+**Requiere internet en la puerta** (datos móviles del celular bastan; el dominio de
+Railway es HTTPS, así que la cámara del navegador funciona sin instalar nada).
+Si falla la cámara, se puede teclear el folio a mano.
 
 ## Credenciales iniciales
 
