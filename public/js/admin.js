@@ -572,34 +572,20 @@ $('#btn-ad-create').addEventListener('click', async () => {
   } catch (e) { if (!guard(e)) $('#ad-err').textContent = e.message; }
 });
 
-/* ---------------- ajustes ---------------- */
-const SAMPLE_TICKET = {
-  folio: 'HF-0001', qr_payload: 'Nombre del Comprador\nGeneral · Externo\nFolio HF-0001',
-  buyer_name: 'Nombre del Comprador', faculty_name: 'Externo',
-  type_name: 'General', type_is_vip: 0, price: 200,
+/* ---------------- ajustes: dos flyers (VIP y General) ---------------- */
+const FLYER_META = {
+  vip: { label: '★ Flyer VIP',
+         sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                   faculty_name: 'Externo', type_name: 'VIP', type_is_vip: 1, price: 500 } },
+  gen: { label: 'Flyer General',
+         sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                   faculty_name: 'Externo', type_name: 'General', type_is_vip: 0, price: 200 } },
 };
-// estado del editor de flyer: imagen cargada, si es nueva (sin subir), posición y zoom
-const flyerState = { img: null, isNew: false, focus: 0.5, scale: 1 };
-
-async function loadSettings() {
-  const s = await API.get('/api/admin/settings');
-  $('#st-name').value = s.event_name;
-  $('#st-subtitle').value = s.event_subtitle;
-  $('#st-date').value = s.event_date_text;
-  flyerState.focus = parseFloat(s.flyer_focus) || 0.5;
-  flyerState.scale = parseFloat(s.flyer_scale) || 1;
-  flyerState.isNew = false;
-  syncFlyerControls();
-  if (s.flyer_file) {
-    flyerState.img = await loadImg('/flyer?ts=' + Date.now());
-    $('#flyer-none').textContent = '';
-    showFlyerEditor(true);
-  } else {
-    flyerState.img = null;
-    $('#flyer-none').textContent = 'Aún no has subido ninguna imagen. Elige un archivo para ver la vista previa.';
-    showFlyerEditor(false);
-  }
-}
+// estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
+const FLY_ED = {
+  vip: { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null },
+  gen: { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null },
+};
 
 function loadImg(src) {
   return new Promise(res => {
@@ -610,74 +596,142 @@ function loadImg(src) {
   });
 }
 
-function showFlyerEditor(show) {
-  $('#flyer-preview-wrap').style.display = show ? 'block' : 'none';
-  if (show) renderFlyerPreview();
-}
+function buildFlyerEditor(variant) {
+  const st = FLY_ED[variant];
+  const root = document.createElement('div');
+  root.style.cssText = 'border:1px solid var(--line);border-radius:14px;padding:12px';
+  root.innerHTML = `
+    <div class="label">${FLYER_META[variant].label}</div>
+    <input type="file" accept="image/png,image/jpeg,image/webp" class="input" style="padding:10px;font-size:12px" data-f="file">
+    <div data-f="wrap" style="display:none">
+      <div class="mt8" style="display:flex;justify-content:center;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:12px;padding:10px">
+        <canvas data-f="cv" style="width:150px;max-width:100%;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.6);cursor:grab"></canvas>
+      </div>
+      <div class="mt8">
+        <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Posición</div><span class="muted" data-f="fv">centro</span></div>
+        <input type="range" min="0" max="1" step="0.02" value="0.5" style="width:100%;accent-color:var(--ember)" data-f="focus">
+      </div>
+      <div class="mt8">
+        <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Zoom</div><span class="muted" data-f="sv">1.0×</span></div>
+        <input type="range" min="1" max="3" step="0.05" value="1" style="width:100%;accent-color:var(--ember)" data-f="scale">
+      </div>
+      <div class="row mt8" style="gap:6px">
+        <button class="btn sm grow" data-f="save">Guardar</button>
+        <button class="btn ghost sm" style="width:auto" data-f="reset">↺</button>
+      </div>
+      <div class="okmsg mt8" data-f="ok" style="font-size:11px"></div>
+    </div>
+    <div class="muted mt8" data-f="none" style="font-size:11px"></div>`;
+  const q = k => root.querySelector(`[data-f="${k}"]`);
+  st.ui = { wrap: q('wrap'), cv: q('cv'), focus: q('focus'), scale: q('scale'),
+            fv: q('fv'), sv: q('sv'), ok: q('ok'), none: q('none'), file: q('file') };
 
-function syncFlyerControls() {
-  $('#fp-focus').value = flyerState.focus;
-  $('#fp-scale').value = flyerState.scale;
-  const f = flyerState.focus;
-  $('#fp-focus-val').textContent = f < 0.34 ? 'arriba' : f > 0.66 ? 'abajo' : 'centro';
-  $('#fp-scale-val').textContent = Number(flyerState.scale).toFixed(1) + '×';
-}
+  const sync = () => {
+    st.ui.focus.value = st.focus; st.ui.scale.value = st.scale;
+    st.ui.fv.textContent = st.focus < 0.34 ? 'arriba' : st.focus > 0.66 ? 'abajo' : 'centro';
+    st.ui.sv.textContent = Number(st.scale).toFixed(1) + '×';
+  };
+  st.sync = sync;
 
-let _fpRenderPending = false;
-async function renderFlyerPreview() {
-  if (_fpRenderPending) return;
-  _fpRenderPending = true;
-  const ev = { ...EV, flyer_focus: flyerState.focus, flyer_scale: flyerState.scale };
-  const cv = await renderTicket(SAMPLE_TICKET, ev, flyerState.img);
-  const dest = $('#flyer-canvas');
-  dest.width = cv.width; dest.height = cv.height;
-  dest.getContext('2d').drawImage(cv, 0, 0);
-  _fpRenderPending = false;
-}
+  st.ui.file.addEventListener('change', async () => {
+    const f = st.ui.file.files[0];
+    if (!f) return;
+    st.file = f;
+    st.img = await loadImg(URL.createObjectURL(f));
+    st.isNew = true;
+    st.ui.none.textContent = ''; st.ui.ok.textContent = '';
+    st.ui.wrap.style.display = 'block';
+    renderFlyerPreview(variant);
+  });
+  st.ui.focus.addEventListener('input', () => { st.focus = parseFloat(st.ui.focus.value); sync(); renderFlyerPreview(variant); });
+  st.ui.scale.addEventListener('input', () => { st.scale = parseFloat(st.ui.scale.value); sync(); renderFlyerPreview(variant); });
+  q('reset').addEventListener('click', () => { st.focus = 0.5; st.scale = 1; sync(); renderFlyerPreview(variant); });
 
-// elegir archivo → vista previa inmediata (aún sin subir)
-$('#st-flyer').addEventListener('change', async () => {
-  const f = $('#st-flyer').files[0];
-  if (!f) return;
-  const url = URL.createObjectURL(f);
-  flyerState.img = await loadImg(url);
-  flyerState.isNew = true;
-  $('#flyer-none').textContent = '';
-  $('#flyer-ok').textContent = '';
-  showFlyerEditor(true);
-});
-
-$('#fp-focus').addEventListener('input', () => {
-  flyerState.focus = parseFloat($('#fp-focus').value);
-  syncFlyerControls(); renderFlyerPreview();
-});
-$('#fp-scale').addEventListener('input', () => {
-  flyerState.scale = parseFloat($('#fp-scale').value);
-  syncFlyerControls(); renderFlyerPreview();
-});
-
-// arrastrar la imagen en la vista previa para moverla verticalmente
-(() => {
-  const dest = $('#flyer-canvas');
+  // arrastrar la imagen para moverla verticalmente
   let dragging = false, startY = 0, startFocus = 0.5;
-  const down = e => { dragging = true; startY = (e.touches ? e.touches[0].clientY : e.clientY); startFocus = flyerState.focus; dest.style.cursor = 'grabbing'; };
+  const down = e => { dragging = true; startY = (e.touches ? e.touches[0].clientY : e.clientY); startFocus = st.focus; };
   const move = e => {
     if (!dragging) return;
     const y = e.touches ? e.touches[0].clientY : e.clientY;
-    const range = dest.clientHeight * 0.8 || 260;
-    flyerState.focus = clamp(startFocus - (y - startY) / range, 0, 1);
-    syncFlyerControls(); renderFlyerPreview();
+    const range = st.ui.cv.clientHeight * 0.8 || 260;
+    st.focus = clamp(startFocus - (y - startY) / range, 0, 1);
+    sync(); renderFlyerPreview(variant);
     e.preventDefault();
   };
-  const up = () => { dragging = false; dest.style.cursor = 'grab'; };
-  dest.addEventListener('mousedown', down); window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
-  dest.addEventListener('touchstart', down, { passive: false }); dest.addEventListener('touchmove', move, { passive: false }); dest.addEventListener('touchend', up);
+  const up = () => { dragging = false; };
+  st.ui.cv.addEventListener('mousedown', down); window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+  st.ui.cv.addEventListener('touchstart', down, { passive: false }); st.ui.cv.addEventListener('touchmove', move, { passive: false }); st.ui.cv.addEventListener('touchend', up);
+
+  q('save').addEventListener('click', async () => {
+    const btn = q('save');
+    btn.disabled = true;
+    try {
+      if (st.isNew) {
+        const fd = new FormData();
+        fd.append('flyer', st.file);
+        fd.append('variant', variant);
+        fd.append('flyer_focus', st.focus);
+        fd.append('flyer_scale', st.scale);
+        await API.post('/api/admin/flyer', fd);
+        st.isNew = false;
+        st.ui.ok.textContent = 'Guardado ✓ — los boletos ' + (variant === 'vip' ? 'VIP' : 'General') + ' usarán este flyer';
+      } else {
+        await API.post('/api/admin/settings', {
+          ['flyer_focus_' + variant]: st.focus, ['flyer_scale_' + variant]: st.scale,
+        });
+        st.ui.ok.textContent = 'Posición guardada ✓';
+      }
+      setTimeout(() => st.ui.ok.textContent = '', 3000);
+      _flyerCache[variant] = undefined;   // que el boleto real recargue este flyer
+      EV = await API.get('/api/catalog');
+    } catch (e) { if (!guard(e)) toast(e.message); }
+    finally { btn.disabled = false; }
+  });
+  return root;
+}
+
+// construir los dos editores una sola vez
+(() => {
+  const cont = $('#flyer-editors');
+  cont.appendChild(buildFlyerEditor('vip'));
+  cont.appendChild(buildFlyerEditor('gen'));
 })();
 
-$('#btn-flyer-reset').addEventListener('click', () => {
-  flyerState.focus = 0.5; flyerState.scale = 1;
-  syncFlyerControls(); renderFlyerPreview();
-});
+let _fpBusy = {};
+async function renderFlyerPreview(variant) {
+  if (_fpBusy[variant]) return;
+  _fpBusy[variant] = true;
+  const st = FLY_ED[variant];
+  const ev = { ...EV, ['flyer_focus_' + variant]: st.focus, ['flyer_scale_' + variant]: st.scale };
+  const cv = await renderTicket(FLYER_META[variant].sample, ev, st.img);
+  st.ui.cv.width = cv.width; st.ui.cv.height = cv.height;
+  st.ui.cv.getContext('2d').drawImage(cv, 0, 0);
+  _fpBusy[variant] = false;
+}
+
+async function loadSettings() {
+  const s = await API.get('/api/admin/settings');
+  $('#st-name').value = s.event_name;
+  $('#st-subtitle').value = s.event_subtitle;
+  $('#st-date').value = s.event_date_text;
+  for (const v of ['vip', 'gen']) {
+    const st = FLY_ED[v];
+    st.focus = parseFloat(s['flyer_focus_' + v]) || 0.5;
+    st.scale = parseFloat(s['flyer_scale_' + v]) || 1;
+    st.isNew = false;
+    st.sync();
+    if (s['flyer_' + v]) {
+      st.img = await loadImg('/flyer?v=' + v + '&ts=' + Date.now());
+      st.ui.none.textContent = '';
+      st.ui.wrap.style.display = 'block';
+      renderFlyerPreview(v);
+    } else {
+      st.img = null;
+      st.ui.none.textContent = 'Sin imagen aún. Elige un archivo para ver la vista previa.';
+      st.ui.wrap.style.display = 'none';
+    }
+  }
+}
 
 $('#btn-st-save').addEventListener('click', async () => {
   try {
@@ -688,36 +742,7 @@ $('#btn-st-save').addEventListener('click', async () => {
     $('#st-ok').textContent = 'Ajustes guardados ✓';
     setTimeout(() => $('#st-ok').textContent = '', 2500);
     EV = await API.get('/api/catalog');
-    renderFlyerPreview();
   } catch (e) { if (!guard(e)) toast(e.message); }
-});
-
-$('#btn-flyer').addEventListener('click', async () => {
-  const btn = $('#btn-flyer');
-  btn.disabled = true;
-  try {
-    if (flyerState.isNew) {
-      const f = $('#st-flyer').files[0];
-      if (!f) { toast('Elige una imagen primero'); return; }
-      const fd = new FormData();
-      fd.append('flyer', f);
-      fd.append('flyer_focus', flyerState.focus);
-      fd.append('flyer_scale', flyerState.scale);
-      await API.post('/api/admin/flyer', fd);
-      flyerState.isNew = false;
-      $('#flyer-ok').textContent = 'Imagen guardada ✓ — los boletos la usarán con esta posición';
-    } else {
-      // solo reposicionar el flyer ya subido
-      await API.post('/api/admin/settings', {
-        flyer_focus: flyerState.focus, flyer_scale: flyerState.scale,
-      });
-      $('#flyer-ok').textContent = 'Posición guardada ✓';
-    }
-    setTimeout(() => $('#flyer-ok').textContent = '', 3000);
-    _flyerCache = null;            // que el boleto real recargue el flyer
-    EV = await API.get('/api/catalog');
-  } catch (e) { if (!guard(e)) toast(e.message); }
-  finally { btn.disabled = false; }
 });
 
 /* ---------------- arranque ---------------- */

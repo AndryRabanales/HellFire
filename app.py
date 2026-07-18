@@ -254,11 +254,13 @@ DEFAULT_SETTINGS = {
     "admin_session_minutes": "480",
     "ranking_winners": "3",
     "ranking_prizes": json.dumps([1000, 500, 250]),
-    "flyer_file": "",        # bandera "hay flyer" ("1" si hay)
-    "flyer_data": "",        # imagen del flyer en base64 (guardada en la BD, sin depender del disco)
-    "flyer_mime": "",        # tipo de la imagen (image/png, etc.)
-    "flyer_focus": "0.5",    # posición vertical del flyer en el boleto (0=arriba, 1=abajo)
-    "flyer_scale": "1",      # zoom del flyer (1 = ajuste "cover")
+    # Flyers por tipo de boleto: uno para VIP y otro para General. Cada uno con su
+    # imagen (base64 en la BD), posición y zoom. Las claves sin sufijo son el flyer
+    # "legado" (una sola imagen) y sirven de respaldo si aún no se sube el del tipo.
+    "flyer_file": "", "flyer_data": "", "flyer_mime": "",
+    "flyer_focus": "0.5", "flyer_scale": "1",
+    "flyer_data_vip": "", "flyer_mime_vip": "", "flyer_focus_vip": "", "flyer_scale_vip": "",
+    "flyer_data_gen": "", "flyer_mime_gen": "", "flyer_focus_gen": "", "flyer_scale_gen": "",
     "max_login_attempts": "8",
     "lockout_minutes": "10",
 }
@@ -270,6 +272,19 @@ def setting(db, key):
 def set_setting(db, key, value):
     db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+
+def flyer_info(db):
+    """Configuración de los dos flyers (vip/gen) para el frontend, con respaldo
+    al flyer legado de una sola imagen."""
+    out = {}
+    for v in ("vip", "gen"):
+        has = bool(setting(db, f"flyer_data_{v}") or setting(db, "flyer_data"))
+        out[f"flyer_{v}"] = has
+        out[f"flyer_focus_{v}"] = float(setting(db, f"flyer_focus_{v}")
+                                        or setting(db, "flyer_focus") or 0.5)
+        out[f"flyer_scale_{v}"] = float(setting(db, f"flyer_scale_{v}")
+                                        or setting(db, "flyer_scale") or 1)
+    return out
 
 def effective_price(db, type_row):
     """Precio vigente de un tipo: la fase más reciente cuya fecha ya llegó;
@@ -625,9 +640,7 @@ def catalog():
                    event_name=setting(db, "event_name"),
                    event_subtitle=setting(db, "event_subtitle"),
                    event_date_text=setting(db, "event_date_text"),
-                   flyer=bool(setting(db, "flyer_file")),
-                   flyer_focus=float(setting(db, "flyer_focus") or 0.5),
-                   flyer_scale=float(setting(db, "flyer_scale") or 1))
+                   **flyer_info(db))
 
 def ticket_public(t):
     return {"id": t["id"], "folio": t["folio"], "qr_token": t["qr_token"],
@@ -1170,9 +1183,9 @@ def get_settings():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    keys = ["event_name", "event_subtitle", "event_date_text", "flyer_file",
-            "flyer_focus", "flyer_scale"]
-    return jsonify({k: setting(db, k) for k in keys})
+    out = {k: setting(db, k) for k in ["event_name", "event_subtitle", "event_date_text"]}
+    out.update(flyer_info(db))
+    return jsonify(out)
 
 def _clamp(v, lo, hi, default):
     try:
@@ -1192,11 +1205,14 @@ def save_settings():
         if k in b:
             set_setting(db, k, str(b[k]).strip())
             changed.append(k)
-    # posición/zoom del flyer (reposicionar sin volver a subir la imagen)
-    if "flyer_focus" in b:
-        set_setting(db, "flyer_focus", _clamp(b["flyer_focus"], 0, 1, 0.5)); changed.append("flyer_focus")
-    if "flyer_scale" in b:
-        set_setting(db, "flyer_scale", _clamp(b["flyer_scale"], 1, 3, 1)); changed.append("flyer_scale")
+    # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
+    for v in ("vip", "gen"):
+        if f"flyer_focus_{v}" in b:
+            set_setting(db, f"flyer_focus_{v}", _clamp(b[f"flyer_focus_{v}"], 0, 1, 0.5))
+            changed.append(f"flyer_focus_{v}")
+        if f"flyer_scale_{v}" in b:
+            set_setting(db, f"flyer_scale_{v}", _clamp(b[f"flyer_scale_{v}"], 1, 3, 1))
+            changed.append(f"flyer_scale_{v}")
     audit(db, s["admin"]["username"], "ajustes", f"Actualizó ajustes: {', '.join(changed)}")
     db.commit()
     return jsonify(ok=True)
@@ -1209,6 +1225,7 @@ def upload_flyer():
     f = request.files.get("flyer")
     if not f:
         return jsonify(error="Sube una imagen"), 400
+    variant = "vip" if request.form.get("variant") == "vip" else "gen"
     ext = os.path.splitext(f.filename or "")[1].lower()
     mimes = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
     if ext not in mimes:
@@ -1216,22 +1233,25 @@ def upload_flyer():
     db = get_db()
     # El flyer se guarda EN LA BASE DE DATOS (base64), no en disco → no depende de volúmenes.
     raw = f.read()
-    set_setting(db, "flyer_data", base64.b64encode(raw).decode())
-    set_setting(db, "flyer_mime", mimes[ext])
-    set_setting(db, "flyer_file", "1")   # bandera: hay flyer
-    set_setting(db, "flyer_focus", _clamp(request.form.get("flyer_focus"), 0, 1, 0.5))
-    set_setting(db, "flyer_scale", _clamp(request.form.get("flyer_scale"), 1, 3, 1))
-    audit(db, s["admin"]["username"], "ajustes", "Subió nueva imagen de la fiesta (flyer)")
+    set_setting(db, f"flyer_data_{variant}", base64.b64encode(raw).decode())
+    set_setting(db, f"flyer_mime_{variant}", mimes[ext])
+    set_setting(db, f"flyer_focus_{variant}", _clamp(request.form.get("flyer_focus"), 0, 1, 0.5))
+    set_setting(db, f"flyer_scale_{variant}", _clamp(request.form.get("flyer_scale"), 1, 3, 1))
+    audit(db, s["admin"]["username"], "ajustes",
+          f"Subió el flyer {'VIP' if variant == 'vip' else 'General'}")
     db.commit()
     return jsonify(ok=True)
 
 @app.get("/flyer")
 def serve_flyer():
+    """Sirve el flyer del tipo pedido (?v=vip|gen), con respaldo al flyer legado."""
     db = get_db()
-    data = setting(db, "flyer_data")
+    v = "vip" if request.args.get("v") == "vip" else "gen"
+    data = setting(db, f"flyer_data_{v}") or setting(db, "flyer_data")
     if not data:
         return "", 404
-    resp = Response(base64.b64decode(data), mimetype=setting(db, "flyer_mime") or "image/png")
+    mime = setting(db, f"flyer_mime_{v}") or setting(db, "flyer_mime") or "image/png"
+    resp = Response(base64.b64decode(data), mimetype=mime)
     resp.headers["Cache-Control"] = "no-cache"
     return resp
 

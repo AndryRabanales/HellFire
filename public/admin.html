@@ -170,7 +170,7 @@
   </section>
 
   <!-- ===== Ajustes ===== -->
-  <section id="tab-ajustes" class="mt16 hidden" style="max-width:560px">
+  <section id="tab-ajustes" class="mt16 hidden" style="max-width:760px">
     <div class="card">
       <div class="label">Evento</div>
       <input class="input" id="st-name" placeholder="Nombre del evento">
@@ -179,33 +179,10 @@
       <button class="btn mt16" id="btn-st-save">Guardar ajustes</button>
       <div class="okmsg mt8" id="st-ok"></div>
     </div>
-    <div class="card mt12">
-      <div class="label">Imagen de la fiesta (flyer del boleto)</div>
-      <div class="muted" style="margin-bottom:10px">La imagen ocupa la parte grande del boleto. Elige el archivo, acomódalo con los controles y mira la vista previa antes de guardar.</div>
-      <input type="file" id="st-flyer" accept="image/png,image/jpeg,image/webp" class="input" style="padding:11px">
-
-      <!-- vista previa del BOLETO real con el flyer -->
-      <div id="flyer-preview-wrap" class="mt12" style="display:none">
-        <div class="label">Vista previa del boleto</div>
-        <div style="display:flex;justify-content:center;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:14px;padding:12px">
-          <canvas id="flyer-canvas" style="width:195px;max-width:100%;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.6);cursor:grab"></canvas>
-        </div>
-        <div class="mt12">
-          <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Posición vertical</div><span class="muted" id="fp-focus-val">centro</span></div>
-          <input type="range" id="fp-focus" min="0" max="1" step="0.02" value="0.5" style="width:100%;accent-color:var(--ember)">
-          <div class="muted" style="font-size:10px">También puedes arrastrar la imagen en la vista previa para moverla.</div>
-        </div>
-        <div class="mt12">
-          <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Zoom</div><span class="muted" id="fp-scale-val">1.0×</span></div>
-          <input type="range" id="fp-scale" min="1" max="3" step="0.05" value="1" style="width:100%;accent-color:var(--ember)">
-        </div>
-        <div class="row mt12" style="gap:8px">
-          <button class="btn grow" id="btn-flyer">Guardar imagen</button>
-          <button class="btn ghost" id="btn-flyer-reset" style="width:auto">Restablecer</button>
-        </div>
-        <div class="okmsg mt8" id="flyer-ok"></div>
-      </div>
-      <div class="muted mt8" id="flyer-none" style="font-size:11px"></div>
+    <div class="card mt12" style="max-width:none">
+      <div class="label">Flyers del boleto — uno para VIP y otro para General</div>
+      <div class="muted" style="margin-bottom:10px">Cada tipo de boleto usa su propia imagen: al descargar un boleto VIP sale el flyer VIP; uno General, el flyer General. Elige el archivo, acomódalo y guarda.</div>
+      <div id="flyer-editors" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px"></div>
     </div>
     <div class="card mt12">
       <div class="label">Respaldo y Excel</div>

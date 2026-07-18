@@ -54,26 +54,29 @@ function nameFontFor(text) {
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, Number(v))); }
 
-let _flyerCache = null;
-function loadFlyer(hasFlyer) {
+/* Dos flyers: 'vip' y 'gen'. Cada boleto usa el de su tipo. */
+const _flyerCache = { vip: undefined, gen: undefined };
+function loadFlyer(variant, hasFlyer) {
   if (!hasFlyer) return Promise.resolve(null);
-  if (_flyerCache !== null) return Promise.resolve(_flyerCache);
+  if (_flyerCache[variant] !== undefined) return Promise.resolve(_flyerCache[variant]);
   return new Promise(resolve => {
     const img = new Image();
-    img.onload = () => { _flyerCache = img; resolve(img); };
-    img.onerror = () => { _flyerCache = null; resolve(null); };
-    img.src = '/flyer?ts=' + Date.now();
+    img.onload = () => { _flyerCache[variant] = img; resolve(img); };
+    img.onerror = () => { _flyerCache[variant] = null; resolve(null); };
+    img.src = '/flyer?v=' + variant + '&ts=' + Date.now();
   });
 }
 
 /* ticket: {folio, qr_token, buyer_name, faculty_name, type_name, type_is_vip, price}
-   ev: {event_name, event_subtitle, event_date_text, flyer:boolean,
-        flyer_focus:0..1 (posición vertical), flyer_scale:1..3 (zoom)}
+   ev: {event_name, event_subtitle, event_date_text,
+        flyer_vip/flyer_gen:boolean, flyer_focus_vip/gen:0..1, flyer_scale_vip/gen:1..3}
    imgOverride: si se pasa una <img> (o null), se usa esa en vez de cargar /flyer
                 — sirve para la vista previa del admin antes de subir. */
 async function renderTicket(ticket, ev, imgOverride) {
   await document.fonts.ready;
-  const flyer = imgOverride !== undefined ? imgOverride : await loadFlyer(ev.flyer);
+  const variant = ticket.type_is_vip ? 'vip' : 'gen';   // cada tipo usa SU flyer
+  const flyer = imgOverride !== undefined ? imgOverride
+    : await loadFlyer(variant, ev['flyer_' + variant]);
   // Proporción de pantalla de celular (~9:19.5): el boleto descargado ocupa
   // toda la pantalla del móvil. Footer compacto; el flyer llena el resto.
   const W = 800, FLY = 1560, BAND = 170, H = FLY + BAND;   // 800×1730 ≈ 9:19.5
@@ -82,8 +85,8 @@ async function renderTicket(ticket, ev, imgOverride) {
   const ctx = cv.getContext('2d');
 
   // ---- zona del flyer (grande)
-  const focusY = clamp(ev.flyer_focus ?? 0.5, 0, 1);
-  const scale = clamp(ev.flyer_scale ?? 1, 1, 3);
+  const focusY = clamp(ev['flyer_focus_' + variant] ?? ev.flyer_focus ?? 0.5, 0, 1);
+  const scale = clamp(ev['flyer_scale_' + variant] ?? ev.flyer_scale ?? 1, 1, 3);
   if (flyer) {
     const s = Math.max(W / flyer.width, FLY / flyer.height) * scale;   // "cover" + zoom
     const dw = flyer.width * s, dh = flyer.height * s;
