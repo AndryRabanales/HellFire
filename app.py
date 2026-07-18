@@ -15,7 +15,9 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
 BASE    = os.path.dirname(os.path.abspath(__file__))
-DATA    = os.path.join(BASE, "data")
+# DATA_DIR permite apuntar a un Volumen persistente (Railway u otro host).
+# Si no se define, usa la carpeta local ./data (desarrollo).
+DATA    = os.environ.get("DATA_DIR") or os.path.join(BASE, "data")
 BACKUPS = os.path.join(DATA, "backups")
 PUBLIC  = os.path.join(BASE, "public")
 DB_PATH = os.path.join(DATA, "onfire.db")
