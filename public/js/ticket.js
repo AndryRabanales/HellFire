@@ -79,7 +79,7 @@ async function renderTicket(ticket, ev, imgOverride) {
     : await loadFlyer(variant, ev['flyer_' + variant]);
   // Proporción de pantalla de celular (~9:19.5): el boleto descargado ocupa
   // toda la pantalla del móvil. Footer compacto; el flyer llena el resto.
-  const W = 800, FLY = 1560, BAND = 170, H = FLY + BAND;   // 800×1730 ≈ 9:19.5
+  const W = 800, FLY = 1450, BAND = 280, H = FLY + BAND;   // 800×1730 ≈ 9:19.5, footer más alto
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
@@ -126,44 +126,44 @@ async function renderTicket(ticket, ev, imgOverride) {
   ctx.beginPath(); ctx.moveTo(0, FLY + 1); ctx.lineTo(W, FLY + 1); ctx.stroke();
   ctx.setLineDash([]);
 
-  const padX = 40;
-  const qrSize = 138;
-  const qrX = W - padX - qrSize, qrY = FLY + 15;
-  ctx.shadowColor = 'rgba(255,110,30,.35)'; ctx.shadowBlur = 18;
+  const padX = 44;
+  const qrSize = 224;                                   // QR grande, fácil de escanear
+  const qrX = W - padX - qrSize, qrY = FLY + 28;
+  ctx.shadowColor = 'rgba(255,110,30,.35)'; ctx.shadowBlur = 24;
   drawQR(ctx, ticket.qr_payload || ticket.qr_token, qrX, qrY, qrSize);
   ctx.shadowBlur = 0;
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(255,150,80,.6)';
-  ctx.font = '600 10px "Space Grotesk", monospace';
-  letterSpaced(ctx, 'ESCANÉALO EN LA PUERTA', qrX + qrSize / 2, qrY + qrSize + 15, 1.2);
+  ctx.font = '600 13px "Space Grotesk", monospace';
+  letterSpaced(ctx, 'ESCANÉALO EN LA PUERTA', qrX + qrSize / 2, qrY + qrSize + 22, 1.6);
 
-  // texto de la banda (compacto): a nombre de · nombre · facultad · tipo (sin precio)
+  // texto de la banda: a nombre de · nombre · facultad · tipo (sin precio), más grande
   ctx.textAlign = 'left';
-  let ty = FLY + 40;
+  let ty = FLY + 66;
   ctx.fillStyle = 'rgba(255,150,80,.6)';
-  ctx.font = '600 12px "Space Grotesk", monospace';
-  letterSpaced(ctx, 'A NOMBRE DE', padX, ty, 2.2);
+  ctx.font = '600 15px "Space Grotesk", monospace';
+  letterSpaced(ctx, 'A NOMBRE DE', padX, ty, 2.6);
   if (ticket.type_is_vip) {
-    const bx = padX + 142, by = ty - 17, bw = 70, bh = 24;
+    const bx = padX + 178, by = ty - 22, bw = 92, bh = 32;
     const gg = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
     gg.addColorStop(0, '#f3d27a'); gg.addColorStop(1, '#d9a53a');
     ctx.fillStyle = gg;
-    roundRect(ctx, bx, by, bw, bh, 7); ctx.fill();
+    roundRect(ctx, bx, by, bw, bh, 9); ctx.fill();
     ctx.fillStyle = '#3a1e00';
-    ctx.font = '800 13px "Space Grotesk", monospace';
-    ctx.fillText('★ VIP', bx + 12, by + 17);
+    ctx.font = '800 17px "Space Grotesk", monospace';
+    ctx.fillText('★ VIP', bx + 16, by + 22);
   }
-  ty += 38;
+  ty += 54;
   ctx.fillStyle = '#f6f1e7';
   const nameFont = nameFontFor(ticket.buyer_name);
-  fitText(ctx, ticket.buyer_name, padX, ty, W - padX * 2 - qrSize - 24, 30, '800 %px ' + nameFont);
-  ty += 30;
+  fitText(ctx, ticket.buyer_name, padX, ty, W - padX * 2 - qrSize - 30, 42, '800 %px ' + nameFont);
+  ty += 44;
   ctx.fillStyle = 'rgba(246,241,231,.55)';
-  ctx.font = '600 15px Manrope, sans-serif';
+  ctx.font = '600 21px Manrope, sans-serif';
   ctx.fillText(ticket.faculty_name, padX, ty);
-  ty += 26;
+  ty += 36;
   ctx.fillStyle = '#ffb27a';
-  ctx.font = '700 17px Manrope, sans-serif';
+  ctx.font = '700 24px Manrope, sans-serif';
   ctx.fillText(ticket.type_name, padX, ty);
 
   return cv;
