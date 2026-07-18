@@ -90,7 +90,8 @@ async function loadSummary() {
   const s = await API.get('/api/admin/summary');
   $('#sum-stats').innerHTML = `
     <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}</div></div>
-    <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>`;
+    <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
+    <div class="stat"><div class="sk">Ya ingresaron</div><div class="sv">${s.entered} <small>de ${s.total_tickets}</small></div></div>`;
 }
 
 /* ---------------- boletos ---------------- */
@@ -131,14 +132,20 @@ async function loadTicketsTable() {
   r.tickets.forEach(t => {
     const tr = document.createElement('tr');
     if (t.status === 'void') tr.className = 'void';
+    const estado = t.status === 'void'
+      ? '<span class="badge void">ANULADO</span>'
+      : t.status === 'used'
+        ? `<span class="badge used">INGRESÓ</span>${t.used_at ? `<div class="muted" style="font-size:9px;margin-top:3px">${esc(t.used_at.slice(11, 16))} h</div>` : ''}`
+        : '<span class="badge active">ACTIVO</span>';
     tr.innerHTML = `
       <td style="font-family:'Space Grotesk';color:var(--ember-soft)">${esc(t.folio)}</td>
-      <td class="strike">${esc(t.buyer_name)}${t.status === 'void' ? ' <span class="badge void">Anulado</span>' : ''}</td>
+      <td class="strike">${esc(t.buyer_name)}</td>
       <td>${esc(t.faculty_name)}</td>
       <td>${esc(t.type_name)}</td>
       <td class="strike" style="font-family:'Space Grotesk'">${fmtMoney(t.price)}</td>
       <td>${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span></td>
-      <td class="muted">${esc(t.created_at)}</td>`;
+      <td class="muted">${esc(t.created_at)}</td>
+      <td>${estado}</td>`;
     const td = document.createElement('td');
     td.style.whiteSpace = 'nowrap';
     if (t.status !== 'void') {

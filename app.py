@@ -759,9 +759,11 @@ def admin_summary():
     db = get_db()
     tot = db.execute("""SELECT
         SUM(CASE WHEN status!='void' THEN 1 ELSE 0 END) AS n,
-        SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS cents
+        SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS cents,
+        SUM(CASE WHEN status='used' THEN 1 ELSE 0 END) AS entered
         FROM tickets""").fetchone()
-    return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0))
+    return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0),
+                   entered=tot["entered"] or 0)
 
 def ticket_filters():
     """WHERE dinámico compartido por la tabla admin y la exportación (RF-93)."""
