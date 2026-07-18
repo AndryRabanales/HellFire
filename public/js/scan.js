@@ -2,7 +2,7 @@
    No requiere login: abres /scan y estás listo. Escanea → muestra resultado
    compacto abajo → apunta al siguiente QR y se actualiza solo. */
 
-let stream = null, scanning = false, busy = false, lastCode = '', lastAt = 0, hideTimer = null;
+let stream = null, scanning = false, busy = false, lastCode = '', lastAt = 0;
 
 async function call(code) {
   const res = await fetch('/api/scan', {
@@ -54,9 +54,8 @@ function render(r) {
   box.className = 'show ' + cls;
   box.innerHTML = `<div class="r-title">${title}</div>${name}${type}` +
     (meta ? `<div class="r-meta">${esc(meta)}</div>` : '');
-
-  clearTimeout(hideTimer);                        // el mensaje se limpia solo si no llega otro
-  hideTimer = setTimeout(() => { box.className = ''; }, 6000);
+  // El mensaje se queda fijo en pantalla hasta que se escanee OTRO QR (o el mismo,
+  // que vuelve a mostrar el resultado). No se auto-oculta.
 }
 
 /* ---------- cámara + lector QR ---------- */
