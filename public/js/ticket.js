@@ -74,8 +74,9 @@ function loadFlyer(hasFlyer) {
 async function renderTicket(ticket, ev, imgOverride) {
   await document.fonts.ready;
   const flyer = imgOverride !== undefined ? imgOverride : await loadFlyer(ev.flyer);
-  // Footer aún más compacto y bajo → el flyer se aprecia casi completo.
-  const W = 800, FLY = 930, BAND = 170, H = FLY + BAND;
+  // Proporción de pantalla de celular (~9:19.5): el boleto descargado ocupa
+  // toda la pantalla del móvil. Footer compacto; el flyer llena el resto.
+  const W = 800, FLY = 1560, BAND = 170, H = FLY + BAND;   // 800×1730 ≈ 9:19.5
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
