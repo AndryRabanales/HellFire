@@ -1,0 +1,18 @@
+# Datos y secretos — NUNCA subir (contraseñas, códigos, datos de compradores)
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Ajustes locales de Claude Code (personales de esta máquina)
+.claude/settings.local.json
+
+# Sistema / editores
+.DS_Store
+*.swp
+.idea/
+.vscode/

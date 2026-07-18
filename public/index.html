@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OnFire · Panel de vendedor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Manrope:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/hellfire.css">
+</head>
+<body>
+<div class="glow-orb"></div>
+
+<!-- ============ VISTA: ACCESO (RF-24) ============ -->
+<div id="view-login" class="wrap hidden">
+  <div style="margin-top:12dvh;text-align:center">
+    <div class="kicker" id="lg-sub">NOCHE</div>
+    <div class="brand" id="lg-name" style="margin-top:8px">HELLFIRE</div>
+    <div class="sub" style="margin-top:14px">Panel de vendedor</div>
+  </div>
+  <div style="margin-top:auto">
+    <div class="hint" style="text-align:center;margin-bottom:16px;font-size:12px;color:var(--cream-60)">Ingresa tu código de acceso</div>
+    <div class="pinrow" id="pinrow">
+      <div class="pinbox">•</div><div class="pinbox">•</div><div class="pinbox">•</div><div class="pinbox">•</div>
+    </div>
+    <input id="pin-input" type="tel" inputmode="numeric" maxlength="4" autocomplete="one-time-code"
+           style="position:absolute;opacity:0;pointer-events:none" aria-label="Código de 4 dígitos">
+    <div class="err mt12" id="lg-err" style="text-align:center"></div>
+    <button class="btn" id="btn-enter">ENTRAR&nbsp;&nbsp;⟶</button>
+    <div class="muted" style="text-align:center;margin-top:16px;font-size:10px;color:rgba(246,241,231,.3)">Tu código es tu identidad de vendedor</div>
+  </div>
+</div>
+
+<!-- ============ VISTA: GENERAR BOLETO ============ -->
+<div id="view-form" class="wrap hidden">
+  <div class="topbar">
+    <div class="row"><div class="avatar" id="av-1">H</div><div class="who" id="hello-1">Hola</div></div>
+    <button class="linkout" id="btn-logout-1"><span style="font-size:13px">⏻</span>Salir</button>
+  </div>
+  <div class="h1" style="margin:24px 0 4px">Nuevo boleto</div>
+  <div class="hint" style="margin-bottom:18px">Los datos del comprador</div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div>
+      <div class="label">Nombre del comprador</div>
+      <input class="input" id="f-buyer" placeholder="Nombre completo" autocomplete="off">
+    </div>
+    <div>
+      <div class="label">Facultad</div>
+      <select class="input" id="f-faculty"></select>
+    </div>
+    <div>
+      <div class="label">Tipo de boleto</div>
+      <div class="typegrid" id="f-types"></div>
+    </div>
+  </div>
+  <div class="err mt12" id="f-err"></div>
+  <button class="btn" id="btn-generate" style="margin-top:auto">GENERAR BOLETO&nbsp;&nbsp;🎟</button>
+  <button class="btn quiet" id="btn-history"><span style="font-size:13px">🧾</span>&nbsp;Ver mi historial&nbsp;<span style="color:var(--ember-dim)">→</span></button>
+</div>
+
+<!-- ============ VISTA: CONFIRMACIÓN (RF-47) ============ -->
+<div id="view-done" class="wrap hidden">
+  <div style="text-align:center;margin-top:20px">
+    <div class="okball">✓</div>
+    <div style="font:800 22px Cinzel;color:var(--cream);margin-top:14px">¡Boleto generado!</div>
+    <div class="hint">Muéstrale la vista previa al comprador</div>
+  </div>
+  <div class="ticket-preview mt16" id="done-card">
+    <div class="tp-head">
+      <div>
+        <div class="tp-title" id="d-event">HELLFIRE</div>
+        <div class="tp-sub" id="d-subtitle">Noche de brujas</div>
+      </div>
+      <div class="qrbox"><canvas id="d-qr"></canvas></div>
+    </div>
+    <div class="tp-sep"></div>
+    <div class="tp-grid">
+      <div><div class="tp-k">Comprador</div><div class="tp-v" id="d-buyer"></div></div>
+      <div><div class="tp-k">Facultad</div><div class="tp-v" id="d-faculty"></div></div>
+      <div><div class="tp-k">Tipo</div><div class="tp-v" id="d-type"></div></div>
+      <div><div class="tp-k">Folio</div><div class="tp-v folio" id="d-folio"></div></div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-top:auto">
+    <button class="btn" id="btn-download">⬇&nbsp;&nbsp;Descargar boleto</button>
+    <button class="btn ghost" id="btn-another">+&nbsp;&nbsp;Generar otro boleto</button>
+  </div>
+</div>
+
+<!-- ============ VISTA: MI PANEL / HISTORIAL ============ -->
+<div id="view-history" class="wrap hidden">
+  <div class="topbar">
+    <div class="row">
+      <button class="iconbtn" id="btn-back" title="Regresar">←</button>
+      <div class="who" id="hello-2">Hola</div>
+    </div>
+    <button class="linkout" id="btn-logout-2"><span style="font-size:13px">⏻</span>Salir</button>
+  </div>
+  <div class="counter" style="margin:16px 0 14px">
+    <div class="clabel">Boletos generados</div>
+    <div class="cnum" id="h-count">0</div>
+  </div>
+  <div class="search" style="margin-bottom:12px">
+    <span class="ico">⌕</span>
+    <input id="h-search" placeholder="Buscar por nombre o folio…" autocomplete="off">
+  </div>
+  <div class="row" style="justify-content:space-between;padding:0 2px 8px">
+    <div style="font:700 10px 'Space Grotesk';letter-spacing:.14em;text-transform:uppercase;color:rgba(246,241,231,.5)">Mi historial</div>
+    <div style="font:500 9px Manrope;color:var(--ember-dim)">Más reciente ↓</div>
+  </div>
+  <div id="h-list" style="display:flex;flex-direction:column;gap:8px;padding-bottom:20px"></div>
+</div>
+
+<script src="/js/qrcode.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/ticket.js"></script>
+<script src="/js/seller.js"></script>
+</body>
+</html>

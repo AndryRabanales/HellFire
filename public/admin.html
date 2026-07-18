@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OnFire · Administración</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Manrope:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/hellfire.css">
+<style>
+  .filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+  .rank1 .pos{color:#f3d27a}.rank2 .pos{color:#cfd4dc}.rank3 .pos{color:#d9925a}
+  .pos{font:800 18px "Space Grotesk"}
+  .codechip{font:700 13px "Space Grotesk";letter-spacing:.18em;color:var(--ember-soft);
+    background:rgba(255,110,30,.12);border:1px solid var(--line-strong);border-radius:8px;padding:5px 9px}
+</style>
+</head>
+<body>
+<div class="glow-orb"></div>
+
+<!-- ============ LOGIN ADMIN (RF-12, RF-33) ============ -->
+<div id="view-login" class="wrap hidden">
+  <div style="margin-top:10dvh;text-align:center">
+    <div class="kicker" id="lg-sub">NOCHE</div>
+    <div class="brand" id="lg-name" style="margin-top:8px">HELLFIRE</div>
+    <div class="sub" style="margin-top:14px">Administración</div>
+  </div>
+  <div style="margin-top:auto;display:flex;flex-direction:column;gap:12px">
+    <input class="input" id="lg-user" placeholder="Usuario" autocomplete="username">
+    <input class="input" id="lg-pass" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <div class="err" id="lg-err"></div>
+    <button class="btn" id="btn-login">ENTRAR&nbsp;&nbsp;⟶</button>
+  </div>
+</div>
+
+<!-- ============ PANEL ============ -->
+<div id="view-panel" class="wrap wide hidden">
+  <div class="topbar">
+    <div class="row"><div class="avatar" id="av">H</div>
+      <div><div class="who" id="who">Admin</div><div class="muted" style="font-size:9px;letter-spacing:.14em;text-transform:uppercase">Administración</div></div>
+    </div>
+    <div class="row">
+      <button class="linkout" id="btn-logout"><span style="font-size:13px">⏻</span>Salir</button>
+    </div>
+  </div>
+
+  <div class="tabs mt16" id="tabs">
+    <button class="tab sel" data-tab="resumen">Resumen</button>
+    <button class="tab" data-tab="boletos">Boletos</button>
+    <button class="tab" data-tab="generar">+ Generar</button>
+    <button class="tab" data-tab="ranking">Ranking</button>
+    <button class="tab" data-tab="vendedores">Vendedores</button>
+    <button class="tab" data-tab="catalogos">Catálogos</button>
+    <button class="tab" data-tab="admins">Admins</button>
+    <button class="tab" data-tab="ajustes">Ajustes</button>
+  </div>
+
+  <!-- ===== Resumen ===== -->
+  <section id="tab-resumen" class="mt16">
+    <div class="stats" id="sum-stats"></div>
+  </section>
+
+  <!-- ===== Boletos (RF-78/79) ===== -->
+  <section id="tab-boletos" class="mt16 hidden">
+    <div class="filters">
+      <input class="input" id="fl-q" placeholder="⌕ Nombre o folio" style="padding:11px">
+      <select class="input" id="fl-seller" style="padding:11px"><option value="">Vendedor: todos</option></select>
+      <select class="input" id="fl-type" style="padding:11px"><option value="">Tipo: todos</option></select>
+      <select class="input" id="fl-faculty" style="padding:11px"><option value="">Facultad: todas</option></select>
+    </div>
+    <div class="row mt12" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div class="muted" id="bt-count"></div>
+      <button class="btn sm" id="btn-export">⬇ Exportar a Excel</button>
+    </div>
+    <div class="tablewrap mt8">
+      <table class="data"><thead><tr>
+        <th>Folio</th><th>Comprador</th><th>Facultad</th><th>Tipo</th><th>Precio</th>
+        <th>Vendedor</th><th>Fecha</th><th></th>
+      </tr></thead><tbody id="bt-body"></tbody></table>
+    </div>
+  </section>
+
+  <!-- ===== Generar (RF-13) ===== -->
+  <section id="tab-generar" class="mt16 hidden" style="max-width:480px">
+    <div class="card">
+      <div class="label">Nombre del comprador</div>
+      <input class="input" id="g-buyer" placeholder="Nombre completo">
+      <div class="label mt12">Facultad</div>
+      <select class="input" id="g-faculty"></select>
+      <div class="label mt12">Tipo de boleto</div>
+      <div class="typegrid" id="g-types"></div>
+      <div class="err mt12" id="g-err"></div>
+      <button class="btn mt8" id="btn-g-generate">GENERAR BOLETO&nbsp;&nbsp;🎟</button>
+      <div class="muted mt8">El boleto quedará registrado a nombre del administrador.</div>
+    </div>
+  </section>
+
+  <!-- ===== Ranking: solo el orden por ventas ===== -->
+  <section id="tab-ranking" class="mt16 hidden" style="max-width:480px">
+    <div class="muted" style="margin-bottom:10px">Orden por ventas, del primero al último. Los anulados no cuentan; en empate va primero quien llegó antes.</div>
+    <div class="tablewrap">
+      <table class="data" style="min-width:0"><thead><tr>
+        <th style="width:60px">#</th><th>Vendedor</th>
+      </tr></thead><tbody id="rk-body"></tbody></table>
+    </div>
+  </section>
+
+  <!-- ===== Vendedores (RF-82..88) ===== -->
+  <section id="tab-vendedores" class="mt16 hidden">
+    <div class="card">
+      <div class="label">Nuevo vendedor</div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        <input class="input grow" id="sl-name" placeholder="Nombre del vendedor" style="min-width:180px;padding:12px">
+        <input class="input" id="sl-code" placeholder="Código (vacío = automático)" maxlength="4" inputmode="numeric" style="width:210px;padding:12px">
+        <button class="btn sm" id="btn-sl-create" style="padding:13px 16px">Crear</button>
+      </div>
+      <div class="err mt8" id="sl-err"></div>
+    </div>
+    <div class="tablewrap mt12">
+      <table class="data"><thead><tr>
+        <th>Vendedor</th><th>Código</th><th>Boletos</th><th>Estado</th><th style="min-width:220px">Acciones</th>
+      </tr></thead><tbody id="sl-body"></tbody></table>
+    </div>
+  </section>
+
+  <!-- ===== Catálogos (RF-80/81) ===== -->
+  <section id="tab-catalogos" class="mt16 hidden" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+    <div class="card">
+      <div class="label">Tipos de boleto · precios por fases</div>
+      <div class="muted" style="margin-bottom:10px">Cada fase tiene nombre, precio y fecha. Al llegar la fecha, el precio cambia solo. Los boletos ya generados no cambian.</div>
+      <div id="tt-list"></div>
+      <div class="row mt12" style="flex-wrap:wrap;gap:8px">
+        <input class="input grow" id="tt-name" placeholder="Nuevo tipo (ej. General)" style="min-width:130px;padding:11px">
+        <input class="input" id="tt-price" type="number" min="1" placeholder="$" style="width:90px;padding:11px">
+        <label class="muted row" style="gap:5px"><input type="checkbox" id="tt-vip">VIP ★</label>
+        <button class="btn sm" id="btn-tt-create">Añadir</button>
+      </div>
+      <div class="err mt8" id="tt-err"></div>
+    </div>
+    <div class="card">
+      <div class="label">Facultades</div>
+      <div id="fc-list" class="mt8"></div>
+      <div class="row mt12">
+        <input class="input grow" id="fc-name" placeholder="Nueva facultad" style="padding:11px">
+        <button class="btn sm" id="btn-fc-create">Añadir</button>
+      </div>
+      <div class="err mt8" id="fc-err"></div>
+    </div>
+  </section>
+
+  <!-- ===== Admins (RF-89) ===== -->
+  <section id="tab-admins" class="mt16 hidden" style="max-width:560px">
+    <div class="card">
+      <div class="label">Nuevo administrador</div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        <input class="input grow" id="ad-user" placeholder="Usuario" style="min-width:140px;padding:12px">
+        <input class="input grow" id="ad-pass" type="password" placeholder="Contraseña (mín. 8)" style="min-width:160px;padding:12px">
+        <button class="btn sm" id="btn-ad-create" style="padding:13px 16px">Crear</button>
+      </div>
+      <div class="err mt8" id="ad-err"></div>
+    </div>
+    <div id="ad-list" class="mt12" style="display:flex;flex-direction:column;gap:8px"></div>
+  </section>
+
+  <!-- ===== Ajustes ===== -->
+  <section id="tab-ajustes" class="mt16 hidden" style="max-width:560px">
+    <div class="card">
+      <div class="label">Evento</div>
+      <input class="input" id="st-name" placeholder="Nombre del evento">
+      <input class="input mt8" id="st-subtitle" placeholder="Subtítulo (ej. Noche de brujas)">
+      <input class="input mt8" id="st-date" placeholder="Fecha y lugar (texto del boleto)">
+      <button class="btn mt16" id="btn-st-save">Guardar ajustes</button>
+      <div class="okmsg mt8" id="st-ok"></div>
+    </div>
+    <div class="card mt12">
+      <div class="label">Imagen de la fiesta (flyer del boleto)</div>
+      <div class="muted" style="margin-bottom:10px">La imagen ocupa la parte grande del boleto. Elige el archivo, acomódalo con los controles y mira la vista previa antes de guardar.</div>
+      <input type="file" id="st-flyer" accept="image/png,image/jpeg,image/webp" class="input" style="padding:11px">
+
+      <!-- vista previa del BOLETO real con el flyer -->
+      <div id="flyer-preview-wrap" class="mt12" style="display:none">
+        <div class="label">Vista previa del boleto</div>
+        <div style="display:flex;justify-content:center;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:14px;padding:12px">
+          <canvas id="flyer-canvas" style="width:230px;max-width:100%;border-radius:10px;box-shadow:0 12px 30px rgba(0,0,0,.6);cursor:grab"></canvas>
+        </div>
+        <div class="mt12">
+          <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Posición vertical</div><span class="muted" id="fp-focus-val">centro</span></div>
+          <input type="range" id="fp-focus" min="0" max="1" step="0.02" value="0.5" style="width:100%;accent-color:var(--ember)">
+          <div class="muted" style="font-size:10px">También puedes arrastrar la imagen en la vista previa para moverla.</div>
+        </div>
+        <div class="mt12">
+          <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Zoom</div><span class="muted" id="fp-scale-val">1.0×</span></div>
+          <input type="range" id="fp-scale" min="1" max="3" step="0.05" value="1" style="width:100%;accent-color:var(--ember)">
+        </div>
+        <div class="row mt12" style="gap:8px">
+          <button class="btn grow" id="btn-flyer">Guardar imagen</button>
+          <button class="btn ghost" id="btn-flyer-reset" style="width:auto">Restablecer</button>
+        </div>
+        <div class="okmsg mt8" id="flyer-ok"></div>
+      </div>
+      <div class="muted mt8" id="flyer-none" style="font-size:11px"></div>
+    </div>
+    <div class="card mt12">
+      <div class="label">Respaldo y Excel</div>
+      <div class="muted">Cada venta se sincroniza sola a <b>data/boletos.xlsx</b> y se respalda cada 10 minutos en <b>data/backups/</b>. La exportación con filtros está en la pestaña Boletos.</div>
+    </div>
+  </section>
+</div>
+
+<!-- modal genérico -->
+<div id="modal-bg" class="modal-bg hidden"><div class="modal" id="modal"></div></div>
+
+<script src="/js/qrcode.min.js"></script>
+<script src="/js/common.js"></script>
+<script src="/js/ticket.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>
