@@ -5,11 +5,11 @@ OnFire — Plataforma de generación y control de boletos con QR
 Backend: Flask + SQLite (archivo local, fácil de migrar a otra BD después).
 Todos los datos de venta se sincronizan automáticamente a data/boletos.xlsx.
 """
-import os, re, json, time, shutil, sqlite3, secrets, hashlib, threading
+import os, re, json, time, base64, shutil, sqlite3, secrets, hashlib, threading
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from flask import Flask, request, jsonify, send_from_directory, send_file, g
+from flask import Flask, request, jsonify, send_from_directory, send_file, g, Response
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
@@ -56,7 +56,7 @@ def check_password(password, stored):
     return secrets.compare_digest(hash_password(password, salt), stored)
 
 def money(cents):
-    return cents / 100.0
+    return float(cents or 0) / 100.0
 
 # ------------------------------------------------------- contenido del QR
 def build_qr_text(folio, buyer, type_name, faculty):
@@ -68,12 +68,81 @@ def build_qr_text(folio, buyer, type_name, faculty):
     return f"{buyer}\n{type_name} · {faculty}\nFolio {folio}"
 
 # ---------------------------------------------------------------- base de datos
+# Funciona con SQLite (local, por defecto) o PostgreSQL (si existe DATABASE_URL,
+# como en Railway). El resto del código usa la MISMA interfaz: db.execute("... ?",
+# params).fetchone()/.fetchall(), db.commit(). El wrapper de Postgres traduce los
+# marcadores ? → %s y entrega filas accesibles por nombre, igual que sqlite3.Row.
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+IS_PG = bool(DATABASE_URL)
+
+if IS_PG:
+    import psycopg
+    from decimal import Decimal
+    from psycopg.rows import dict_row
+    IntegrityError = psycopg.IntegrityError
+    LIKE = "ILIKE"   # búsqueda sin distinguir mayúsculas, como se comporta SQLite
+
+    def _plain(row):
+        """Convierte Decimal → int/float para que jsonify y el resto del código
+        reciban los mismos tipos que con SQLite."""
+        if row is None:
+            return None
+        out = {}
+        for k, v in row.items():
+            if isinstance(v, Decimal):
+                v = int(v) if v == v.to_integral_value() else float(v)
+            out[k] = v
+        return out
+
+    class _PGCursor:
+        def __init__(self, cur, conn):
+            self._cur, self._conn = cur, conn
+        def fetchone(self):
+            return _plain(self._cur.fetchone())
+        def fetchall(self):
+            return [_plain(r) for r in self._cur.fetchall()]
+        @property
+        def lastrowid(self):
+            with self._conn.cursor() as c:
+                c.execute("SELECT lastval()")
+                return c.fetchone()[0]
+
+    class PGConn:
+        """Imita la interfaz de una conexión sqlite3 sobre psycopg."""
+        def __init__(self, conn):
+            self._conn = conn
+        def execute(self, sql, params=()):
+            cur = self._conn.cursor(row_factory=dict_row)
+            cur.execute(sql.replace("?", "%s"), params)
+            return _PGCursor(cur, self._conn)
+        def executescript(self, script):
+            with self._conn.cursor() as cur:
+                for stmt in script.split(";"):
+                    if stmt.strip():
+                        cur.execute(stmt)
+        def commit(self):
+            self._conn.commit()
+        def rollback(self):
+            self._conn.rollback()
+        def close(self):
+            self._conn.close()
+
+    def db_connect():
+        return PGConn(psycopg.connect(DATABASE_URL))
+else:
+    IntegrityError = sqlite3.IntegrityError
+    LIKE = "LIKE"
+
+    def db_connect():
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = db_connect()
     return g.db
 
 @app.teardown_appcontext
@@ -171,7 +240,9 @@ DEFAULT_SETTINGS = {
     "admin_session_minutes": "480",
     "ranking_winners": "3",
     "ranking_prizes": json.dumps([1000, 500, 250]),
-    "flyer_file": "",
+    "flyer_file": "",        # bandera "hay flyer" ("1" si hay)
+    "flyer_data": "",        # imagen del flyer en base64 (guardada en la BD, sin depender del disco)
+    "flyer_mime": "",        # tipo de la imagen (image/png, etc.)
     "flyer_focus": "0.5",    # posición vertical del flyer en el boleto (0=arriba, 1=abajo)
     "flyer_scale": "1",      # zoom del flyer (1 = ajuste "cover")
     "max_login_attempts": "8",
@@ -206,17 +277,37 @@ def gen_seller_code(db):
             return code
     raise RuntimeError("sin códigos disponibles")
 
+def _schema_for_backend():
+    s = SCHEMA
+    if IS_PG:
+        s = s.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    return s
+
 def init_db():
-    fresh = not os.path.exists(DB_PATH)
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    db.executescript(SCHEMA)
-    # migración suave: agregar qr_payload si la BD viene de una versión anterior
-    cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
-    if "qr_payload" not in cols:
-        db.execute("ALTER TABLE tickets ADD COLUMN qr_payload TEXT")
+    # espera a que la base esté disponible (Railway puede tardar unos segundos al arrancar)
+    db = None
+    for intento in range(10):
+        try:
+            db = db_connect()
+            break
+        except Exception as e:
+            print(f"[OnFire] esperando la base de datos… ({e})")
+            time.sleep(2)
+    if db is None:
+        raise RuntimeError("no se pudo conectar a la base de datos")
+
+    db.executescript(_schema_for_backend())
+    # migración suave (solo SQLite antiguo): agregar qr_payload si falta
+    if not IS_PG:
+        cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
+        if "qr_payload" not in cols:
+            db.execute("ALTER TABLE tickets ADD COLUMN qr_payload TEXT")
     for k, v in DEFAULT_SETTINGS.items():
-        db.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (k, v))
+        db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
+    db.commit()
+
+    # "fresh" = todavía no hay administradores → sembrar datos iniciales
+    fresh = db.execute("SELECT COUNT(*) AS c FROM admins").fetchone()["c"] == 0
     if fresh:
         db.execute("INSERT INTO admins(username, pass_hash, created_at) VALUES(?,?,?)",
                    ("admin", hash_password("onfire2026"), now_iso()))
@@ -227,7 +318,6 @@ def init_db():
         # RF-25: el sistema inicia con 4 códigos activos, uno por vendedor
         codes = []
         for i in range(1, 5):
-            row_factory_db = db
             code = None
             while code is None:
                 c = f"{secrets.randbelow(10000):04d}"
@@ -240,15 +330,17 @@ def init_db():
                    ("sistema", "inicializacion",
                     "Sistema inicializado con admin inicial y 4 vendedores", now_iso()))
         db.commit()
-        creds = os.path.join(DATA, "CREDENCIALES_INICIALES.txt")
-        with open(creds, "w") as f:
-            f.write("OnFire — credenciales iniciales\n")
-            f.write("================================\n\n")
-            f.write("Administrador:  usuario: admin   contraseña: onfire2026\n")
-            f.write("(cámbiala creando otro admin y borrando este, o guárdala bien)\n\n")
-            for i, c in enumerate(codes, 1):
-                f.write(f"Vendedor {i}: código {c}\n")
-        print(f"[OnFire] Base de datos creada. Credenciales en {creds}")
+        try:
+            creds = os.path.join(DATA, "CREDENCIALES_INICIALES.txt")
+            with open(creds, "w") as f:
+                f.write("OnFire — credenciales iniciales\n================================\n\n")
+                f.write("Administrador:  usuario: admin   contraseña: onfire2026\n")
+                f.write("(cámbiala creando otro admin y borrando este, o guárdala bien)\n\n")
+                for i, c in enumerate(codes, 1):
+                    f.write(f"Vendedor {i}: código {c}\n")
+        except OSError:
+            pass
+        print(f"[OnFire] Base creada. Admin: admin/onfire2026 · Códigos vendedor: {', '.join(codes)}")
     db.commit()
     db.close()
 
@@ -311,10 +403,10 @@ def seller_summary(db):
         GROUP BY s.id ORDER BY total_cents DESC""").fetchall()]
 
 def sync_excel():
-    """Regenera data/boletos.xlsx con todas las ventas. Se llama tras cada cambio."""
+    """Regenera boletos.xlsx con todas las ventas. Se llama tras cada cambio.
+    (Es un archivo derivado; la fuente de verdad es la base de datos.)"""
     try:
-        db = sqlite3.connect(DB_PATH)
-        db.row_factory = sqlite3.Row
+        db = db_connect()
         rows = db.execute("SELECT * FROM tickets ORDER BY id").fetchall()
         summary = seller_summary(db)
         db.close()
@@ -334,7 +426,7 @@ def backup_loop():
     while True:
         try:
             stamp = datetime.now().strftime("%Y%m%d_%H%M")
-            if os.path.exists(DB_PATH):
+            if not IS_PG and os.path.exists(DB_PATH):   # con Postgres el respaldo lo gestiona la plataforma
                 shutil.copy2(DB_PATH, os.path.join(BACKUPS, f"onfire_{stamp}.db"))
             if os.path.exists(XLSX):
                 shutil.copy2(XLSX, os.path.join(BACKUPS, f"boletos_{stamp}.xlsx"))
@@ -536,8 +628,12 @@ def create_ticket():
         seller_id, seller_name, seller_code = None, f"Admin: {s['admin']['username']}", "ADMIN"
     prefix = setting(db, "folio_prefix")
     with _write_lock:
-        for _ in range(20):
-            n = db.execute("SELECT COALESCE(MAX(id),0)+1 AS n FROM tickets").fetchone()["n"]
+        # siguiente número a partir del folio más alto existente (robusto en ambos motores)
+        base = db.execute(
+            "SELECT COALESCE(MAX(CAST(SUBSTR(folio, ?) AS INTEGER)),0) AS n FROM tickets",
+            (len(prefix) + 1,)).fetchone()["n"]
+        for attempt in range(20):
+            n = base + 1 + attempt
             folio = f"{prefix}{n:04d}"
             token = secrets.token_urlsafe(12)   # RF-46: no adivinable ni secuencial
             qr_payload = build_qr_text(folio, buyer, tt["name"], fac["name"])
@@ -552,7 +648,8 @@ def create_ticket():
                      seller_code, now_iso()))
                 db.commit()
                 break
-            except sqlite3.IntegrityError:
+            except IntegrityError:
+                db.rollback()   # Postgres: liberar la transacción abortada antes de reintentar
                 continue
         else:
             return jsonify(error="No se pudo generar el folio, intenta de nuevo"), 500
@@ -570,7 +667,7 @@ def my_tickets():
     sql = "SELECT * FROM tickets WHERE seller_id=?"
     params = [s["seller"]["id"]]
     if q:
-        sql += " AND (buyer_name LIKE ? OR folio LIKE ?)"
+        sql += f" AND (buyer_name {LIKE} ? OR folio {LIKE} ?)"
         params += [f"%{q}%", f"%{q}%"]
     sql += " ORDER BY id DESC"   # RF-72
     rows = db.execute(sql, params).fetchall()
@@ -617,7 +714,7 @@ def ticket_filters():
     if a.get("type"):
         where.append("type_name=?"); params.append(a["type"])
     if a.get("q"):
-        where.append("(buyer_name LIKE ? OR folio LIKE ?)")
+        where.append(f"(buyer_name {LIKE} ? OR folio {LIKE} ?)")
         params += [f"%{a['q']}%", f"%{a['q']}%"]
     return (" WHERE " + " AND ".join(where) if where else ""), params
 
@@ -1044,19 +1141,15 @@ def upload_flyer():
     if not f:
         return jsonify(error="Sube una imagen"), 400
     ext = os.path.splitext(f.filename or "")[1].lower()
-    if ext not in (".png", ".jpg", ".jpeg", ".webp"):
+    mimes = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+    if ext not in mimes:
         return jsonify(error="Usa PNG, JPG o WEBP"), 400
     db = get_db()
-    old = setting(db, "flyer_file")
-    if old:
-        try:
-            os.remove(os.path.join(DATA, old))
-        except OSError:
-            pass
-    fname = f"flyer{ext}"
-    f.save(os.path.join(DATA, fname))
-    set_setting(db, "flyer_file", fname)
-    # posición/zoom elegidos en la vista previa (vienen como campos del formulario)
+    # El flyer se guarda EN LA BASE DE DATOS (base64), no en disco → no depende de volúmenes.
+    raw = f.read()
+    set_setting(db, "flyer_data", base64.b64encode(raw).decode())
+    set_setting(db, "flyer_mime", mimes[ext])
+    set_setting(db, "flyer_file", "1")   # bandera: hay flyer
     set_setting(db, "flyer_focus", _clamp(request.form.get("flyer_focus"), 0, 1, 0.5))
     set_setting(db, "flyer_scale", _clamp(request.form.get("flyer_scale"), 1, 3, 1))
     audit(db, s["admin"]["username"], "ajustes", "Subió nueva imagen de la fiesta (flyer)")
@@ -1066,10 +1159,12 @@ def upload_flyer():
 @app.get("/flyer")
 def serve_flyer():
     db = get_db()
-    fname = setting(db, "flyer_file")
-    if not fname or not os.path.exists(os.path.join(DATA, fname)):
+    data = setting(db, "flyer_data")
+    if not data:
         return "", 404
-    return send_from_directory(DATA, fname)
+    resp = Response(base64.b64decode(data), mimetype=setting(db, "flyer_mime") or "image/png")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 # ---------------------------------------------------------------- estáticos
 

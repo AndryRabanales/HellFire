@@ -66,9 +66,24 @@ Todo queda escrito en **`data/CREDENCIALES_INICIALES.txt`**.
 
 ## Datos y respaldos
 
-- Base de datos: **SQLite** en `data/onfire.db` (un archivo; fácil de migrar a
-  Postgres/Supabase u otra base cuando se decida).
-- Respaldo automático cada 10 minutos en `data/backups/` (se conservan los últimos 40).
+- **En local (desarrollo):** SQLite en `data/onfire.db`, con respaldo automático
+  cada 10 minutos en `data/backups/`.
+- **En producción (Railway):** PostgreSQL. La app detecta la variable
+  `DATABASE_URL` y usa Postgres automáticamente; sin ella, usa SQLite.
+- El **flyer se guarda dentro de la base de datos**, así que no se pierde entre
+  despliegues ni necesita discos especiales.
+
+## Despliegue en Railway
+
+1. Conecta este repo de GitHub a un servicio de Railway (deploy automático en cada push).
+2. Agrega una base de datos: **+ New → Database → PostgreSQL**.
+3. En el servicio de la app → **Variables** → agrega:
+   `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (referencia a la base creada).
+4. Genera el dominio público (Settings → Networking → Generate Domain).
+
+El `Procfile` arranca con gunicorn. En el primer arranque la app crea las tablas,
+el admin inicial (`admin` / `onfire2026` — cámbiala) y 4 vendedores con códigos
+nuevos (se ven en los logs de Railway y en el panel Admin → Vendedores).
 
 ## Detalles clave del funcionamiento
 
