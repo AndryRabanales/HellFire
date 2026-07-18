@@ -77,19 +77,34 @@ const workCv = document.createElement('canvas');
 function tick() {
   if (!scanning) return;
   const video = document.getElementById('cam');
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    const w = Math.min(video.videoWidth, 640);
-    const h = Math.round(video.videoHeight * (w / video.videoWidth));
-    workCv.width = w; workCv.height = h;
-    const ctx = workCv.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(video, 0, 0, w, h);
-    const code = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
-    if (code && code.data) {
-      const now = Date.now();
-      // mismo QR: no re-dispara por 3.5s. QR distinto: valida de inmediato.
-      if (code.data !== lastCode || now - lastAt > 3500) {
-        lastCode = code.data; lastAt = now;
-        validate(code.data);
+  if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth) {
+    // Recortar SOLO la región del marco. El video se muestra con object-fit:cover,
+    // así que mapeamos el recuadro en pantalla a los píxeles reales de la cámara.
+    const cont = video.getBoundingClientRect();
+    const fr = document.getElementById('cam-frame').getBoundingClientRect();
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const s = Math.max(cont.width / vw, cont.height / vh);   // escala de "cover"
+    const offX = (cont.width - vw * s) / 2, offY = (cont.height - vh * s) / 2;
+    // marco → coordenadas de la fuente (video)
+    let sx = (fr.left - cont.left - offX) / s;
+    let sy = (fr.top - cont.top - offY) / s;
+    let sw = fr.width / s, sh = fr.height / s;
+    sx = Math.max(0, sx); sy = Math.max(0, sy);
+    sw = Math.min(sw, vw - sx); sh = Math.min(sh, vh - sy);
+    if (sw > 10 && sh > 10) {
+      const outW = Math.min(Math.round(sw), 480);
+      const outH = Math.max(1, Math.round(sh * outW / sw));
+      workCv.width = outW; workCv.height = outH;
+      const ctx = workCv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, outW, outH);   // solo el recuadro
+      const code = jsQR(ctx.getImageData(0, 0, outW, outH).data, outW, outH, { inversionAttempts: 'dontInvert' });
+      if (code && code.data) {
+        const now = Date.now();
+        // mismo QR: no re-dispara por 3.5s. QR distinto: valida de inmediato.
+        if (code.data !== lastCode || now - lastAt > 3500) {
+          lastCode = code.data; lastAt = now;
+          validate(code.data);
+        }
       }
     }
   }
