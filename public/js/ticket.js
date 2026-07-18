@@ -77,20 +77,25 @@ async function renderTicket(ticket, ev, imgOverride) {
   const variant = ticket.type_is_vip ? 'vip' : 'gen';   // cada tipo usa SU flyer
   const flyer = imgOverride !== undefined ? imgOverride
     : await loadFlyer(variant, ev['flyer_' + variant]);
-  // Proporción de pantalla de celular (~9:19.5): el boleto descargado ocupa
-  // toda la pantalla del móvil. Footer compacto; el flyer llena el resto.
-  const W = 800, FLY = 1450, BAND = 280, H = FLY + BAND;   // 800×1730 ≈ 9:19.5, footer más alto
+  // El alto del flyer se adapta a la proporción REAL de la imagen subida, para que
+  // se aprecie completa sin recortes (en vez de forzarla a una caja fija con "cover").
+  // El boleto queda "estirado" verticalmente según esa proporción; el footer es fijo.
+  const W = 800, BAND = 280;
+  const FLY = flyer
+    ? clamp(Math.round(W * flyer.height / flyer.width), 700, 2400)
+    : 1450;   // sin flyer: placeholder con proporción de celular por defecto
+  const H = FLY + BAND;
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
 
-  // ---- zona del flyer (grande)
+  // ---- zona del flyer (grande, imagen completa sin recortar a escala 1)
   const focusY = clamp(ev['flyer_focus_' + variant] ?? ev.flyer_focus ?? 0.5, 0, 1);
   const scale = clamp(ev['flyer_scale_' + variant] ?? ev.flyer_scale ?? 1, 1, 3);
   if (flyer) {
-    const s = Math.max(W / flyer.width, FLY / flyer.height) * scale;   // "cover" + zoom
+    const s = (W / flyer.width) * scale;   // ajuste exacto al ancho; con scale=1 no recorta nada
     const dw = flyer.width * s, dh = flyer.height * s;
-    ctx.drawImage(flyer, (W - dw) / 2, (FLY - dh) * focusY, dw, dh);   // focusY mueve en vertical
+    ctx.drawImage(flyer, (W - dw) / 2, (FLY - dh) * focusY, dw, dh);   // focusY mueve en vertical si hay zoom
   } else {
     // placeholder con el nombre del evento (estilo del mockup de acceso)
     const g = ctx.createRadialGradient(W / 2, 60, 40, W / 2, FLY * 0.42, FLY);
