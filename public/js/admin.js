@@ -45,15 +45,36 @@ const loaders = {
   admins: loadAdmins, ajustes: loadSettings,
 };
 
+let currentTab = 'resumen';
 function openTab(name) {
+  currentTab = name;
   $$('#tabs .tab').forEach(t => t.classList.toggle('sel', t.dataset.tab === name));
   $$('section[id^="tab-"]').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-' + name));
   loaders[name]().catch(e => { if (!guard(e)) toast(e.message); });
+  startLive();
 }
 $('#tabs').addEventListener('click', e => {
   const t = e.target.closest('.tab');
   if (t) openTab(t.dataset.tab);
 });
+
+/* ---------------- actualización en vivo (sin recargar la página) ----------------
+   Cada pocos segundos re-consulta la pestaña visible y actualiza solo si algo cambió
+   (nuevos boletos, ingresos, anulaciones). Se pausa si la pestaña del navegador no
+   está activa, para no gastar de más. */
+let liveTimer = null;
+const LIVE = { resumen: loadSummary, boletos: loadTicketsTable, ranking: loadRanking };
+function startLive() {
+  stopLive();
+  const fn = LIVE[currentTab];
+  if (!fn) return;
+  liveTimer = setInterval(() => {
+    if (document.hidden) return;
+    fn(true).catch(() => {});   // true = silencioso (solo actualiza si cambió)
+  }, 4000);
+}
+function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) startLive(); });
 
 /* ---------------- modal ---------------- */
 function modal(html) {
@@ -86,8 +107,12 @@ function confirmModal({ title, body, okLabel, danger, withReason }) {
 }
 
 /* ---------------- resumen ---------------- */
-async function loadSummary() {
+let _sigSummary = '';
+async function loadSummary(silent) {
   const s = await API.get('/api/admin/summary');
+  const sig = JSON.stringify(s);
+  if (silent && sig === _sigSummary) return;   // nada cambió → no re-dibujar
+  _sigSummary = sig;
   $('#sum-stats').innerHTML = `
     <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}</div></div>
     <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
@@ -123,9 +148,14 @@ async function loadTicketsTab() {
   await loadTicketsTable();
 }
 
-async function loadTicketsTable() {
+let _sigTickets = '';
+async function loadTicketsTable(silent) {
   const qs = filterQS();
   const r = await API.get('/api/admin/tickets' + (qs ? '?' + qs : ''));
+  // firma con lo que puede cambiar en vivo: folios, estado y hora de ingreso
+  const sig = qs + '|' + r.tickets.map(t => t.folio + t.status + (t.used_at || '')).join(',');
+  if (silent && sig === _sigTickets) return;   // sin cambios → no re-dibujar (evita parpadeo)
+  _sigTickets = sig;
   $('#bt-count').textContent = r.tickets.length + ' boleto(s)';
   const body = $('#bt-body');
   body.innerHTML = '';
@@ -243,8 +273,12 @@ $('#btn-g-generate').addEventListener('click', async () => {
 });
 
 /* ---------------- ranking ---------------- */
-async function loadRanking() {
+let _sigRanking = '';
+async function loadRanking(silent) {
   const r = await API.get('/api/admin/ranking');
+  const sig = r.ranking.map(s => s.position + s.name).join(',');
+  if (silent && sig === _sigRanking) return;
+  _sigRanking = sig;
   $('#rk-body').innerHTML = r.ranking.map((s, i) => `
     <tr class="rank${i + 1}">
       <td><span class="pos">${s.position}</span></td>

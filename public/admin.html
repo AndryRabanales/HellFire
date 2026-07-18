@@ -14,6 +14,10 @@
   .pos{font:800 18px "Space Grotesk"}
   .codechip{font:700 13px "Space Grotesk";letter-spacing:.18em;color:var(--ember-soft);
     background:rgba(255,110,30,.12);border:1px solid var(--line-strong);border-radius:8px;padding:5px 9px}
+  .live-chip{display:flex;align-items:center;gap:6px;font:600 10px Manrope;color:var(--ok);
+    padding:5px 10px;border-radius:20px;border:1px solid rgba(126,226,168,.35);background:rgba(126,226,168,.07)}
+  .live-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);
+    box-shadow:0 0 8px var(--ok);animation:ember 2s ease-in-out infinite}
 </style>
 </head>
 <body>
@@ -41,6 +45,7 @@
       <div><div class="who" id="who">Admin</div><div class="muted" style="font-size:9px;letter-spacing:.14em;text-transform:uppercase">Administración</div></div>
     </div>
     <div class="row">
+      <div class="live-chip" title="El panel se actualiza solo"><span class="dot"></span>En vivo</div>
       <a href="/scan" target="_blank" class="btn ghost sm" style="text-decoration:none;text-align:center">▣ Escáner</a>
       <button class="linkout" id="btn-logout"><span style="font-size:13px">⏻</span>Salir</button>
     </div>
