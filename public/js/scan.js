@@ -56,26 +56,29 @@ async function validate(code) {
   }
 }
 
+/* Pantalla simple para el guardia: ENTRA / NO ENTRA + nombre + VIP o General. */
 function render(r) {
   const box = $('#result');
   const t = r.ticket;
-  const info = t ? `${esc(t.buyer_name || '')}${t.faculty_name ? ' · ' + esc(t.faculty_name) : ''}<br>${esc(t.type_name || '')} · Folio ${esc(t.folio || '')}` : '';
+  const name = t ? `<div class="r-name">${esc(t.buyer_name || '')}</div>` : '';
+  const type = t ? (t.type_is_vip
+    ? '<div class="r-type vip">★ VIP</div>'
+    : `<div class="r-type gen">${esc(t.type_name || 'General')}</div>`) : '';
   if (r.result === 'valido') {
-    box.innerHTML = `<div class="result ok"><div class="r-icon">✓</div>
-      <div class="r-title">VÁLIDO — PASA</div><div class="r-info">${info}</div>
-      <div class="r-meta">Vendió: ${esc(t.seller_name || '')}</div></div>`;
+    box.innerHTML = `<div class="result ok">
+      <div class="r-title">✓ ENTRA</div>${name}${type}</div>`;
   } else if (r.result === 'usado') {
-    box.innerHTML = `<div class="result bad"><div class="r-icon">⚠</div>
-      <div class="r-title">YA INGRESÓ</div><div class="r-info">${info}</div>
-      <div class="r-meta">Este boleto ya entró: <b>${esc(r.used_at || '')}</b><br>No dejar pasar.</div></div>`;
+    box.innerHTML = `<div class="result bad">
+      <div class="r-title">✕ NO ENTRA</div>${name}${type}
+      <div class="r-meta">Este boleto ya se usó (${esc((r.used_at || '').slice(11, 16))} h)</div></div>`;
   } else if (r.result === 'anulado') {
-    box.innerHTML = `<div class="result bad"><div class="r-icon">✕</div>
-      <div class="r-title">ANULADO</div><div class="r-info">${info}</div>
-      <div class="r-meta">Cancelado por administración. No dejar pasar.</div></div>`;
+    box.innerHTML = `<div class="result bad">
+      <div class="r-title">✕ NO ENTRA</div>${name}
+      <div class="r-meta">Boleto anulado</div></div>`;
   } else if (r.result === 'no_existe') {
-    box.innerHTML = `<div class="result bad"><div class="r-icon">✕</div>
-      <div class="r-title">NO EXISTE / FALSO</div>
-      <div class="r-meta">Este código no corresponde a ningún boleto vendido.</div></div>`;
+    box.innerHTML = `<div class="result bad">
+      <div class="r-title">✕ NO ENTRA</div>
+      <div class="r-meta">Boleto falso — no existe en el sistema</div></div>`;
   } else {
     box.innerHTML = `<div class="result warn"><div class="r-title">Error</div>
       <div class="r-meta">${esc(r.message || 'Intenta de nuevo')}</div></div>`;
