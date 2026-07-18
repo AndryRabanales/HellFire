@@ -8,6 +8,11 @@ Todos los datos de venta se sincronizan automáticamente a data/boletos.xlsx.
 import os, re, json, time, base64, shutil, sqlite3, secrets, hashlib, threading
 from datetime import datetime, timedelta
 from io import BytesIO
+try:
+    from zoneinfo import ZoneInfo
+    EVENT_TZ = ZoneInfo(os.environ.get("EVENT_TZ", "America/Mexico_City"))
+except Exception:
+    EVENT_TZ = None   # sin base de zonas → cae a la hora local del servidor
 
 from flask import Flask, request, jsonify, send_from_directory, send_file, g, Response
 from openpyxl import Workbook
@@ -40,8 +45,11 @@ def revalidate_assets(resp):
 
 # ---------------------------------------------------------------- utilidades
 
+def now_dt():
+    return datetime.now(EVENT_TZ)   # hora del evento (México por defecto), no UTC del servidor
+
 def now_iso():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return now_dt().strftime("%Y-%m-%d %H:%M:%S")
 
 def hash_password(password, salt=None):
     salt = salt or secrets.token_hex(16)
@@ -266,7 +274,7 @@ def set_setting(db, key, value):
 def effective_price(db, type_row):
     """Precio vigente de un tipo: la fase más reciente cuya fecha ya llegó;
     si no hay fase aplicable, el precio base del tipo."""
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = now_dt().strftime("%Y-%m-%d")
     ph = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on<=?
                        ORDER BY starts_on DESC, id DESC LIMIT 1""",
                     (type_row["id"], today)).fetchone()
@@ -453,7 +461,7 @@ def sync_excel_async():
 def backup_loop():
     while True:
         try:
-            stamp = datetime.now().strftime("%Y%m%d_%H%M")
+            stamp = now_dt().strftime("%Y%m%d_%H%M")
             if not IS_PG and os.path.exists(DB_PATH):   # con Postgres el respaldo lo gestiona la plataforma
                 shutil.copy2(DB_PATH, os.path.join(BACKUPS, f"onfire_{stamp}.db"))
             if os.path.exists(XLSX):
@@ -474,7 +482,7 @@ def audit(db, actor, action, detail):
 def create_session(db, role, user_id):
     minutes = int(setting(db, "admin_session_minutes" if role == "admin" else "session_minutes"))
     token = secrets.token_urlsafe(24)
-    exp = (datetime.now() + timedelta(minutes=minutes)).strftime("%Y-%m-%d %H:%M:%S")
+    exp = (now_dt() + timedelta(minutes=minutes)).strftime("%Y-%m-%d %H:%M:%S")
     db.execute("INSERT INTO sessions(token, role, user_id, created_at, expires_at) VALUES(?,?,?,?,?)",
                (token, role, user_id, now_iso(), exp))
     return token
@@ -722,10 +730,9 @@ def get_ticket(tid):
 @app.post("/api/scan")
 def scan():
     """Valida un boleto en tiempo real y lo marca como INGRESÓ en el primer escaneo.
-    Cierra el boleto: cualquier copia o falso sale en rojo."""
-    s = require_admin()
-    if not s:
-        return jsonify(error="sin sesión"), 401
+    Cierra el boleto: cualquier copia o falso sale en rojo.
+    PÚBLICO: el staff de la puerta no necesita cuenta; se valida con el token del QR
+    (imposible de adivinar), así que sin un boleto real no se puede hacer nada."""
     db = get_db()
     ident = folio_from_scan((request.json or {}).get("code", ""))
     if not ident:
@@ -1153,7 +1160,7 @@ def export_xlsx():
     audit(db, s["admin"]["username"], "exportacion",
           f"Exportó la base de compradores{fdesc} ({len(rows)} boletos)")   # RF-94
     db.commit()
-    name = f"boletos_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    name = f"boletos_{now_dt().strftime('%Y%m%d_%H%M')}.xlsx"
     return send_file(buf, as_attachment=True, download_name=name,
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 

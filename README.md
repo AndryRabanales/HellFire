@@ -27,9 +27,9 @@ y usar la IP de esta computadora (se ve con `ipconfig getifaddr en0`).
 
 ## Control en la puerta: escáner en tiempo real (`/scan`)
 
-El staff abre `tu-dominio.railway.app/scan` en el celular (entra con una cuenta de
-administrador; conviene crear una cuenta "puerta" y borrarla al terminar). Apunta la
-cámara al QR y **valida contra la base en tiempo real**:
+El staff abre `tu-dominio.railway.app/scan` en el celular — **es público, no necesita
+login**: entra directo a la cámara. Apunta al QR y **valida contra la base en tiempo
+real**, de forma continua (no hay que refrescar ni confirmar entre boletos):
 
 - 🟢 **VÁLIDO — PASA** → el boleto es real y no se había usado. Queda marcado como
   *ingresó* en ese momento.
@@ -46,7 +46,13 @@ van impresos en el boleto para el cotejo con INE, que se usa como revisión adic
 
 **Requiere internet en la puerta** (datos móviles del celular bastan; el dominio de
 Railway es HTTPS, así que la cámara del navegador funciona sin instalar nada).
-Si falla la cámara, se puede teclear el folio a mano.
+
+**Zona horaria:** las horas usan `America/Mexico_City` por defecto. Para otra zona,
+define la variable `EVENT_TZ` en Railway (ej. `America/Monterrey`).
+
+**Nota:** como el escáner es público, cualquiera con el enlace podría escanear un QR
+que tenga a la vista. El riesgo real es bajo (se necesita el QR físico del boleto),
+pero si quieres protegerlo con un enlace secreto, se puede agregar.
 
 ## Credenciales iniciales
 

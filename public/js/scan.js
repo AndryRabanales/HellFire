@@ -1,54 +1,44 @@
-/* OnFire — escáner de puerta ONLINE, en tiempo real, una sola pantalla.
-   Escanea → muestra resultado compacto → "Aceptar" pasa al siguiente. */
-API.init('onfire_admin_token');
+/* OnFire — escáner de puerta PÚBLICO, en tiempo real, escaneo continuo.
+   No requiere login: abres /scan y estás listo. Escanea → muestra resultado
+   compacto abajo → apunta al siguiente QR y se actualiza solo. */
 
-let stream = null, scanning = false, paused = false, lastCode = '', lastAt = 0;
+let stream = null, scanning = false, busy = false, lastCode = '', lastAt = 0, hideTimer = null;
 
-function show(view) {
-  $('#view-login').classList.toggle('hidden', view !== 'login');
-  $('#view-scan').classList.toggle('hidden', view !== 'scan');
+async function call(code) {
+  const res = await fetch('/api/scan', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  return res.json();
 }
-
-/* ---------- login ---------- */
-async function login() {
-  $('#lg-err').textContent = '';
-  try {
-    const r = await API.post('/api/admin/login', {
-      username: $('#lg-user').value.trim(), password: $('#lg-pass').value,
-    });
-    API.setToken(r.token);
-    enter();
-  } catch (e) { $('#lg-err').textContent = e.message; }
-}
-function enter() { show('scan'); updateNet(); startCamera(); }
-function logoutLocal() { API.setToken(null); stopCamera(); show('login'); }
 
 /* ---------- estado de conexión ---------- */
 function updateNet() {
-  const el = $('#live'), on = navigator.onLine !== false;
+  const el = document.getElementById('live'), on = navigator.onLine !== false;
   el.className = 'live' + (on ? '' : ' off');
-  $('#live-text').textContent = on ? 'En vivo' : 'Sin conexión';
+  document.getElementById('live-text').textContent = on ? 'En vivo' : 'Sin conexión';
 }
 window.addEventListener('online', updateNet);
 window.addEventListener('offline', updateNet);
 
 /* ---------- validación ---------- */
 async function validate(code) {
-  if (paused) return;
-  paused = true;                       // pausa hasta que el guardia dé "Aceptar"
+  if (busy) return;
+  busy = true;
   try {
-    const r = await API.post('/api/scan', { code });
+    const r = await call(code);
     render(r);
     if (navigator.vibrate) navigator.vibrate(r.result === 'valido' ? 90 : [70, 60, 70]);
   } catch (e) {
-    if (e.data && e.data._unauthorized) return logoutLocal();
     render({ result: 'error', message: navigator.onLine === false
-      ? 'Sin conexión — revisa el internet de la puerta' : e.message });
+      ? 'Sin conexión — revisa el internet de la puerta' : 'Error, intenta de nuevo' });
+  } finally {
+    setTimeout(() => { busy = false; }, 600);   // pequeño respiro entre escaneos
   }
 }
 
 function render(r) {
-  const box = $('#result'), t = r.ticket;
+  const box = document.getElementById('result'), t = r.ticket;
   let cls = 'bad', title = '✕ NO ENTRA', meta = '';
   if (r.result === 'valido') { cls = 'ok'; title = '✓ ENTRA'; }
   else if (r.result === 'usado') meta = 'Ya se usó · ' + (r.used_at || '').slice(11, 16) + ' h';
@@ -63,21 +53,15 @@ function render(r) {
 
   box.className = 'show ' + cls;
   box.innerHTML = `<div class="r-title">${title}</div>${name}${type}` +
-    (meta ? `<div class="r-meta">${esc(meta)}</div>` : '') +
-    `<button id="btn-accept">Aceptar</button>`;
-  $('#btn-accept').onclick = accept;
-}
+    (meta ? `<div class="r-meta">${esc(meta)}</div>` : '');
 
-function accept() {
-  const box = $('#result');
-  box.className = ''; box.innerHTML = '';
-  lastCode = '';       // permite re-escanear incluso el mismo QR
-  paused = false;
+  clearTimeout(hideTimer);                        // el mensaje se limpia solo si no llega otro
+  hideTimer = setTimeout(() => { box.className = ''; }, 6000);
 }
 
 /* ---------- cámara + lector QR ---------- */
 async function startCamera() {
-  const video = $('#cam'), status = $('#cam-status');
+  const video = document.getElementById('cam'), status = document.getElementById('cam-status');
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false,
@@ -93,8 +77,8 @@ async function startCamera() {
 const workCv = document.createElement('canvas');
 function tick() {
   if (!scanning) return;
-  const video = $('#cam');
-  if (!paused && video.readyState === video.HAVE_ENOUGH_DATA) {
+  const video = document.getElementById('cam');
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
     const w = Math.min(video.videoWidth, 640);
     const h = Math.round(video.videoHeight * (w / video.videoWidth));
     workCv.width = w; workCv.height = h;
@@ -103,6 +87,7 @@ function tick() {
     const code = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
     if (code && code.data) {
       const now = Date.now();
+      // mismo QR: no re-dispara por 3.5s. QR distinto: valida de inmediato.
       if (code.data !== lastCode || now - lastAt > 3500) {
         lastCode = code.data; lastAt = now;
         validate(code.data);
@@ -111,27 +96,7 @@ function tick() {
   }
   requestAnimationFrame(tick);
 }
-function stopCamera() {
-  scanning = false;
-  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-}
 
-/* ---------- eventos ---------- */
-$('#btn-login').addEventListener('click', login);
-$('#lg-pass').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
-$('#btn-logout').addEventListener('click', async () => {
-  try { await API.post('/api/logout'); } catch (_) {}
-  logoutLocal();
-});
-
-/* ---------- arranque ---------- */
-(async function boot() {
-  if (API.token) {
-    try {
-      const me = await API.get('/api/me');
-      if (me.role === 'admin') return enter();
-    } catch (_) {}
-    API.setToken(null);
-  }
-  show('login');
-})();
+/* ---------- arranque (directo, sin login) ---------- */
+updateNet();
+startCamera();
