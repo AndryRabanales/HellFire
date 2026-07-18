@@ -54,6 +54,7 @@
   <div class="tabs mt16" id="tabs">
     <button class="tab sel" data-tab="resumen">Resumen</button>
     <button class="tab" data-tab="boletos">Boletos</button>
+    <button class="tab" data-tab="movimientos">Movimientos</button>
     <button class="tab" data-tab="generar">+ Generar</button>
     <button class="tab" data-tab="ranking">Ranking</button>
     <button class="tab" data-tab="vendedores">Vendedores</button>
@@ -85,6 +86,12 @@
         <th>Vendedor</th><th>Fecha</th><th>Estado</th><th></th>
       </tr></thead><tbody id="bt-body"></tbody></table>
     </div>
+  </section>
+
+  <!-- ===== Movimientos: feed de actividad visible para TODOS los admins ===== -->
+  <section id="tab-movimientos" class="mt16 hidden" style="max-width:720px">
+    <div class="muted" style="margin-bottom:10px">Todo lo que pasa en el sistema: boletos generados y anulados, vendedores creados/eliminados, cambios de fases y precios. Visible para todos los administradores.</div>
+    <div id="mv-list" style="display:flex;flex-direction:column;gap:8px"></div>
   </section>
 
   <!-- ===== Generar (RF-13) ===== -->

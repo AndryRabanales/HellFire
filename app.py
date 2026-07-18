@@ -180,6 +180,8 @@ CREATE TABLE IF NOT EXISTS sellers (
   code TEXT,                       -- NULL cuando el vendedor fue eliminado
   active INTEGER NOT NULL DEFAULT 1,
   deleted INTEGER NOT NULL DEFAULT 0,
+  owner_admin_id INTEGER,          -- admin que creó al vendedor (su dueño)
+  owner_admin_name TEXT,           -- nombre del admin dueño (etiqueta visible)
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ticket_types (
@@ -330,12 +332,19 @@ def init_db():
     if IS_PG:
         for col in ("qr_payload TEXT", "used_at TEXT"):
             db.execute(f"ALTER TABLE tickets ADD COLUMN IF NOT EXISTS {col}")
+        for col in ("owner_admin_id INTEGER", "owner_admin_name TEXT"):
+            db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
             db.execute("ALTER TABLE tickets ADD COLUMN qr_payload TEXT")
         if "used_at" not in cols:
             db.execute("ALTER TABLE tickets ADD COLUMN used_at TEXT")
+        scols = [r["name"] for r in db.execute("PRAGMA table_info(sellers)").fetchall()]
+        if "owner_admin_id" not in scols:
+            db.execute("ALTER TABLE sellers ADD COLUMN owner_admin_id INTEGER")
+        if "owner_admin_name" not in scols:
+            db.execute("ALTER TABLE sellers ADD COLUMN owner_admin_name TEXT")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -619,7 +628,13 @@ def me():
             "flyer": bool(setting(db, "flyer_file"))}
     if s["role"] == "seller":
         return jsonify(role="seller", name=s["seller"]["name"], **info)
-    return jsonify(role="admin", name=s["admin"]["username"], **info)
+    return jsonify(role="admin", name=s["admin"]["username"],
+                   admin_id=s["admin"]["id"], **info)
+
+def owns_seller(admin, seller_row):
+    """Un admin es dueño del vendedor si lo creó. Vendedores antiguos sin dueño
+    (owner NULL, de versiones previas) pueden gestionarse por cualquier admin."""
+    return seller_row["owner_admin_id"] is None or seller_row["owner_admin_id"] == admin["id"]
 
 # ---------------------------------------------------------------- API: vendedor
 
@@ -703,6 +718,9 @@ def create_ticket():
         else:
             return jsonify(error="No se pudo generar el folio, intenta de nuevo"), 500
     t = db.execute("SELECT * FROM tickets WHERE id=?", (cur.lastrowid,)).fetchone()
+    audit(db, seller_name, "generacion",
+          f"Generó el boleto {t['folio']} para {buyer} ({tt['name']})")
+    db.commit()
     sync_excel_async()
     return jsonify(ticket=ticket_public(t))
 
@@ -785,18 +803,20 @@ def admin_summary():
     return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0),
                    entered=tot["entered"] or 0)
 
-def ticket_filters():
-    """WHERE dinámico compartido por la tabla admin y la exportación (RF-93)."""
+def ticket_filters(prefix=""):
+    """WHERE dinámico compartido por la tabla admin y la exportación (RF-93).
+    prefix: alias de la tabla tickets cuando la consulta usa JOIN (ej. "t.")."""
     a = request.args
+    p = prefix
     where, params = [], []
     if a.get("seller_id"):
-        where.append("seller_id=?"); params.append(a["seller_id"])
+        where.append(f"{p}seller_id=?"); params.append(a["seller_id"])
     if a.get("faculty"):
-        where.append("faculty_name=?"); params.append(a["faculty"])
+        where.append(f"{p}faculty_name=?"); params.append(a["faculty"])
     if a.get("type"):
-        where.append("type_name=?"); params.append(a["type"])
+        where.append(f"{p}type_name=?"); params.append(a["type"])
     if a.get("q"):
-        where.append(f"(buyer_name {LIKE} ? OR folio {LIKE} ?)")
+        where.append(f"({p}buyer_name {LIKE} ? OR {p}folio {LIKE} ?)")
         params += [f"%{a['q']}%", f"%{a['q']}%"]
     return (" WHERE " + " AND ".join(where) if where else ""), params
 
@@ -806,9 +826,33 @@ def admin_tickets():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    where, params = ticket_filters()
-    rows = db.execute("SELECT * FROM tickets" + where + " ORDER BY id DESC", params).fetchall()
-    return jsonify(tickets=[ticket_public(t) for t in rows])
+    where, params = ticket_filters("t.")
+    rows = db.execute(
+        "SELECT t.*, s.owner_admin_id AS owner_admin_id, s.owner_admin_name AS owner_admin_name "
+        "FROM tickets t LEFT JOIN sellers s ON s.id = t.seller_id"
+        + where + " ORDER BY t.id DESC", params).fetchall()
+    out = []
+    for t in rows:
+        tp = ticket_public(t)
+        tp["owner_admin_id"] = t["owner_admin_id"]
+        tp["owner_admin_name"] = t["owner_admin_name"]
+        out.append(tp)
+    return jsonify(tickets=out)
+
+def can_void(admin, db, t):
+    """Solo el admin dueño del vendedor puede anular sus boletos. Boletos generados
+    directamente por un admin: solo ese mismo admin. Vendedores sin dueño (legado):
+    cualquier admin."""
+    if t["seller_id"] is not None:
+        sel = db.execute("SELECT * FROM sellers WHERE id=?", (t["seller_id"],)).fetchone()
+        if sel and sel["owner_admin_id"] is not None and sel["owner_admin_id"] != admin["id"]:
+            return False, sel["owner_admin_name"]
+        return True, None
+    # boleto generado por un admin (seller_name = "Admin: usuario")
+    creator = (t["seller_name"] or "").removeprefix("Admin: ")
+    if creator and creator != admin["username"]:
+        return False, creator
+    return True, None
 
 @app.post("/api/admin/tickets/<int:tid>/void")
 def void_ticket(tid):
@@ -824,10 +868,14 @@ def void_ticket(tid):
         return jsonify(error="no existe"), 404
     if t["status"] == "void":
         return jsonify(error="Ya estaba anulado"), 400
+    ok, owner = can_void(s["admin"], db, t)
+    if not ok:
+        return jsonify(error=f"Solo {owner} (admin del vendedor) puede anular este boleto"), 403
     db.execute("UPDATE tickets SET status='void', voided_at=?, voided_by=?, void_reason=? WHERE id=?",
                (now_iso(), s["admin"]["username"], reason, tid))
     audit(db, s["admin"]["username"], "anulacion",
-          f"Anuló {t['folio']} ({t['buyer_name']}, {t['type_name']} ${money(t['price_cents']):.2f}). Motivo: {reason}")
+          f"Anuló el boleto {t['folio']} de {t['buyer_name']} ({t['type_name']}, "
+          f"vendió {t['seller_name']}). Motivo: {reason}")
     db.commit()
     sync_excel_async()
     return jsonify(ok=True)
@@ -1027,9 +1075,12 @@ def create_seller():
             return jsonify(error="Ese código ya está en uso"), 400   # RF-84
     else:
         code = gen_seller_code(db)
-    db.execute("INSERT INTO sellers(name, code, created_at) VALUES(?,?,?)",
-               (name, code, now_iso()))
-    audit(db, s["admin"]["username"], "usuarios", f"Creó vendedor '{name}' con código {code}")
+    # el vendedor queda ligado al admin que lo crea (su dueño)
+    db.execute("INSERT INTO sellers(name, code, owner_admin_id, owner_admin_name, created_at) "
+               "VALUES(?,?,?,?,?)",
+               (name, code, s["admin"]["id"], s["admin"]["username"], now_iso()))
+    audit(db, s["admin"]["username"], "vendedor_creado",
+          f"Creó al vendedor '{name}' (código {code})")
     db.commit()
     return jsonify(ok=True, code=code)
 
@@ -1043,6 +1094,8 @@ def edit_seller(sid):
     sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0", (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
+    if not owns_seller(s["admin"], sel):
+        return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede modificar a este vendedor"), 403
     name = str(b.get("name", sel["name"])).strip() or sel["name"]
     code = str(b.get("code", sel["code"])).strip()
     if code != sel["code"]:
@@ -1067,6 +1120,8 @@ def toggle_seller(sid):
     sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0", (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
+    if not owns_seller(s["admin"], sel):
+        return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede modificar a este vendedor"), 403
     new = 0 if sel["active"] else 1
     db.execute("UPDATE sellers SET active=? WHERE id=?", (new, sid))
     if not new:
@@ -1086,11 +1141,13 @@ def delete_seller(sid):
     sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0", (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
+    if not owns_seller(s["admin"], sel):
+        return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede eliminar a este vendedor"), 403
     n = db.execute("SELECT COUNT(*) c FROM tickets WHERE seller_id=?", (sid,)).fetchone()["c"]
     # RF-87: se elimina la cuenta, los boletos se conservan con su nombre
     db.execute("UPDATE sellers SET deleted=1, active=0, code=NULL WHERE id=?", (sid,))
     db.execute("DELETE FROM sessions WHERE role='seller' AND user_id=?", (sid,))
-    audit(db, s["admin"]["username"], "usuarios",
+    audit(db, s["admin"]["username"], "vendedor_eliminado",
           f"Eliminó al vendedor '{sel['name']}' ({n} boletos quedan asociados a su nombre)")
     db.commit()
     sync_excel_async()

@@ -29,8 +29,10 @@ async function login() {
   } catch (e) { $('#lg-err').textContent = e.message; }
 }
 
+let ME_ID = null;   // id del admin con sesión (para saber qué es "mío")
 async function enter(name) {
   EV = await API.get('/api/catalog');
+  try { ME_ID = (await API.get('/api/me')).admin_id ?? null; } catch (_) {}
   $('#who').textContent = name;
   $('#av').textContent = (EV.event_name || 'O')[0];
   $('#lg-name').textContent = EV.event_name;
@@ -40,9 +42,9 @@ async function enter(name) {
 
 /* ---------------- tabs ---------------- */
 const loaders = {
-  resumen: loadSummary, boletos: loadTicketsTab, generar: loadGenerar,
-  ranking: loadRanking, vendedores: loadSellers, catalogos: loadCatalogs,
-  admins: loadAdmins, ajustes: loadSettings,
+  resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
+  generar: loadGenerar, ranking: loadRanking, vendedores: loadSellers,
+  catalogos: loadCatalogs, admins: loadAdmins, ajustes: loadSettings,
 };
 
 let currentTab = 'resumen';
@@ -63,7 +65,8 @@ $('#tabs').addEventListener('click', e => {
    (nuevos boletos, ingresos, anulaciones). Se pausa si la pestaña del navegador no
    está activa, para no gastar de más. */
 let liveTimer = null;
-const LIVE = { resumen: loadSummary, boletos: loadTicketsTable, ranking: loadRanking };
+const LIVE = { resumen: loadSummary, boletos: loadTicketsTable, ranking: loadRanking,
+               movimientos: loadMovements, vendedores: loadSellers };
 function startLive() {
   stopLive();
   const fn = LIVE[currentTab];
@@ -173,21 +176,25 @@ async function loadTicketsTable(silent) {
       <td>${esc(t.faculty_name)}</td>
       <td>${esc(t.type_name)}</td>
       <td class="strike" style="font-family:'Space Grotesk'">${fmtMoney(t.price)}</td>
-      <td>${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span></td>
+      <td>${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
       <td class="muted">${esc(t.created_at)}</td>
       <td>${estado}</td>`;
     const td = document.createElement('td');
     td.style.whiteSpace = 'nowrap';
+    // solo el admin dueño del vendedor puede anular sus boletos
+    const mine = t.owner_admin_id == null || t.owner_admin_id === ME_ID;
     if (t.status !== 'void') {
       const dl = document.createElement('button');
       dl.className = 'iconbtn'; dl.title = 'Descargar boleto'; dl.textContent = '⬇';
       dl.onclick = async () => { dl.disabled = true; try { await downloadTicket(t, EV); } finally { dl.disabled = false; } };
       td.appendChild(dl);
-      const vd = document.createElement('button');
-      vd.className = 'iconbtn'; vd.title = 'Anular boleto'; vd.textContent = '✕';
-      vd.style.marginLeft = '6px'; vd.style.color = 'var(--danger)'; vd.style.borderColor = 'rgba(232,112,106,.5)'; vd.style.background = 'rgba(232,112,106,.08)';
-      vd.onclick = () => voidTicket(t);
-      td.appendChild(vd);
+      if (mine) {
+        const vd = document.createElement('button');
+        vd.className = 'iconbtn'; vd.title = 'Anular boleto'; vd.textContent = '✕';
+        vd.style.marginLeft = '6px'; vd.style.color = 'var(--danger)'; vd.style.borderColor = 'rgba(232,112,106,.5)'; vd.style.background = 'rgba(232,112,106,.08)';
+        vd.onclick = () => voidTicket(t);
+        td.appendChild(vd);
+      }
     }
     tr.appendChild(td);
     body.appendChild(tr);
@@ -286,24 +293,54 @@ async function loadRanking(silent) {
     </tr>`).join('');
 }
 
+/* ---------------- movimientos (feed para todos los admins) ---------------- */
+const MV_ICON = { generacion: '🎟', anulacion: '✕', vendedor_creado: '👤', vendedor_eliminado: '✂',
+                  usuarios: '👤', precio: '$', catalogo: '📋', ajustes: '⚙', exportacion: '⬇',
+                  inicializacion: '⚡' };
+const MV_COLOR = { anulacion: 'rgba(232,112,106,.5)', vendedor_eliminado: 'rgba(232,112,106,.5)',
+                   generacion: 'rgba(126,226,168,.4)', vendedor_creado: 'rgba(126,226,168,.4)' };
+let _sigMoves = '';
+async function loadMovements(silent) {
+  const r = await API.get('/api/admin/audit');
+  const sig = r.log.length ? r.log[0].id + '-' + r.log.length : '0';
+  if (silent && sig === _sigMoves) return;
+  _sigMoves = sig;
+  $('#mv-list').innerHTML = r.log.map(l => `
+    <div class="trow" style="${MV_COLOR[l.action] ? 'border-color:' + MV_COLOR[l.action] : ''}">
+      <div class="avatar" style="font-size:13px">${MV_ICON[l.action] || '·'}</div>
+      <div class="tmain">
+        <div style="font:600 12.5px Manrope;color:var(--cream);white-space:normal">${esc(l.detail)}</div>
+        <div class="tmeta">${esc(l.actor)} · ${esc(l.created_at)}</div>
+      </div>
+    </div>`).join('') || '<div class="muted">Sin movimientos aún</div>';
+}
+
 /* ---------------- vendedores ---------------- */
-async function loadSellers() {
+let _sigSellers = '';
+async function loadSellers(silent) {
   const r = await API.get('/api/admin/sellers');
+  const sig = JSON.stringify(r.sellers.map(s => [s.id, s.name, s.code, s.active, s.deleted, s.tickets]));
+  if (silent && sig === _sigSellers) return;
+  _sigSellers = sig;
   CACHE.sellers = r.sellers;
   const body = $('#sl-body');
   body.innerHTML = '';
   r.sellers.forEach(s => {
     const tr = document.createElement('tr');
     if (s.deleted) tr.style.opacity = '.45';
+    // cada vendedor va etiquetado con su admin dueño
+    const ownerTag = s.owner_admin_name
+      ? `<div class="muted" style="font-size:9px;margin-top:3px">admin: ${esc(s.owner_admin_name)}</div>` : '';
     tr.innerHTML = `
-      <td style="font-weight:700">${esc(s.name)}</td>
+      <td style="font-weight:700">${esc(s.name)}${ownerTag}</td>
       <td>${s.deleted ? '<span class="muted">—</span>' : `<span class="codechip">${esc(s.code)}</span>`}</td>
       <td>${s.tickets} <span class="muted">válidos</span></td>
       <td>${s.deleted ? '<span class="badge void">Eliminado</span>'
           : s.active ? '<span class="badge active">Activo</span>'
           : '<span class="badge used">Desactivado</span>'}</td>`;
     const td = document.createElement('td');
-    if (!s.deleted) {
+    const mine = s.owner_admin_id == null || s.owner_admin_id === ME_ID;
+    if (!s.deleted && mine) {
       const mk = (label, fn, cls) => {
         const b = document.createElement('button');
         b.className = 'btn sm ' + (cls || 'ghost');
@@ -314,6 +351,8 @@ async function loadSellers() {
       mk('Editar', () => editSeller(s));
       mk(s.active ? 'Desactivar' : 'Reactivar', () => toggleSeller(s));
       mk('Eliminar', () => deleteSeller(s), 'danger');
+    } else if (!s.deleted) {
+      td.innerHTML = `<span class="muted" style="font-size:10px">solo ${esc(s.owner_admin_name || 'su admin')} puede modificarlo</span>`;
     }
     tr.appendChild(td);
     body.appendChild(tr);
