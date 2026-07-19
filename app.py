@@ -1025,6 +1025,57 @@ def delete_phase(pid):
     db.commit()
     return jsonify(ok=True)
 
+@app.post("/api/admin/phases-all")
+def create_phase_all():
+    """Crea una fase para TODOS los tipos activos a la vez: misma fecha y nombre,
+    con precio propio por tipo. Al llegar la fecha, todos los boletos suben de precio."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    b = request.json or {}
+    name = str(b.get("name", "")).strip()
+    date = str(b.get("starts_on", "")).strip()
+    prices = b.get("prices") or {}
+    if not name or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        return jsonify(error="Falta el nombre o la fecha (AAAA-MM-DD) de la fase"), 400
+    db = get_db()
+    types = db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY id").fetchall()
+    if not types:
+        return jsonify(error="No hay tipos de boleto activos"), 400
+    parsed = []
+    for t in types:
+        raw = prices.get(str(t["id"]), prices.get(t["id"]))
+        try:
+            cents = int(round(float(raw) * 100))
+        except (TypeError, ValueError):
+            cents = 0
+        if cents <= 0:
+            return jsonify(error=f"Pon un precio válido para {t['name']}"), 400
+        parsed.append((t["id"], cents))
+    for tid, cents in parsed:
+        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on) VALUES(?,?,?,?)",
+                   (tid, name, cents, date))
+    audit(db, s["admin"]["username"], "precio",
+          f"Creó la fase '{name}' desde {date} (todos los tipos)")
+    db.commit()
+    return jsonify(ok=True)
+
+@app.delete("/api/admin/phases-all")
+def delete_phase_all():
+    """Borra una fase global (todas las filas con ese nombre y fecha)."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    name = (request.args.get("name") or "").strip()
+    date = (request.args.get("starts_on") or "").strip()
+    if not name or not date:
+        return jsonify(error="Falta identificar la fase"), 400
+    db = get_db()
+    db.execute("DELETE FROM price_phases WHERE name=? AND starts_on=?", (name, date))
+    audit(db, s["admin"]["username"], "precio", f"Eliminó la fase '{name}' ({date})")
+    db.commit()
+    return jsonify(ok=True)
+
 @app.post("/api/admin/ticket-types")
 def create_type():
     s = require_admin()

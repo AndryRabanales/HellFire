@@ -475,71 +475,98 @@ async function deleteSeller(s) {
 }
 
 /* ---------------- catálogos ---------------- */
+// Fases GLOBALES: se agrupan las fases de todos los tipos por (fecha + nombre).
+// Cada grupo es "una fase de venta" que sube todos los boletos a la vez.
+function renderPhases(types) {
+  const groups = {};   // clave "fecha|nombre" -> {name, starts_on, byType:{id:price_cents}}
+  types.forEach(t => (t.phases || []).forEach(p => {
+    const key = p.starts_on + '|' + p.name;
+    (groups[key] = groups[key] || { name: p.name, starts_on: p.starts_on, byType: {} })
+      .byType[t.id] = p.price_cents;
+  }));
+  const arr = Object.values(groups).sort((a, b) => a.starts_on < b.starts_on ? -1 : 1);
+  const today = new Date().toLocaleDateString('en-CA');   // AAAA-MM-DD local
+  const list = $('#ph-list');
+  list.innerHTML = arr.length ? '' :
+    '<div class="muted" style="font-size:12px">Sin fases todavía. Agrega la primera abajo.</div>';
+  arr.forEach(g => {
+    const vigente = g.starts_on <= today;
+    const row = document.createElement('div');
+    row.style.cssText = 'padding:8px 11px;border-radius:11px;margin-bottom:6px;background:rgba(255,255,255,.03);border:1px solid '
+      + (vigente ? 'var(--ember)' : 'rgba(255,120,40,.15)');
+    const top = document.createElement('div');
+    top.className = 'row'; top.style.justifyContent = 'space-between';
+    top.innerHTML = `<div style="font:700 12px Manrope">${esc(g.name)}${vigente ? ' <span style="color:var(--ember-soft);font-size:9px">● VIGENTE</span>' : ''}</div>
+      <div class="muted" style="font-size:11px">desde ${esc(g.starts_on)}</div>`;
+    const del = document.createElement('button');
+    del.className = 'iconbtn'; del.style.cssText = 'width:26px;height:26px;font-size:11px';
+    del.title = 'Eliminar fase'; del.textContent = '✕';
+    del.onclick = async () => {
+      try {
+        await API.del(`/api/admin/phases-all?name=${encodeURIComponent(g.name)}&starts_on=${encodeURIComponent(g.starts_on)}`);
+        loadCatalogs();
+      } catch (e) { if (!guard(e)) toast(e.message); }
+    };
+    top.appendChild(del);
+    row.appendChild(top);
+    const pr = document.createElement('div');
+    pr.style.cssText = 'margin-top:5px;display:flex;gap:12px;flex-wrap:wrap';
+    pr.innerHTML = types.map(t => {
+      const c = g.byType[t.id];
+      return `<span style="font:600 11px Manrope;color:var(--cream-60)">${esc(t.name)}${t.is_vip ? ' ★' : ''}: <b style="color:var(--ember-soft)">${c != null ? fmtMoney(c / 100) : '—'}</b></span>`;
+    }).join('');
+    row.appendChild(pr);
+    list.appendChild(row);
+  });
+  // formulario de alta: nombre + fecha + un precio por cada tipo
+  const add = $('#ph-add');
+  add.innerHTML = `
+    <div class="row" style="gap:6px;flex-wrap:wrap">
+      <input class="input" id="ph-name" placeholder="Nombre de la fase (ej. Preventa 2)" style="flex:1;min-width:130px;padding:9px;font-size:12px">
+      <input class="input" id="ph-date" type="date" style="width:150px;padding:9px;font-size:12px">
+    </div>
+    <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
+      ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)}${t.is_vip ? ' ★' : ''} — precio nuevo
+        <input class="input" type="number" min="1" placeholder="$" data-ph-price="${t.id}" style="width:110px;padding:9px;font-size:12px"></label>`).join('')}
+      <button class="btn sm" id="btn-ph-create" style="width:auto">+ Fase</button>
+    </div>`;
+  $('#btn-ph-create').onclick = async () => {
+    const prices = {};
+    types.forEach(t => {
+      const v = add.querySelector(`[data-ph-price="${t.id}"]`).value.trim();
+      if (v) prices[t.id] = parseFloat(v);
+    });
+    $('#ph-err').textContent = '';
+    try {
+      await API.post('/api/admin/phases-all',
+        { name: $('#ph-name').value.trim(), starts_on: $('#ph-date').value, prices });
+      loadCatalogs();
+    } catch (e) { if (!guard(e)) $('#ph-err').textContent = e.message; }
+  };
+}
+
 async function loadCatalogs() {
   const [tt, fc] = await Promise.all([
     API.get('/api/admin/ticket-types'), API.get('/api/admin/faculties'),
   ]);
+  // ----- tipos de boleto: solo precio base + editar -----
   $('#tt-list').innerHTML = '';
   tt.types.forEach(t => {
     const box = document.createElement('div');
-    box.style.cssText = 'padding:12px 0;border-bottom:1px solid rgba(255,120,40,.1)';
-    // cabecera del tipo: nombre + precio vigente
-    const head = document.createElement('div');
-    head.className = 'row';
-    head.style.justifyContent = 'space-between';
-    head.innerHTML = `<div style="font:700 14px Manrope">${esc(t.name)}${t.is_vip ? ' <span style="color:#f3d27a">★</span>' : ''}
+    box.className = 'row';
+    box.style.cssText = 'justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,120,40,.1)';
+    box.innerHTML = `<div style="font:700 14px Manrope">${esc(t.name)}${t.is_vip ? ' <span style="color:#f3d27a">★</span>' : ''}
         ${t.active ? '' : ' <span class="muted">(desactivado)</span>'}</div>
       <div style="font:700 14px 'Space Grotesk'">${fmtMoney(t.current_price_cents / 100)}
-        ${t.current_phase ? `<span class="muted" style="font-size:10px">· ${esc(t.current_phase)}</span>` : ''}</div>`;
+        ${t.current_phase ? `<span class="muted" style="font-size:10px"> · ${esc(t.current_phase)}</span>` : ''}</div>`;
     const eb = document.createElement('button');
     eb.className = 'btn sm ghost'; eb.style.width = 'auto'; eb.textContent = 'Editar';
     eb.onclick = () => editType(t);
-    head.appendChild(eb);
-    box.appendChild(head);
-    // fases del tipo
-    const list = document.createElement('div');
-    list.style.cssText = 'margin-top:8px;display:flex;flex-direction:column;gap:5px';
-    t.phases.forEach(p => {
-      const isCurrent = t.current_phase === p.name && t.current_price_cents === p.price_cents;
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.style.cssText = 'justify-content:space-between;padding:6px 10px;border-radius:10px;background:rgba(255,255,255,.03);border:1px solid ' + (isCurrent ? 'var(--ember)' : 'rgba(255,120,40,.15)');
-      row.innerHTML = `<div style="font:600 12px Manrope">${esc(p.name)}${isCurrent ? ' <span style="color:var(--ember-soft);font-size:9px">● VIGENTE</span>' : ''}</div>
-        <div class="muted" style="font-size:11px">desde ${esc(p.starts_on)}</div>
-        <div style="font:700 12px 'Space Grotesk'">${fmtMoney(p.price_cents / 100)}</div>`;
-      const del = document.createElement('button');
-      del.className = 'iconbtn'; del.style.cssText = 'width:26px;height:26px;font-size:11px';
-      del.title = 'Eliminar fase'; del.textContent = '✕';
-      del.onclick = async () => {
-        try { await API.del('/api/admin/phases/' + p.id); loadCatalogs(); }
-        catch (e) { if (!guard(e)) toast(e.message); }
-      };
-      row.appendChild(del);
-      list.appendChild(row);
-    });
-    // agregar fase
-    const add = document.createElement('div');
-    add.className = 'row';
-    add.style.cssText = 'gap:6px;margin-top:6px;flex-wrap:wrap';
-    add.innerHTML = `
-      <input class="input" placeholder="Fase (ej. Preventa)" data-ph="name" style="flex:1;min-width:110px;padding:9px;font-size:12px">
-      <input class="input" type="number" min="1" placeholder="$" data-ph="price" style="width:70px;padding:9px;font-size:12px">
-      <input class="input" type="date" data-ph="date" style="width:140px;padding:9px;font-size:12px">`;
-    const ab = document.createElement('button');
-    ab.className = 'btn sm'; ab.style.width = 'auto'; ab.textContent = '+ Fase';
-    ab.onclick = async () => {
-      const g = k => add.querySelector(`[data-ph="${k}"]`).value.trim();
-      try {
-        await API.post(`/api/admin/ticket-types/${t.id}/phases`,
-          { name: g('name'), price: parseFloat(g('price')), starts_on: g('date') });
-        loadCatalogs();
-      } catch (e) { if (!guard(e)) toast(e.message); }
-    };
-    add.appendChild(ab);
-    box.appendChild(list);
-    box.appendChild(add);
+    box.appendChild(eb);
     $('#tt-list').appendChild(box);
   });
+  // ----- fases de venta globales -----
+  renderPhases(tt.types);
   $('#fc-list').innerHTML = '';
   fc.faculties.forEach(f => {
     const row = document.createElement('div');

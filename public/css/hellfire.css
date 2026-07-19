@@ -201,5 +201,9 @@ table.data tr.void td.strike{text-decoration:line-through}
 .phase-timer .pt-label b{color:var(--ember-soft);font-weight:800}
 .phase-timer .pt-clock{font:800 26px/1 "Space Grotesk",monospace;color:var(--ember);
   letter-spacing:.06em;text-shadow:0 0 16px rgba(255,110,30,.45);font-variant-numeric:tabular-nums}
+.phase-timer .pt-items{display:flex;flex-direction:column;gap:3px;width:100%;max-width:220px;margin-top:2px}
+.phase-timer .pt-item{display:flex;justify-content:space-between;gap:14px;
+  font:600 12px Manrope;color:var(--cream-60)}
+.phase-timer .pt-item b{color:var(--ember-soft);font-weight:800}
 .phase-timer .pt-date{font:600 9px "Space Grotesk",monospace;letter-spacing:.12em;
   text-transform:uppercase;color:var(--ember-dim)}

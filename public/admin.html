@@ -134,8 +134,8 @@
   <!-- ===== Catálogos (RF-80/81) ===== -->
   <section id="tab-catalogos" class="mt16 hidden" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
     <div class="card">
-      <div class="label">Tipos de boleto · precios por fases</div>
-      <div class="muted" style="margin-bottom:10px">Cada fase tiene nombre, precio y fecha. Al llegar la fecha, el precio cambia solo. Los boletos ya generados no cambian.</div>
+      <div class="label">Tipos de boleto · precio base</div>
+      <div class="muted" style="margin-bottom:10px">El precio base aplica cuando ninguna fase está vigente. Las fases de venta (abajo) suben todos los tipos a la vez.</div>
       <div id="tt-list"></div>
       <div class="row mt12" style="flex-wrap:wrap;gap:8px">
         <input class="input grow" id="tt-name" placeholder="Nuevo tipo (ej. General)" style="min-width:130px;padding:11px">
@@ -144,6 +144,13 @@
         <button class="btn sm" id="btn-tt-create">Añadir</button>
       </div>
       <div class="err mt8" id="tt-err"></div>
+    </div>
+    <div class="card">
+      <div class="label">Fases de venta · suben todos los boletos</div>
+      <div class="muted" style="margin-bottom:10px">Una fase tiene nombre y fecha. Al llegar la fecha, <b>todos los tipos</b> cambian al precio que definas aquí (uno por tipo). Los boletos ya generados no cambian.</div>
+      <div id="ph-list"></div>
+      <div id="ph-add" class="mt12"></div>
+      <div class="err mt8" id="ph-err"></div>
     </div>
     <div class="card">
       <div class="label">Facultades</div>

@@ -94,23 +94,25 @@ function phaseStart(ymd) {
 }
 function pad2(n) { return String(n).padStart(2, '0'); }
 
-// Muestra la fase futura más próxima: la del tipo elegido, o la más cercana de todos
-function pickNextPhase() {
-  if (SELECTED_TYPE != null) {
-    const t = CATALOG.types.find(x => x.id === SELECTED_TYPE);
-    return t && t.next_phase ? t.next_phase : null;
-  }
-  const cand = CATALOG.types.map(t => t.next_phase).filter(Boolean);
-  if (!cand.length) return null;
-  return cand.sort((a, b) => a.starts_on < b.starts_on ? -1 : 1)[0];
+// La próxima fase de venta: la fecha futura más cercana entre todos los tipos,
+// con el precio nuevo de CADA tipo (las fases son globales: misma fecha para todos).
+function nextGlobalPhase() {
+  const withPhase = CATALOG.types.filter(t => t.next_phase);
+  if (!withPhase.length) return null;
+  const soonest = withPhase.map(t => t.next_phase.starts_on).sort()[0];
+  const items = withPhase
+    .filter(t => t.next_phase.starts_on === soonest)
+    .map(t => ({ name: t.name, is_vip: t.is_vip, price_cents: t.next_phase.price_cents }));
+  const phaseName = withPhase.find(t => t.next_phase.starts_on === soonest).next_phase.name;
+  return { starts_on: soonest, name: phaseName, items };
 }
 
 function renderPhaseTimer() {
   const box = $('#f-phase-timer');
-  const np = pickNextPhase();
-  if (!np) { box.classList.add('hidden'); box.innerHTML = ''; return; }
-  const diff = phaseStart(np.starts_on) - new Date();
-  if (diff <= 0) {                     // la fase ya llegó → tomar el nuevo precio
+  const g = nextGlobalPhase();
+  if (!g) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  const diff = phaseStart(g.starts_on) - new Date();
+  if (diff <= 0) {                     // la fase ya llegó → tomar los precios nuevos
     box.classList.add('hidden');
     reloadCatalog();
     return;
@@ -120,12 +122,16 @@ function renderPhaseTimer() {
   const m = Math.floor(diff % 3600000 / 60000);
   const s = Math.floor(diff % 60000 / 1000);
   const clock = (d > 0 ? d + 'd ' : '') + pad2(h) + ':' + pad2(m) + ':' + pad2(s);
-  const fecha = phaseStart(np.starts_on).toLocaleDateString('es-MX',
+  const fecha = phaseStart(g.starts_on).toLocaleDateString('es-MX',
     { day: 'numeric', month: 'long' });
+  const lines = g.items.map(i =>
+    `<div class="pt-item"><span>${esc(i.name)}${i.is_vip ? ' ★' : ''}</span><b>${fmtMoney(i.price_cents / 100)}</b></div>`
+  ).join('');
   box.classList.remove('hidden');
   box.innerHTML =
-    `<div class="pt-label">Sube a <b>${fmtMoney(np.price_cents / 100)}</b> · ${esc(np.name)}</div>
+    `<div class="pt-label">Los precios suben · ${esc(g.name)}</div>
      <div class="pt-clock">${clock}</div>
+     <div class="pt-items">${lines}</div>
      <div class="pt-date">a partir del ${fecha}</div>`;
 }
 
