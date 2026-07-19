@@ -141,14 +141,19 @@ async function renderTicket(ticket, ev, imgOverride) {
   ctx.font = '600 15px "Space Grotesk", monospace';
   letterSpaced(ctx, 'A NOMBRE DE', padX, ty, 2.6);
   if (ticket.type_is_vip) {
-    const bx = padX + 178, by = ty - 22, bw = 92, bh = 32;
+    const label = '★ VIP';
+    ctx.font = '800 17px Manrope, sans-serif';   // Manrope sí dibuja bien el glifo ★
+    const tw = ctx.measureText(label).width;
+    const bh = 32, bw = tw + 30;                  // la caja se ajusta al texto
+    const bx = padX + 178, by = ty - 22;
     const gg = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
     gg.addColorStop(0, '#f3d27a'); gg.addColorStop(1, '#d9a53a');
     ctx.fillStyle = gg;
     roundRect(ctx, bx, by, bw, bh, 9); ctx.fill();
     ctx.fillStyle = '#3a1e00';
-    ctx.font = '800 17px "Space Grotesk", monospace';
-    ctx.fillText('★ VIP', bx + 16, by + 22);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';   // centrado real, sin recortes
+    ctx.fillText(label, bx + bw / 2, by + bh / 2 + 1);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
   ty += 54;
   ctx.fillStyle = '#f6f1e7';
