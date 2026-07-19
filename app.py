@@ -253,6 +253,7 @@ DEFAULT_SETTINGS = {
     "event_subtitle": "Noche de brujas",
     "event_date_text": "",
     "folio_prefix": "HF-",
+    "folio_start": "1",              # número del primer folio (no revela lo vendido)
     "session_minutes": "480",
     "admin_session_minutes": "480",
     "ranking_winners": "3",
@@ -431,6 +432,24 @@ def init_db():
                    (env_user, hash_password(env_pass), now_iso()))
         db.commit()
         print(f"[OnFire] Admin '{env_user}' creado desde ADMIN_USER/ADMIN_PASSWORD.")
+
+    # Limpieza TOTAL de una sola vez (evento nuevo): borra todo lo generado en las
+    # pruebas — boletos, vendedores, fases, movimientos, sesiones y los demás admins.
+    # Solo queda el admin inicial (ADMIN_USER/ADMIN_PASSWORD) y los catálogos
+    # (tipos de boleto y facultades). Corre una vez y se marca con la bandera.
+    if setting(db, "event_reset_v1") != "1":
+        for table in ("tickets", "sellers", "price_phases", "audit_log",
+                      "login_attempts", "sessions"):
+            db.execute(f"DELETE FROM {table}")
+        db.execute("DELETE FROM admins WHERE username != ?", (init_user,))
+        db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
+                   ("sistema", "inicializacion",
+                    f"Evento reiniciado: datos de prueba eliminados. Admin inicial: {init_user}",
+                    now_iso()))
+        set_setting(db, "event_reset_v1", "1")
+        db.commit()
+        print(f"[OnFire] Limpieza total: solo queda el admin '{init_user}'.")
+
     db.commit()
     db.close()
 
@@ -729,6 +748,11 @@ def create_ticket():
         base = db.execute(
             "SELECT COALESCE(MAX(CAST(SUBSTR(folio, ?) AS INTEGER)),0) AS n FROM tickets",
             (len(prefix) + 1,)).fetchone()["n"]
+        # folio inicial configurable: el primer boleto no arranca en 0001
+        try:
+            base = max(base, int(setting(db, "folio_start") or 1) - 1)
+        except ValueError:
+            pass
         for attempt in range(20):
             n = base + 1 + attempt
             folio = f"{prefix}{n:04d}"
@@ -1400,7 +1424,8 @@ def get_settings():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    out = {k: setting(db, k) for k in ["event_name", "event_subtitle", "event_date_text"]}
+    out = {k: setting(db, k) for k in ["event_name", "event_subtitle", "event_date_text",
+                                       "folio_start"]}
     out.update(flyer_info(db))
     return jsonify(out)
 
@@ -1422,6 +1447,15 @@ def save_settings():
         if k in b:
             set_setting(db, k, str(b[k]).strip())
             changed.append(k)
+    if "folio_start" in b:
+        # número del primer folio: sirve para no empezar en 0001 y que no se
+        # sepa cuántos boletos llevamos vendidos
+        try:
+            fs = max(1, min(9999, int(b["folio_start"])))
+        except (TypeError, ValueError):
+            fs = 1
+        set_setting(db, "folio_start", str(fs))
+        changed.append(f"folio inicial {fs:04d}")
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
     for v in ("vip", "gen"):
         if f"flyer_focus_{v}" in b:

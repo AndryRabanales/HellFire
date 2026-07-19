@@ -826,6 +826,7 @@ async function loadSettings() {
   $('#st-name').value = s.event_name;
   $('#st-subtitle').value = s.event_subtitle;
   $('#st-date').value = s.event_date_text;
+  $('#st-folio').value = s.folio_start || '1';
   for (const v of ['vip', 'gen']) {
     const st = FLY_ED[v];
     st.focus = parseFloat(s['flyer_focus_' + v]) || 0.5;
@@ -850,6 +851,7 @@ $('#btn-st-save').addEventListener('click', async () => {
     await API.post('/api/admin/settings', {
       event_name: $('#st-name').value, event_subtitle: $('#st-subtitle').value,
       event_date_text: $('#st-date').value,
+      folio_start: parseInt($('#st-folio').value, 10) || 1,
     });
     $('#st-ok').textContent = 'Ajustes guardados ✓';
     setTimeout(() => $('#st-ok').textContent = '', 2500);
