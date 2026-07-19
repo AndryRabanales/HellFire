@@ -121,6 +121,18 @@ async function loadSummary(silent) {
     <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
     <div class="stat"><div class="sk">Cobrado a vendedores</div><div class="sv">${fmtMoney(s.collected)} <small>de ${fmtMoney(s.total)}</small></div></div>
     <div class="stat"><div class="sk">Ya ingresaron</div><div class="sv">${s.entered} <small>de ${s.total_tickets}</small></div></div>`;
+  // desglose de cobranza por admin
+  $('#sum-by-admin').innerHTML = (s.by_admin || []).map(a => {
+    const falta = a.sold - a.collected;
+    const estado = a.sold <= 0
+      ? '<span class="muted">sin ventas</span>'
+      : (falta <= 0 ? '<span class="badge active">al día</span>'
+                    : `<span class="badge used">falta ${fmtMoney(falta)}</span>`);
+    return `<div class="row" style="justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,120,40,.1)">
+      <div style="font:700 13px Manrope;min-width:120px">${esc(a.admin)}</div>
+      <div class="muted" style="font-size:12px">cobró <b style="color:var(--cream)">${fmtMoney(a.collected)}</b> de <b>${fmtMoney(a.sold)}</b></div>
+      <div>${estado}</div></div>`;
+  }).join('') || '<div class="muted">Sin datos aún</div>';
 }
 
 /* ---------------- boletos ---------------- */

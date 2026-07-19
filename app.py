@@ -817,8 +817,23 @@ def admin_summary():
         SUM(CASE WHEN status='used' THEN 1 ELSE 0 END) AS entered
         FROM tickets""").fetchone()
     paid = db.execute("SELECT COALESCE(SUM(paid_cents),0) AS c FROM sellers").fetchone()["c"]
+    # desglose por admin: cuánto han vendido sus vendedores y cuánto ya cobró (todos lo ven)
+    by_admin = db.execute("""
+        SELECT COALESCE(s.owner_admin_name, 'Sin asignar') AS admin_name,
+               COALESCE(SUM(s.paid_cents),0) AS paid_cents,
+               COALESCE(SUM(tk.sold),0) AS sold_cents
+        FROM sellers s
+        LEFT JOIN (SELECT seller_id, SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS sold
+                   FROM tickets GROUP BY seller_id) tk ON tk.seller_id = s.id
+        WHERE s.deleted=0
+        GROUP BY COALESCE(s.owner_admin_name, 'Sin asignar')
+        ORDER BY sold_cents DESC""").fetchall()
+    admins = [{"admin": r["admin_name"], "sold": money(r["sold_cents"]),
+               "collected": money(r["paid_cents"]),
+               "settled": r["sold_cents"] > 0 and r["paid_cents"] >= r["sold_cents"]}
+              for r in by_admin]
     return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0),
-                   entered=tot["entered"] or 0, collected=money(paid))
+                   entered=tot["entered"] or 0, collected=money(paid), by_admin=admins)
 
 def ticket_filters(prefix=""):
     """WHERE dinámico compartido por la tabla admin y la exportación (RF-93).
