@@ -189,7 +189,6 @@ function showDone(t) {
   $('#d-buyer').textContent = t.buyer_name;
   $('#d-faculty').textContent = t.faculty_name;
   $('#d-type').textContent = t.type_name + ' · ' + fmtMoney(t.price);
-  $('#d-folio').textContent = t.folio;
   drawPreviewQR(t.qr_payload || t.qr_token);
   show('done');
 }
@@ -215,7 +214,6 @@ async function loadHistory() {
   const q = $('#h-search').value.trim();
   try {
     const r = await API.get('/api/my-tickets' + (q ? '?q=' + encodeURIComponent(q) : ''));
-    $('#h-count').textContent = r.count;   // RF-68 (anulados no cuentan)
     const list = $('#h-list');
     list.innerHTML = '';
     if (!r.tickets.length) {
@@ -230,7 +228,7 @@ async function loadHistory() {
       row.innerHTML = `
         <div class="tmain">
           <div class="tbuyer">${esc(t.buyer_name)}</div>
-          <div class="tmeta">${esc(t.folio)} · ${esc(t.type_name)} · ${esc(fmtDate(t.created_at))}</div>
+          <div class="tmeta">${esc(t.type_name)} · ${esc(fmtDate(t.created_at))}</div>
         </div>
         <div class="tprice">${fmtMoney(t.price)}</div>`;
       if (isVoid) {
@@ -240,7 +238,7 @@ async function loadHistory() {
         b.className = 'iconbtn'; b.title = 'Descargar imagen'; b.textContent = '⬇';
         b.addEventListener('click', async () => {
           b.disabled = true;
-          try { await downloadTicket(t, CATALOG); toast('Boleto ' + t.folio + ' descargado'); }
+          try { await downloadTicket(t, CATALOG); toast('Boleto descargado'); }
           finally { b.disabled = false; }
         });
         row.appendChild(b);

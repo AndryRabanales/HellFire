@@ -197,7 +197,10 @@ async function downloadTicket(ticket, ev) {
     cv.toBlob(blob => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'boleto_' + ticket.folio + '.png';
+      // el nombre del archivo usa al comprador, no el folio (el folio revela cuántos van vendidos)
+      const slug = (ticket.buyer_name || 'boleto').normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'boleto';
+      a.download = 'boleto_' + slug + '.png';
       document.body.appendChild(a);
       a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); resolve(); }, 400);
