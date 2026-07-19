@@ -841,12 +841,15 @@ def ticket_filters(prefix=""):
     a = request.args
     p = prefix
     where, params = [], []
-    if a.get("admin"):   # boletos de los vendedores de un admin
+    if a.get("admin"):   # boletos de un admin: los de SUS vendedores + los que él generó
         if a["admin"] == "__none__":
             where.append(f"{p}seller_id IN (SELECT id FROM sellers WHERE owner_admin_name IS NULL)")
         else:
-            where.append(f"{p}seller_id IN (SELECT id FROM sellers WHERE owner_admin_name=?)")
+            where.append(
+                f"({p}seller_id IN (SELECT id FROM sellers WHERE owner_admin_name=?) "
+                f"OR {p}seller_name=?)")
             params.append(a["admin"])
+            params.append("Admin: " + a["admin"])
     if a.get("seller_id"):
         where.append(f"{p}seller_id=?"); params.append(a["seller_id"])
     if a.get("faculty"):
