@@ -182,6 +182,7 @@ CREATE TABLE IF NOT EXISTS sellers (
   deleted INTEGER NOT NULL DEFAULT 0,
   owner_admin_id INTEGER,          -- admin que creó al vendedor (su dueño)
   owner_admin_name TEXT,           -- nombre del admin dueño (etiqueta visible)
+  paid_cents INTEGER NOT NULL DEFAULT 0,  -- dinero que el vendedor ya entregó a su admin
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ticket_types (
@@ -332,7 +333,8 @@ def init_db():
     if IS_PG:
         for col in ("qr_payload TEXT", "used_at TEXT"):
             db.execute(f"ALTER TABLE tickets ADD COLUMN IF NOT EXISTS {col}")
-        for col in ("owner_admin_id INTEGER", "owner_admin_name TEXT"):
+        for col in ("owner_admin_id INTEGER", "owner_admin_name TEXT",
+                    "paid_cents INTEGER NOT NULL DEFAULT 0"):
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
@@ -345,6 +347,8 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN owner_admin_id INTEGER")
         if "owner_admin_name" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN owner_admin_name TEXT")
+        if "paid_cents" not in scols:
+            db.execute("ALTER TABLE sellers ADD COLUMN paid_cents INTEGER NOT NULL DEFAULT 0")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -440,22 +444,26 @@ def build_workbook(rows, summary=None):
     ws.freeze_panes = "A2"
     if summary is not None:
         ws2 = wb.create_sheet("Resumen por vendedor")
-        ws2.append(["Vendedor", "Código", "Boletos válidos", "Boletos anulados", "Monto total"])
+        ws2.append(["Vendedor", "Admin", "Código", "Boletos válidos", "Boletos anulados",
+                    "Monto total", "Pagado", "Estatus"])
         for c in ws2[1]:
             c.fill, c.font = header_fill, header_font
         for s in summary:
-            ws2.append([s["name"], s["code"] or "—", s["count_valid"],
-                        s["count_void"], money(s["total_cents"])])
-        for i, w in enumerate([24, 10, 15, 16, 14], 1):
+            paid = s.get("paid_cents") or 0
+            settled = s["total_cents"] > 0 and paid >= s["total_cents"]
+            ws2.append([s["name"], s.get("owner_admin_name") or "—", s["code"] or "—",
+                        s["count_valid"], s["count_void"], money(s["total_cents"]),
+                        money(paid), "COMPLETADO" if settled else "Pendiente"])
+        for i, w in enumerate([24, 16, 10, 15, 16, 14, 12, 13], 1):
             ws2.column_dimensions[get_column_letter(i)].width = w
-        for row in ws2.iter_rows(min_row=2, min_col=5, max_col=5):
+        for row in ws2.iter_rows(min_row=2, min_col=6, max_col=7):
             for c in row:
                 c.number_format = '"$"#,##0.00'
     return wb
 
 def seller_summary(db):
     return [dict(r) for r in db.execute("""
-        SELECT s.name, s.code,
+        SELECT s.name, s.code, s.owner_admin_name, s.paid_cents,
           COALESCE(SUM(CASE WHEN t.status!='void' THEN 1 ELSE 0 END),0) AS count_valid,
           COALESCE(SUM(CASE WHEN t.status='void' THEN 1 ELSE 0 END),0)  AS count_void,
           COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS total_cents
@@ -800,8 +808,9 @@ def admin_summary():
         SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS cents,
         SUM(CASE WHEN status='used' THEN 1 ELSE 0 END) AS entered
         FROM tickets""").fetchone()
+    paid = db.execute("SELECT COALESCE(SUM(paid_cents),0) AS c FROM sellers").fetchone()["c"]
     return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0),
-                   entered=tot["entered"] or 0)
+                   entered=tot["entered"] or 0, collected=money(paid))
 
 def ticket_filters(prefix=""):
     """WHERE dinámico compartido por la tabla admin y la exportación (RF-93).
@@ -1052,10 +1061,48 @@ def list_sellers():
     db = get_db()
     rows = db.execute("""
         SELECT s.*, COALESCE(SUM(CASE WHEN t.status!='void' THEN 1 ELSE 0 END),0) AS tickets,
-               COUNT(t.id) AS tickets_all
+               COUNT(t.id) AS tickets_all,
+               COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS total_cents
         FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id
         GROUP BY s.id ORDER BY s.deleted, s.id""").fetchall()
-    return jsonify(sellers=[dict(r) for r in rows])
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["total"] = money(d.pop("total_cents"))
+        d["paid"] = money(d.get("paid_cents") or 0)
+        d.pop("paid_cents", None)
+        d["settled"] = d["total"] > 0 and d["paid"] >= d["total"]   # Completado
+        out.append(d)
+    return jsonify(sellers=out)
+
+@app.post("/api/admin/sellers/<int:sid>/paid")
+def set_seller_paid(sid):
+    """El admin dueño registra cuánto dinero le ha entregado su vendedor."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0", (sid,)).fetchone()
+    if not sel:
+        return jsonify(error="no existe"), 404
+    if not owns_seller(s["admin"], sel):
+        return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede registrar pagos de este vendedor"), 403
+    try:
+        paid_cents = int(round(float((request.json or {}).get("paid", 0)) * 100))
+    except (TypeError, ValueError):
+        return jsonify(error="Monto inválido"), 400
+    if paid_cents < 0:
+        return jsonify(error="El monto no puede ser negativo"), 400
+    total = db.execute("""SELECT COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS c
+                          FROM tickets WHERE seller_id=?""", (sid,)).fetchone()["c"]
+    db.execute("UPDATE sellers SET paid_cents=? WHERE id=?", (paid_cents, sid))
+    estado = "COMPLETADO" if total > 0 and paid_cents >= total else "pendiente"
+    audit(db, s["admin"]["username"], "pago",
+          f"Registró ${paid_cents/100:,.2f} recibidos de '{sel['name']}' "
+          f"(vendido ${total/100:,.2f} → {estado})")
+    db.commit()
+    return jsonify(ok=True, paid=money(paid_cents), total=money(total),
+                   settled=total > 0 and paid_cents >= total)
 
 @app.post("/api/admin/sellers")
 def create_seller():

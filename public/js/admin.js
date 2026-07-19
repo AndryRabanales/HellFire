@@ -119,6 +119,7 @@ async function loadSummary(silent) {
   $('#sum-stats').innerHTML = `
     <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}</div></div>
     <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
+    <div class="stat"><div class="sk">Cobrado a vendedores</div><div class="sv">${fmtMoney(s.collected)} <small>de ${fmtMoney(s.total)}</small></div></div>
     <div class="stat"><div class="sk">Ya ingresaron</div><div class="sv">${s.entered} <small>de ${s.total_tickets}</small></div></div>`;
 }
 
@@ -296,7 +297,7 @@ async function loadRanking(silent) {
 /* ---------------- movimientos (feed para todos los admins) ---------------- */
 const MV_ICON = { generacion: '🎟', anulacion: '✕', vendedor_creado: '👤', vendedor_eliminado: '✂',
                   usuarios: '👤', precio: '$', catalogo: '📋', ajustes: '⚙', exportacion: '⬇',
-                  inicializacion: '⚡' };
+                  inicializacion: '⚡', pago: '💰' };
 const MV_COLOR = { anulacion: 'rgba(232,112,106,.5)', vendedor_eliminado: 'rgba(232,112,106,.5)',
                    generacion: 'rgba(126,226,168,.4)', vendedor_creado: 'rgba(126,226,168,.4)' };
 let _sigMoves = '';
@@ -319,7 +320,7 @@ async function loadMovements(silent) {
 let _sigSellers = '';
 async function loadSellers(silent) {
   const r = await API.get('/api/admin/sellers');
-  const sig = JSON.stringify(r.sellers.map(s => [s.id, s.name, s.code, s.active, s.deleted, s.tickets]));
+  const sig = JSON.stringify(r.sellers.map(s => [s.id, s.name, s.code, s.active, s.deleted, s.tickets, s.total, s.paid]));
   if (silent && sig === _sigSellers) return;
   _sigSellers = sig;
   CACHE.sellers = r.sellers;
@@ -328,13 +329,21 @@ async function loadSellers(silent) {
   r.sellers.forEach(s => {
     const tr = document.createElement('tr');
     if (s.deleted) tr.style.opacity = '.45';
-    // cada vendedor va etiquetado con su admin dueño
+    // cada vendedor va etiquetado con su admin dueño (quien le cobra)
     const ownerTag = s.owner_admin_name
       ? `<div class="muted" style="font-size:9px;margin-top:3px">admin: ${esc(s.owner_admin_name)}</div>` : '';
+    // cuentas: pagado vs vendido → Pendiente / Completado
+    const cuentas = s.total > 0
+      ? (s.settled
+          ? '<span class="badge active">COMPLETADO</span>'
+          : `<span class="badge used">Pendiente</span><div class="muted" style="font-size:9px;margin-top:3px">faltan ${fmtMoney(s.total - s.paid)}</div>`)
+      : '<span class="muted">—</span>';
     tr.innerHTML = `
       <td style="font-weight:700">${esc(s.name)}${ownerTag}</td>
       <td>${s.deleted ? '<span class="muted">—</span>' : `<span class="codechip">${esc(s.code)}</span>`}</td>
-      <td>${s.tickets} <span class="muted">válidos</span></td>
+      <td><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></td>
+      <td style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(s.paid)}</td>
+      <td>${cuentas}</td>
       <td>${s.deleted ? '<span class="badge void">Eliminado</span>'
           : s.active ? '<span class="badge active">Activo</span>'
           : '<span class="badge used">Desactivado</span>'}</td>`;
@@ -348,6 +357,7 @@ async function loadSellers(silent) {
         b.textContent = label; b.onclick = fn;
         td.appendChild(b);
       };
+      mk('$ Pago', () => paySeller(s));
       mk('Editar', () => editSeller(s));
       mk(s.active ? 'Desactivar' : 'Reactivar', () => toggleSeller(s));
       mk('Eliminar', () => deleteSeller(s), 'danger');
@@ -357,6 +367,30 @@ async function loadSellers(silent) {
     tr.appendChild(td);
     body.appendChild(tr);
   });
+}
+
+/* registrar cuánto dinero ha entregado el vendedor a su admin */
+function paySeller(s) {
+  modal(`<div class="h1" style="font-size:18px">Registrar pago de ${esc(s.name)}</div>
+    <div class="muted mt8">Vendido: <b style="color:var(--cream)">${fmtMoney(s.total)}</b> ·
+      Pagado hasta ahora: <b style="color:var(--cream)">${fmtMoney(s.paid)}</b></div>
+    <div class="label mt12">Total recibido de este vendedor ($)</div>
+    <input class="input" id="pg-amount" type="number" min="0" step="0.01" value="${s.paid}">
+    <div class="muted mt8">Escribe el TOTAL acumulado que te ha entregado. Cuando iguale lo vendido, quedará COMPLETADO.</div>
+    <div class="err mt8" id="pg-err"></div>
+    <div class="row mt16">
+      <button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
+      <button class="btn grow" id="pg-save">Guardar</button>
+    </div>`);
+  $('#pg-save').onclick = async () => {
+    try {
+      const r = await API.post(`/api/admin/sellers/${s.id}/paid`,
+        { paid: parseFloat($('#pg-amount').value || '0') });
+      closeModal();
+      toast(r.settled ? `${s.name}: cuentas COMPLETADAS ✓` : `Pago registrado (faltan ${fmtMoney(r.total - r.paid)})`);
+      loadSellers();
+    } catch (e) { if (!guard(e)) $('#pg-err').textContent = e.message; }
+  };
 }
 
 $('#btn-sl-create').addEventListener('click', async () => {
