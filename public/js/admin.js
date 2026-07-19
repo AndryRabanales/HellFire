@@ -331,18 +331,19 @@ async function loadSellers(silent) {
     if (s.deleted) tr.style.opacity = '.45';
     // en cada fila: quién es el admin de este vendedor (texto simple, claro)
     const adminLine = `<div class="muted" style="font-size:10px;margin-top:3px">Admin: <b style="color:var(--ember-soft)">${esc(s.owner_admin_name || 'sin asignar')}</b></div>`;
-    // cuentas: pagado vs vendido → Pendiente / Completado
-    const cuentas = s.total > 0
-      ? (s.settled
+    // faltante = vendido - pagado. Cuando es 0 (y vendió), COMPLETADO.
+    const falta = s.total - s.paid;
+    const faltante = s.total <= 0
+      ? '<span class="muted">—</span>'
+      : (falta <= 0
           ? '<span class="badge active">COMPLETADO</span>'
-          : `<span class="badge used">Pendiente</span><div class="muted" style="font-size:9px;margin-top:3px">faltan ${fmtMoney(s.total - s.paid)}</div>`)
-      : '<span class="muted">—</span>';
+          : `<b style="font-family:'Space Grotesk';color:var(--danger)">${fmtMoney(falta)}</b>`);
     tr.innerHTML = `
       <td style="font-weight:700">${esc(s.name)}${adminLine}</td>
       <td>${s.deleted ? '<span class="muted">—</span>' : `<span class="codechip">${esc(s.code)}</span>`}</td>
       <td><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></td>
       <td style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(s.paid)}</td>
-      <td>${cuentas}</td>
+      <td>${faltante}</td>
       <td>${s.deleted ? '<span class="badge void">Eliminado</span>'
           : s.active ? '<span class="badge active">Activo</span>'
           : '<span class="badge used">Desactivado</span>'}</td>`;
