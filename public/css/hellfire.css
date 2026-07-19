@@ -192,3 +192,14 @@ table.data tr.void td.strike{text-decoration:line-through}
   font:700 13px Manrope;padding:12px 18px;border-radius:13px;
   box-shadow:0 0 20px rgba(255,110,30,.4);opacity:0;pointer-events:none;transition:opacity .25s}
 #toast.show{opacity:1}
+
+/* Cronómetro de fase (panel de vendedor): cuenta regresiva al próximo cambio de precio */
+.phase-timer{margin-top:12px;padding:12px 14px;border-radius:13px;
+  background:linear-gradient(135deg,rgba(255,122,46,.10),rgba(255,122,46,.03));
+  border:1px solid rgba(255,122,46,.32);display:flex;flex-direction:column;gap:5px;align-items:center;text-align:center}
+.phase-timer .pt-label{font:600 11px Manrope;color:var(--cream-60);letter-spacing:.02em}
+.phase-timer .pt-label b{color:var(--ember-soft);font-weight:800}
+.phase-timer .pt-clock{font:800 26px/1 "Space Grotesk",monospace;color:var(--ember);
+  letter-spacing:.06em;text-shadow:0 0 16px rgba(255,110,30,.45);font-variant-numeric:tabular-nums}
+.phase-timer .pt-date{font:600 9px "Space Grotesk",monospace;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ember-dim)}

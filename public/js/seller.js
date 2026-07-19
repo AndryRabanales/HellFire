@@ -66,6 +66,7 @@ async function enterApp() {
   sel.innerHTML = '<option value="" disabled selected>Elige facultad…</option>' +
     CATALOG.faculties.map(f => `<option value="${f.id}">${esc(f.name)}</option>`).join('');
   renderTypes();
+  startPhaseTimer();
   show('form');
 }
 
@@ -80,6 +81,68 @@ function renderTypes() {
     el.addEventListener('click', () => { SELECTED_TYPE = t.id; renderTypes(); });
     box.appendChild(el);
   });
+  renderPhaseTimer();
+}
+
+/* ---------------- cronómetro de la próxima fase de precio ---------------- */
+let PHASE_INT = null, _reloadingCatalog = false;
+
+// "AAAA-MM-DD" → medianoche local de ese día (cuando entra la nueva fase)
+function phaseStart(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, d, 0, 0, 0, 0);
+}
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+// Muestra la fase futura más próxima: la del tipo elegido, o la más cercana de todos
+function pickNextPhase() {
+  if (SELECTED_TYPE != null) {
+    const t = CATALOG.types.find(x => x.id === SELECTED_TYPE);
+    return t && t.next_phase ? t.next_phase : null;
+  }
+  const cand = CATALOG.types.map(t => t.next_phase).filter(Boolean);
+  if (!cand.length) return null;
+  return cand.sort((a, b) => a.starts_on < b.starts_on ? -1 : 1)[0];
+}
+
+function renderPhaseTimer() {
+  const box = $('#f-phase-timer');
+  const np = pickNextPhase();
+  if (!np) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  const diff = phaseStart(np.starts_on) - new Date();
+  if (diff <= 0) {                     // la fase ya llegó → tomar el nuevo precio
+    box.classList.add('hidden');
+    reloadCatalog();
+    return;
+  }
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor(diff % 86400000 / 3600000);
+  const m = Math.floor(diff % 3600000 / 60000);
+  const s = Math.floor(diff % 60000 / 1000);
+  const clock = (d > 0 ? d + 'd ' : '') + pad2(h) + ':' + pad2(m) + ':' + pad2(s);
+  const fecha = phaseStart(np.starts_on).toLocaleDateString('es-MX',
+    { day: 'numeric', month: 'long' });
+  box.classList.remove('hidden');
+  box.innerHTML =
+    `<div class="pt-label">Sube a <b>${fmtMoney(np.price_cents / 100)}</b> · ${esc(np.name)}</div>
+     <div class="pt-clock">${clock}</div>
+     <div class="pt-date">a partir del ${fecha}</div>`;
+}
+
+// al vencer una fase se recarga el catálogo para reflejar el precio nuevo
+async function reloadCatalog() {
+  if (_reloadingCatalog) return;
+  _reloadingCatalog = true;
+  try {
+    CATALOG = await API.get('/api/catalog');
+    renderTypes();
+  } catch (e) { /* reintenta en el siguiente tick */ }
+  finally { _reloadingCatalog = false; }
+}
+
+function startPhaseTimer() {
+  if (PHASE_INT) clearInterval(PHASE_INT);
+  PHASE_INT = setInterval(renderPhaseTimer, 1000);
 }
 
 function clearForm() {

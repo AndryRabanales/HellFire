@@ -300,6 +300,18 @@ def effective_price(db, type_row):
         return ph["price_cents"], ph["name"]
     return type_row["price_cents"], None
 
+def next_phase(db, type_row):
+    """La próxima fase cuya fecha aún NO llegó (el siguiente cambio de precio).
+    Devuelve {name, price_cents, starts_on} o None si no hay más fases futuras."""
+    today = now_dt().strftime("%Y-%m-%d")
+    ph = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on>?
+                       ORDER BY starts_on ASC, id ASC LIMIT 1""",
+                    (type_row["id"], today)).fetchone()
+    if ph:
+        return {"name": ph["name"], "price_cents": ph["price_cents"],
+                "starts_on": ph["starts_on"]}
+    return None
+
 def gen_seller_code(db):
     for _ in range(500):
         code = f"{secrets.randbelow(10000):04d}"
@@ -671,7 +683,8 @@ def catalog():
     for r in db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY price_cents").fetchall():
         price, phase = effective_price(db, r)
         types.append({"id": r["id"], "name": r["name"], "is_vip": r["is_vip"],
-                      "price_cents": price, "phase": phase})
+                      "price_cents": price, "phase": phase,
+                      "next_phase": next_phase(db, r)})
     facs = [dict(r) for r in db.execute(
         "SELECT id, name FROM faculties WHERE active=1 ORDER BY name").fetchall()]
     return jsonify(types=types, faculties=facs,
