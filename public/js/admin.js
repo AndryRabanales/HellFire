@@ -128,8 +128,11 @@ async function loadSummary(silent) {
       ? '<span class="muted">sin ventas</span>'
       : (falta <= 0 ? '<span class="badge active">al día</span>'
                     : `<span class="badge used">falta ${fmtMoney(falta)}</span>`);
+    const propias = a.direct > 0
+      ? `<div class="muted" style="font-size:10.5px;margin-top:2px">incluye <b style="color:var(--ember-soft)">${fmtMoney(a.direct)}</b> de ventas propias</div>`
+      : '';
     return `<div class="row" style="justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,120,40,.1)">
-      <div style="font:700 13px Manrope;min-width:120px">${esc(a.admin)}</div>
+      <div style="min-width:120px"><div style="font:700 13px Manrope">${esc(a.admin)}</div>${propias}</div>
       <div class="muted" style="font-size:12px">cobró <b style="color:var(--cream)">${fmtMoney(a.collected)}</b> de <b>${fmtMoney(a.sold)}</b></div>
       <div>${estado}</div></div>`;
   }).join('') || '<div class="muted">Sin datos aún</div>';

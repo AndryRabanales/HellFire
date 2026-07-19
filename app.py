@@ -828,10 +828,28 @@ def admin_summary():
         WHERE s.deleted=0
         GROUP BY COALESCE(s.owner_admin_name, 'Sin asignar')
         ORDER BY sold_cents DESC""").fetchall()
-    admins = [{"admin": r["admin_name"], "sold": money(r["sold_cents"]),
-               "collected": money(r["paid_cents"]),
-               "settled": r["sold_cents"] > 0 and r["paid_cents"] >= r["sold_cents"]}
-              for r in by_admin]
+    # ventas DIRECTAS de cada admin (boletos que el admin generó él mismo).
+    # Ese dinero ya lo tiene el admin en mano: cuenta como vendido y cobrado por él.
+    direct = db.execute("""
+        SELECT seller_name AS nm,
+               COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS sold
+        FROM tickets WHERE seller_id IS NULL AND seller_name LIKE 'Admin: %'
+        GROUP BY seller_name""").fetchall()
+    # nombre -> {sold, paid, direct}
+    rows_map = {}
+    for r in by_admin:
+        rows_map[r["admin_name"]] = {"sold": r["sold_cents"] or 0,
+                                     "paid": r["paid_cents"] or 0, "direct": 0}
+    for r in direct:
+        nm = (r["nm"] or "").replace("Admin: ", "", 1)
+        e = rows_map.setdefault(nm, {"sold": 0, "paid": 0, "direct": 0})
+        e["sold"] += r["sold"]      # sus ventas propias suman a su total
+        e["paid"] += r["sold"]      # ya cobradas (el admin tiene ese dinero)
+        e["direct"] += r["sold"]
+    admins = [{"admin": nm, "sold": money(v["sold"]),
+               "collected": money(v["paid"]), "direct": money(v["direct"]),
+               "settled": v["sold"] > 0 and v["paid"] >= v["sold"]}
+              for nm, v in sorted(rows_map.items(), key=lambda kv: -kv[1]["sold"])]
     return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0),
                    entered=tot["entered"] or 0, collected=money(paid), by_admin=admins)
 
