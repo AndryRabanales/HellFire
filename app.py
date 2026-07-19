@@ -354,6 +354,14 @@ def init_db():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
     db.commit()
 
+    # corrección de una sola vez: ningún pago puede exceder lo vendido (datos viejos)
+    if setting(db, "paid_capped_v1") != "1":
+        sub = ("SELECT COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) "
+               "FROM tickets WHERE seller_id = sellers.id")
+        db.execute(f"UPDATE sellers SET paid_cents = ({sub}) WHERE paid_cents > ({sub})")
+        set_setting(db, "paid_capped_v1", "1")
+        db.commit()
+
     # Admin inicial: si defines ADMIN_USER + ADMIN_PASSWORD (en Railway → Variables),
     # el admin arranca con TUS credenciales. Si no, usa el admin por defecto solo en local.
     env_user = (os.environ.get("ADMIN_USER") or "").strip()
@@ -1095,6 +1103,11 @@ def set_seller_paid(sid):
         return jsonify(error="El monto no puede ser negativo"), 400
     total = db.execute("""SELECT COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS c
                           FROM tickets WHERE seller_id=?""", (sid,)).fetchone()["c"]
+    # nunca se puede registrar un pago mayor a lo vendido (ni pagos si no ha vendido nada)
+    if total <= 0 and paid_cents > 0:
+        return jsonify(error="Este vendedor aún no ha vendido nada; no hay pago que registrar"), 400
+    if paid_cents > total:
+        return jsonify(error=f"El pago no puede superar lo vendido (${total/100:,.2f})"), 400
     db.execute("UPDATE sellers SET paid_cents=? WHERE id=?", (paid_cents, sid))
     estado = "COMPLETADO" if total > 0 and paid_cents >= total else "pendiente"
     audit(db, s["admin"]["username"], "pago",

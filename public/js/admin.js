@@ -393,21 +393,30 @@ async function loadSellers(silent) {
 
 /* registrar cuánto dinero ha entregado el vendedor a su admin */
 function paySeller(s) {
+  // sin ventas → no hay pago que registrar
+  if (s.total <= 0) {
+    modal(`<div class="h1" style="font-size:18px">Registrar pago de ${esc(s.name)}</div>
+      <div class="muted mt12" style="line-height:1.5">Este vendedor <b style="color:var(--cream)">aún no ha vendido nada</b> ($0), así que no hay pago que registrar. El pago solo se habilita cuando tenga boletos vendidos.</div>
+      <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
+    return;
+  }
   modal(`<div class="h1" style="font-size:18px">Registrar pago de ${esc(s.name)}</div>
     <div class="muted mt8">Vendido: <b style="color:var(--cream)">${fmtMoney(s.total)}</b> ·
       Pagado hasta ahora: <b style="color:var(--cream)">${fmtMoney(s.paid)}</b></div>
     <div class="label mt12">Total recibido de este vendedor ($)</div>
-    <input class="input" id="pg-amount" type="number" min="0" step="0.01" value="${s.paid}">
-    <div class="muted mt8">Escribe el TOTAL acumulado que te ha entregado. Cuando iguale lo vendido, quedará COMPLETADO.</div>
+    <input class="input" id="pg-amount" type="number" min="0" max="${s.total}" step="0.01" value="${s.paid}">
+    <div class="muted mt8">Escribe el TOTAL acumulado que te ha entregado. Máximo ${fmtMoney(s.total)} (lo vendido). Cuando lo iguale, quedará COMPLETADO.</div>
     <div class="err mt8" id="pg-err"></div>
     <div class="row mt16">
       <button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
       <button class="btn grow" id="pg-save">Guardar</button>
     </div>`);
   $('#pg-save').onclick = async () => {
+    const val = parseFloat($('#pg-amount').value || '0');
+    if (isNaN(val) || val < 0) { $('#pg-err').textContent = 'Monto inválido'; return; }
+    if (val > s.total) { $('#pg-err').textContent = `No puede superar lo vendido (${fmtMoney(s.total)})`; return; }
     try {
-      const r = await API.post(`/api/admin/sellers/${s.id}/paid`,
-        { paid: parseFloat($('#pg-amount').value || '0') });
+      const r = await API.post(`/api/admin/sellers/${s.id}/paid`, { paid: val });
       closeModal();
       toast(r.settled ? `${s.name}: cuentas COMPLETADAS ✓` : `Pago registrado (faltan ${fmtMoney(r.total - r.paid)})`);
       loadSellers();
