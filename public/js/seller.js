@@ -173,7 +173,12 @@ async function generate() {
       buyer_name: buyer, faculty_id: Number(faculty), type_id: SELECTED_TYPE,
     });
     LAST_TICKET = r.ticket;
-    showDone(r.ticket);
+    // sin pantalla de confirmación: se descarga al instante, se limpia el
+    // formulario para el siguiente y el boleto queda guardado en el historial.
+    clearForm();
+    btn.textContent = 'DESCARGANDO…';
+    await downloadTicket(r.ticket, CATALOG);
+    toast('Boleto de ' + r.ticket.buyer_name + ' generado y descargado ✓');
   } catch (e) {
     if (e.data && e.data._unauthorized) return sessionLost();
     $('#f-err').textContent = e.message;
