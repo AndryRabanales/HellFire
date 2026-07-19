@@ -177,7 +177,7 @@ async function loadTicketsTable(silent) {
       <td>${esc(t.faculty_name)}</td>
       <td>${esc(t.type_name)}</td>
       <td class="strike" style="font-family:'Space Grotesk'">${fmtMoney(t.price)}</td>
-      <td>${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
+      <td>${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div style="margin-top:3px">${adminBadge(t.owner_admin_id, t.owner_admin_name, t.owner_admin_id === ME_ID)}</div>` : ''}</td>
       <td class="muted">${esc(t.created_at)}</td>
       <td>${estado}</td>`;
     const td = document.createElement('td');
@@ -317,6 +317,15 @@ async function loadMovements(silent) {
 }
 
 /* ---------------- vendedores ---------------- */
+// distintivo de color por admin, para distinguir "quién es admin de quién" de un vistazo
+const ADMIN_HUES = [28, 200, 320, 150, 260, 10, 100, 340];
+function adminBadge(ownerId, ownerName, isMine) {
+  if (!ownerName) return '<span class="admin-badge none">sin admin asignado</span>';
+  const hue = ADMIN_HUES[Math.abs(ownerId || 0) % ADMIN_HUES.length];
+  const mine = isMine ? ' admin-badge-mine' : '';
+  return `<span class="admin-badge${mine}" style="--h:${hue}">${isMine ? '★ ' : ''}${esc(ownerName)}</span>`;
+}
+
 let _sigSellers = '';
 async function loadSellers(silent) {
   const r = await API.get('/api/admin/sellers');
@@ -326,12 +335,25 @@ async function loadSellers(silent) {
   CACHE.sellers = r.sellers;
   const body = $('#sl-body');
   body.innerHTML = '';
-  r.sellers.forEach(s => {
+  // agrupar visualmente: vendedores del mismo admin quedan juntos
+  const sorted = [...r.sellers].sort((a, b) => {
+    if (a.deleted !== b.deleted) return a.deleted - b.deleted;
+    const ao = a.owner_admin_id ?? 0, bo = b.owner_admin_id ?? 0;
+    if (ao !== bo) return ao - bo;
+    return a.id - b.id;
+  });
+  let lastOwner;
+  sorted.forEach(s => {
+    const ownerKey = s.owner_admin_id ?? 'none';
+    if (ownerKey !== lastOwner) {
+      lastOwner = ownerKey;
+      const head = document.createElement('tr');
+      head.innerHTML = `<td colspan="7" style="padding-top:16px;padding-bottom:6px;border-bottom:none">
+        ${adminBadge(s.owner_admin_id, s.owner_admin_name, s.owner_admin_id === ME_ID)}</td>`;
+      body.appendChild(head);
+    }
     const tr = document.createElement('tr');
     if (s.deleted) tr.style.opacity = '.45';
-    // cada vendedor va etiquetado con su admin dueño (quien le cobra)
-    const ownerTag = s.owner_admin_name
-      ? `<div class="muted" style="font-size:9px;margin-top:3px">admin: ${esc(s.owner_admin_name)}</div>` : '';
     // cuentas: pagado vs vendido → Pendiente / Completado
     const cuentas = s.total > 0
       ? (s.settled
@@ -339,7 +361,7 @@ async function loadSellers(silent) {
           : `<span class="badge used">Pendiente</span><div class="muted" style="font-size:9px;margin-top:3px">faltan ${fmtMoney(s.total - s.paid)}</div>`)
       : '<span class="muted">—</span>';
     tr.innerHTML = `
-      <td style="font-weight:700">${esc(s.name)}${ownerTag}</td>
+      <td style="font-weight:700">${esc(s.name)}</td>
       <td>${s.deleted ? '<span class="muted">—</span>' : `<span class="codechip">${esc(s.code)}</span>`}</td>
       <td><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></td>
       <td style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(s.paid)}</td>
@@ -394,18 +416,22 @@ function paySeller(s) {
 }
 
 $('#btn-sl-create').addEventListener('click', async () => {
+  const btn = $('#btn-sl-create');
+  if (btn.disabled) return;   // evita doble-clic → vendedor duplicado
   $('#sl-err').textContent = '';
   const name = $('#sl-name').value.trim();
   if (!name) { $('#sl-err').textContent = 'Escribe el nombre'; return; }
+  btn.disabled = true;
   try {
-    const r = await API.post('/api/admin/sellers', { name, code: $('#sl-code').value.trim() });
-    $('#sl-name').value = ''; $('#sl-code').value = '';
+    const r = await API.post('/api/admin/sellers', { name });   // código siempre automático
+    $('#sl-name').value = '';
     modal(`<div class="h1" style="font-size:18px">Vendedor creado</div>
       <div class="muted mt8">Comparte su código de acceso. Es su identidad en el sistema:</div>
       <div style="text-align:center;margin:18px 0"><span class="codechip" style="font-size:30px;padding:12px 22px">${esc(r.code)}</span></div>
       <button class="btn" onclick="closeModal()">Listo</button>`);
     loadSellers();
   } catch (e) { if (!guard(e)) $('#sl-err').textContent = e.message; }
+  finally { btn.disabled = false; }
 });
 
 function editSeller(s) {
