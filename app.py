@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS ticket_types (
   price_cents INTEGER NOT NULL,
   is_vip INTEGER NOT NULL DEFAULT 0,
   active INTEGER NOT NULL DEFAULT 1,
-  needs_faculty INTEGER NOT NULL DEFAULT 1   -- UADY pide facultad; VIP/Externo no
+  needs_faculty INTEGER NOT NULL DEFAULT 1   -- UADY la pide, VIP/Externo no
 );
 CREATE TABLE IF NOT EXISTS price_phases (
   -- fases de precio por tipo: al llegar la fecha de cada fase, el precio cambia solo
