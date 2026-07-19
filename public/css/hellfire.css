@@ -116,16 +116,6 @@ select.input option{background:#160603;color:var(--cream)}
 .badge.used{color:var(--ember-soft);border-color:var(--line-strong)}
 .badge.void{color:var(--danger);border-color:rgba(232,112,106,.5)}
 
-/* distintivo de admin dueño: color propio por admin (--h = tono), para ver
-   de un vistazo qué vendedor/boleto es de cuál administrador */
-.admin-badge{display:inline-flex;align-items:center;font:700 10px "Space Grotesk";
-  letter-spacing:.06em;padding:4px 10px;border-radius:20px;white-space:nowrap;
-  color:hsl(var(--h) 85% 72%);background:hsl(var(--h) 70% 50% / .16);
-  border:1px solid hsl(var(--h) 70% 55% / .4)}
-.admin-badge.admin-badge-mine{box-shadow:0 0 10px hsl(var(--h) 70% 55% / .35)}
-.admin-badge.none{font:600 9px Manrope;letter-spacing:.02em;color:var(--cream-45);
-  background:none;border:1px dashed var(--line);border-radius:20px;padding:4px 10px}
-
 .search{display:flex;align-items:center;gap:8px;padding:12px 13px;border-radius:12px;
   background:var(--card);border:1px solid var(--line)}
 .search input{flex:1;background:none;border:none;outline:none;font:500 14px Manrope;color:var(--cream)}
