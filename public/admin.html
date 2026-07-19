@@ -55,7 +55,6 @@
     <button class="tab sel" data-tab="resumen">Resumen</button>
     <button class="tab" data-tab="boletos">Boletos</button>
     <button class="tab" data-tab="movimientos">Movimientos</button>
-    <button class="tab" data-tab="generar">+ Generar</button>
     <button class="tab" data-tab="ranking">Ranking</button>
     <button class="tab" data-tab="vendedores">Vendedores</button>
     <button class="tab" data-tab="catalogos">Catálogos</button>
@@ -98,21 +97,6 @@
   <section id="tab-movimientos" class="mt16 hidden" style="max-width:720px">
     <div class="muted" style="margin-bottom:10px">Todo lo que pasa en el sistema: boletos generados y anulados, vendedores creados/eliminados, cambios de fases y precios. Visible para todos los administradores.</div>
     <div id="mv-list" style="display:flex;flex-direction:column;gap:8px"></div>
-  </section>
-
-  <!-- ===== Generar (RF-13) ===== -->
-  <section id="tab-generar" class="mt16 hidden" style="max-width:480px">
-    <div class="card">
-      <div class="label">Nombre del comprador</div>
-      <input class="input" id="g-buyer" placeholder="Nombre completo">
-      <div class="label mt12">Facultad</div>
-      <select class="input" id="g-faculty"></select>
-      <div class="label mt12">Tipo de boleto</div>
-      <div class="typegrid" id="g-types"></div>
-      <div class="err mt12" id="g-err"></div>
-      <button class="btn mt8" id="btn-g-generate">GENERAR BOLETO&nbsp;&nbsp;🎟</button>
-      <div class="muted mt8">El boleto quedará registrado a nombre del administrador.</div>
-    </div>
   </section>
 
   <!-- ===== Ranking: solo el orden por ventas ===== -->

@@ -43,7 +43,7 @@ async function enter(name) {
 /* ---------------- tabs ---------------- */
 const loaders = {
   resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
-  generar: loadGenerar, ranking: loadRanking, vendedores: loadSellers,
+  ranking: loadRanking, vendedores: loadSellers,
   catalogos: loadCatalogs, admins: loadAdmins, ajustes: loadSettings,
 };
 
@@ -128,11 +128,8 @@ async function loadSummary(silent) {
       ? '<span class="muted">sin ventas</span>'
       : (falta <= 0 ? '<span class="badge active">al día</span>'
                     : `<span class="badge used">falta ${fmtMoney(falta)}</span>`);
-    const propias = a.direct > 0
-      ? `<div class="muted" style="font-size:10.5px;margin-top:2px">incluye <b style="color:var(--ember-soft)">${fmtMoney(a.direct)}</b> de ventas propias</div>`
-      : '';
     return `<div class="row" style="justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,120,40,.1)">
-      <div style="min-width:120px"><div style="font:700 13px Manrope">${esc(a.admin)}</div>${propias}</div>
+      <div style="font:700 13px Manrope;min-width:120px">${esc(a.admin)}</div>
       <div class="muted" style="font-size:12px">cobró <b style="color:var(--cream)">${fmtMoney(a.collected)}</b> de <b>${fmtMoney(a.sold)}</b></div>
       <div>${estado}</div></div>`;
   }).join('') || '<div class="muted">Sin datos aún</div>';
@@ -272,42 +269,6 @@ $('#btn-export').addEventListener('click', async () => {
     setTimeout(() => URL.revokeObjectURL(a.href), 500);
     toast('Excel exportado ✓ (quedó registrado en auditoría)');
   } catch (e) { toast(e.message); }
-});
-
-/* ---------------- generar (admin) ---------------- */
-async function loadGenerar() {
-  EV = await API.get('/api/catalog');
-  $('#g-faculty').innerHTML = '<option value="" disabled selected>Elige facultad…</option>' +
-    EV.faculties.map(f => `<option value="${f.id}">${esc(f.name)}</option>`).join('');
-  renderGTypes();
-}
-
-function renderGTypes() {
-  const box = $('#g-types');
-  box.innerHTML = '';
-  EV.types.forEach(t => {
-    const el = document.createElement('div');
-    el.className = 'typeopt' + (SELECTED_TYPE === t.id ? ' sel' : '');
-    el.innerHTML = `<div class="tname">${esc(t.name)}</div><div class="tprice">${fmtMoney(t.price_cents / 100)}</div>`;
-    el.onclick = () => { SELECTED_TYPE = t.id; renderGTypes(); };
-    box.appendChild(el);
-  });
-}
-
-$('#btn-g-generate').addEventListener('click', async () => {
-  const buyer = $('#g-buyer').value.trim();
-  $('#g-err').textContent = '';
-  if (buyer.length < 3) { $('#g-err').textContent = 'Escribe el nombre del comprador'; return; }
-  if (!$('#g-faculty').value) { $('#g-err').textContent = 'Elige la facultad'; return; }
-  if (!SELECTED_TYPE) { $('#g-err').textContent = 'Elige el tipo de boleto'; return; }
-  try {
-    const r = await API.post('/api/tickets', {
-      buyer_name: buyer, faculty_id: Number($('#g-faculty').value), type_id: SELECTED_TYPE,
-    });
-    $('#g-buyer').value = ''; $('#g-faculty').selectedIndex = 0; SELECTED_TYPE = null; renderGTypes();
-    toast('Boleto ' + r.ticket.folio + ' generado, descargando…');
-    await downloadTicket(r.ticket, EV);
-  } catch (e) { if (!guard(e)) $('#g-err').textContent = e.message; }
 });
 
 /* ---------------- ranking ---------------- */
