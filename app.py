@@ -869,11 +869,19 @@ def admin_tickets():
         "SELECT t.*, s.owner_admin_id AS owner_admin_id, s.owner_admin_name AS owner_admin_name "
         "FROM tickets t LEFT JOIN sellers s ON s.id = t.seller_id"
         + where + " ORDER BY t.id DESC", params).fetchall()
+    me = s["admin"]
     out = []
     for t in rows:
         tp = ticket_public(t)
         tp["owner_admin_id"] = t["owner_admin_id"]
         tp["owner_admin_name"] = t["owner_admin_name"]
+        # el SERVIDOR decide si este admin puede anular este boleto (única verdad)
+        if t["seller_id"] is not None:
+            cv = t["owner_admin_id"] is None or t["owner_admin_id"] == me["id"]
+        else:   # boleto generado por un admin → solo ese mismo admin
+            creator = (t["seller_name"] or "").replace("Admin: ", "", 1)
+            cv = creator == me["username"]
+        tp["can_void"] = cv
         out.append(tp)
     return jsonify(tickets=out)
 

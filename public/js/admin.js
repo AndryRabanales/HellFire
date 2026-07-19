@@ -209,15 +209,13 @@ async function loadTicketsTable(silent) {
       <td>${estado}</td>`;
     const td = document.createElement('td');
     td.style.whiteSpace = 'nowrap';
-    // solo el admin dueño del vendedor puede anular sus boletos
-    const mine = t.owner_admin_id == null || t.owner_admin_id === ME_ID;
     if (t.status !== 'void') {
       const dl = document.createElement('button');
       dl.className = 'iconbtn'; dl.title = 'Descargar boleto'; dl.textContent = '⬇';
       dl.onclick = async () => { dl.disabled = true; try { await downloadTicket(t, EV); } finally { dl.disabled = false; } };
       td.appendChild(dl);
-      // la tachita de anular SOLO aparece si el boleto es de un vendedor tuyo
-      if (mine) {
+      // la tachita aparece SOLO si el servidor dice que este admin puede anularlo
+      if (t.can_void) {
         const vd = document.createElement('button');
         vd.className = 'iconbtn'; vd.textContent = '✕'; vd.style.marginLeft = '6px';
         vd.title = 'Anular boleto';
