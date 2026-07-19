@@ -402,9 +402,10 @@ def init_db():
         db.execute("INSERT INTO admins(username, pass_hash, created_at) VALUES(?,?,?)",
                    (init_user, hash_password(init_pass), now_iso()))
         # 3 precios (UADY, Externo, VIP) en 2 tipos: UADY/Externo son "General" (no VIP);
-        # UADY pide facultad, Externo y VIP no.
-        for name, price, vip, needs in [("UADY", 25000, 0, 1), ("Externo", 30000, 0, 0),
-                                        ("VIP", 50000, 1, 0)]:
+        # UADY pide facultad, Externo y VIP no. Arrancan en $0: el admin los define
+        # en Catálogos antes de iniciar (no se puede vender con precio en 0).
+        for name, price, vip, needs in [("UADY", 0, 0, 1), ("Externo", 0, 0, 0),
+                                        ("VIP", 0, 1, 0)]:
             db.execute("INSERT INTO ticket_types(name, price_cents, is_vip, needs_faculty) "
                        "VALUES(?,?,?,?)", (name, price, vip, needs))
         for f in ["Ingeniería", "Medicina", "Derecho", "Economía", "Arquitectura"]:
@@ -476,6 +477,23 @@ def init_db():
         set_setting(db, "types_uady_externo_v1", "1")
         db.commit()
         print("[OnFire] Tipos reestructurados: UADY / Externo / VIP.")
+
+    # RESET para lanzamiento: borra TODO lo generado (boletos, vendedores, fases,
+    # movimientos, sesiones y demás admins) y deja los precios en $0 para que el
+    # admin los defina antes de iniciar. Solo queda el admin inicial y los catálogos.
+    if setting(db, "event_reset_v2") != "1":
+        for table in ("tickets", "sellers", "price_phases", "audit_log",
+                      "login_attempts", "sessions"):
+            db.execute(f"DELETE FROM {table}")
+        db.execute("DELETE FROM admins WHERE username != ?", (init_user,))
+        db.execute("UPDATE ticket_types SET price_cents=0")   # precios en 0: editar para iniciar
+        db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
+                   ("sistema", "inicializacion",
+                    f"Sistema listo para lanzar: datos borrados, precios en 0. Admin: {init_user}",
+                    now_iso()))
+        set_setting(db, "event_reset_v2", "1")
+        db.commit()
+        print(f"[OnFire] RESET de lanzamiento: solo admin '{init_user}', precios en 0.")
 
     db.commit()
     db.close()
@@ -773,6 +791,9 @@ def create_ticket():
     else:
         fac_id, fac_name = None, ""
     price_now, _phase = effective_price(db, tt)   # precio de la fase vigente, congelado en el boleto
+    if price_now <= 0:   # el sistema no vende hasta que el admin defina el precio
+        return jsonify(error="El precio de este boleto aún no está configurado. "
+                             "Pídele al administrador que lo defina en Catálogos."), 400
     # RF-43: el boleto queda ligado al vendedor que lo genera
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
     prefix = setting(db, "folio_prefix")

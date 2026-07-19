@@ -76,8 +76,10 @@ function renderTypes() {
   CATALOG.types.forEach(t => {
     const el = document.createElement('div');
     el.className = 'typeopt' + (SELECTED_TYPE === t.id ? ' sel' : '');
-    el.innerHTML = `<div class="tname">${esc(t.name)}</div>
-                    <div class="tprice">${fmtMoney(t.price_cents / 100)}</div>`;
+    const priceLabel = t.price_cents > 0
+      ? fmtMoney(t.price_cents / 100)
+      : '<span style="color:var(--cream-45);font-size:12px">Por definir</span>';
+    el.innerHTML = `<div class="tname">${esc(t.name)}</div><div class="tprice">${priceLabel}</div>`;
     el.addEventListener('click', () => { SELECTED_TYPE = t.id; renderTypes(); });
     box.appendChild(el);
   });
