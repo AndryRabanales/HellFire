@@ -1451,7 +1451,10 @@ def get_audit():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    rows = db.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 500").fetchall()
+    # Movimientos = solo acciones de ADMINS. La generación de boletos la hacen los
+    # vendedores y ya se refleja en Ventas/Vendedores, así que no se lista aquí.
+    rows = db.execute("SELECT * FROM audit_log WHERE action != 'generacion' "
+                      "ORDER BY id DESC LIMIT 500").fetchall()
     return jsonify(log=[dict(r) for r in rows])
 
 @app.get("/api/admin/export")
