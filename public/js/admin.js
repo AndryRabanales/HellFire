@@ -601,27 +601,23 @@ async function loadCatalogs() {
 }
 
 function editType(t) {
-  modal(`<div class="h1" style="font-size:18px">Editar tipo de boleto</div>
-    <div class="label mt12">Nombre</div><input class="input" id="et-name" value="${esc(t.name)}">
-    <div class="label mt12">Precio base ($) — aplica cuando ninguna fase está vigente</div>
+  // solo el precio es editable; nombre/VIP/facultad/disponibilidad son fijos por tipo
+  const rasgo = t.is_vip ? 'VIP ★' : (t.needs_faculty ? 'pide facultad (UADY)' : 'sin facultad (Externo)');
+  modal(`<div class="h1" style="font-size:18px">Editar precio · ${esc(t.name)}</div>
+    <div class="muted" style="margin-top:4px">${esc(t.name)} — ${rasgo} · siempre disponible</div>
+    <div class="label mt16">Precio ($)</div>
     <input class="input" id="et-price" type="number" min="1" value="${t.price_cents / 100}">
-    <label class="muted row mt12" style="gap:6px"><input type="checkbox" id="et-vip" ${t.is_vip ? 'checked' : ''}>Lleva distintivo ★ VIP en el boleto</label>
-    <label class="muted row mt8" style="gap:6px"><input type="checkbox" id="et-needfac" ${t.needs_faculty ? 'checked' : ''}>Pide facultad al vender (UADY)</label>
-    <label class="muted row mt8" style="gap:6px"><input type="checkbox" id="et-active" ${t.active ? 'checked' : ''}>Disponible para la venta</label>
     <div class="muted mt12">El cambio de precio solo aplica a boletos nuevos; los ya generados conservan su precio.</div>
     <div class="err mt8" id="et-err"></div>
     <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
     <button class="btn grow" id="et-save">Guardar</button></div>`);
   $('#et-save').onclick = async () => {
+    const price = parseFloat($('#et-price').value);
+    if (!(price > 0)) { $('#et-err').textContent = 'Escribe un precio válido'; return; }
     try {
-      await API.put('/api/admin/ticket-types/' + t.id, {
-        name: $('#et-name').value.trim(),
-        price: parseFloat($('#et-price').value),
-        is_vip: $('#et-vip').checked,
-        needs_faculty: $('#et-needfac').checked,
-        active: $('#et-active').checked,
-      });
-      closeModal(); toast('Tipo actualizado'); loadCatalogs();
+      // solo mandamos el precio; el resto de propiedades quedan intactas en el backend
+      await API.put('/api/admin/ticket-types/' + t.id, { price });
+      closeModal(); toast('Precio actualizado'); loadCatalogs();
     } catch (e) { if (!guard(e)) $('#et-err').textContent = e.message; }
   };
 }
