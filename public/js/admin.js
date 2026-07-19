@@ -216,19 +216,15 @@ async function loadTicketsTable(silent) {
       dl.className = 'iconbtn'; dl.title = 'Descargar boleto'; dl.textContent = '⬇';
       dl.onclick = async () => { dl.disabled = true; try { await downloadTicket(t, EV); } finally { dl.disabled = false; } };
       td.appendChild(dl);
-      // la tachita SIEMPRE se muestra; deshabilitada si no eres el admin del vendedor
-      const vd = document.createElement('button');
-      vd.className = 'iconbtn'; vd.textContent = '✕'; vd.style.marginLeft = '6px';
+      // la tachita de anular SOLO aparece si el boleto es de un vendedor tuyo
       if (mine) {
+        const vd = document.createElement('button');
+        vd.className = 'iconbtn'; vd.textContent = '✕'; vd.style.marginLeft = '6px';
         vd.title = 'Anular boleto';
         vd.style.color = 'var(--danger)'; vd.style.borderColor = 'rgba(232,112,106,.5)'; vd.style.background = 'rgba(232,112,106,.08)';
         vd.onclick = () => voidTicket(t);
-      } else {
-        vd.disabled = true;
-        vd.title = `Solo ${t.owner_admin_name || 'su admin'} puede anular este boleto`;
-        vd.style.opacity = '.3'; vd.style.cursor = 'not-allowed';
+        td.appendChild(vd);
       }
-      td.appendChild(vd);
     }
     tr.appendChild(td);
     body.appendChild(tr);
