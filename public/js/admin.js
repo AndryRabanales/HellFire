@@ -147,11 +147,26 @@ async function refreshFilterSources() {
     tt.types.map(t => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
   $('#fl-faculty').innerHTML = '<option value="">Facultad: todas</option>' +
     fc.faculties.map(f => `<option value="${esc(f.name)}">${esc(f.name)}</option>`).join('');
+  populateAdminFilters(sl.sellers);
+}
+
+// llena los selects "Admin: todos" (en Boletos y Vendedores) con los admins que
+// tienen vendedores, más "Sin asignar" si hay vendedores sin dueño
+function populateAdminFilters(sellers) {
+  const names = [...new Set(sellers.filter(s => s.owner_admin_name).map(s => s.owner_admin_name))].sort();
+  const hasNone = sellers.some(s => !s.owner_admin_name);
+  const opts = '<option value="">Admin: todos</option>' +
+    names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('') +
+    (hasNone ? '<option value="__none__">Sin asignar</option>' : '');
+  ['#fl-admin', '#sl-filter-admin'].forEach(sel => {
+    const el = $(sel); if (!el) return;
+    const cur = el.value; el.innerHTML = opts; el.value = cur;
+  });
 }
 
 function filterQS() {
   const p = new URLSearchParams();
-  const map = { q: '#fl-q', seller_id: '#fl-seller', type: '#fl-type', faculty: '#fl-faculty' };
+  const map = { q: '#fl-q', admin: '#fl-admin', seller_id: '#fl-seller', type: '#fl-type', faculty: '#fl-faculty' };
   for (const [k, sel] of Object.entries(map)) {
     const v = $(sel).value.trim();
     if (v) p.set(k, v);
@@ -201,13 +216,19 @@ async function loadTicketsTable(silent) {
       dl.className = 'iconbtn'; dl.title = 'Descargar boleto'; dl.textContent = '⬇';
       dl.onclick = async () => { dl.disabled = true; try { await downloadTicket(t, EV); } finally { dl.disabled = false; } };
       td.appendChild(dl);
+      // la tachita SIEMPRE se muestra; deshabilitada si no eres el admin del vendedor
+      const vd = document.createElement('button');
+      vd.className = 'iconbtn'; vd.textContent = '✕'; vd.style.marginLeft = '6px';
       if (mine) {
-        const vd = document.createElement('button');
-        vd.className = 'iconbtn'; vd.title = 'Anular boleto'; vd.textContent = '✕';
-        vd.style.marginLeft = '6px'; vd.style.color = 'var(--danger)'; vd.style.borderColor = 'rgba(232,112,106,.5)'; vd.style.background = 'rgba(232,112,106,.08)';
+        vd.title = 'Anular boleto';
+        vd.style.color = 'var(--danger)'; vd.style.borderColor = 'rgba(232,112,106,.5)'; vd.style.background = 'rgba(232,112,106,.08)';
         vd.onclick = () => voidTicket(t);
-        td.appendChild(vd);
+      } else {
+        vd.disabled = true;
+        vd.title = `Solo ${t.owner_admin_name || 'su admin'} puede anular este boleto`;
+        vd.style.opacity = '.3'; vd.style.cursor = 'not-allowed';
       }
+      td.appendChild(vd);
     }
     tr.appendChild(td);
     body.appendChild(tr);
@@ -235,7 +256,7 @@ let _flTimer = null;
 ['#fl-q'].forEach(s => $(s).addEventListener('input', () => {
   clearTimeout(_flTimer); _flTimer = setTimeout(loadTicketsTable, 300);
 }));
-['#fl-seller', '#fl-type', '#fl-faculty']
+['#fl-admin', '#fl-seller', '#fl-type', '#fl-faculty']
   .forEach(s => $(s).addEventListener('change', loadTicketsTable));
 
 $('#btn-export').addEventListener('click', async () => {
@@ -332,13 +353,19 @@ async function loadMovements(silent) {
 let _sigSellers = '';
 async function loadSellers(silent) {
   const r = await API.get('/api/admin/sellers');
-  const sig = JSON.stringify(r.sellers.map(s => [s.id, s.name, s.code, s.active, s.deleted, s.tickets, s.total, s.paid]));
+  populateAdminFilters(r.sellers);
+  const fa = ($('#sl-filter-admin') && $('#sl-filter-admin').value) || '';
+  const sig = JSON.stringify([fa, ...r.sellers.map(s => [s.id, s.name, s.code, s.active, s.deleted, s.tickets, s.total, s.paid])]);
   if (silent && sig === _sigSellers) return;
   _sigSellers = sig;
   CACHE.sellers = r.sellers;
   const body = $('#sl-body');
   body.innerHTML = '';
-  r.sellers.forEach(s => {
+  // filtro por admin (cliente): "" todos, "__none__" sin asignar, o el nombre
+  const shown = r.sellers.filter(s => !fa
+    || (fa === '__none__' ? !s.owner_admin_name : s.owner_admin_name === fa));
+  if (!shown.length) { body.innerHTML = '<tr><td colspan="7" class="muted" style="padding:16px">Sin vendedores para ese admin</td></tr>'; return; }
+  shown.forEach(s => {
     const tr = document.createElement('tr');
     if (s.deleted) tr.style.opacity = '.45';
     // en cada fila: quién es el admin de este vendedor (texto simple, claro)
@@ -413,6 +440,8 @@ function paySeller(s) {
     } catch (e) { if (!guard(e)) $('#pg-err').textContent = e.message; }
   };
 }
+
+$('#sl-filter-admin').addEventListener('change', () => { _sigSellers = ''; loadSellers(); });
 
 $('#btn-sl-create').addEventListener('click', async () => {
   const btn = $('#btn-sl-create');

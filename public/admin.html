@@ -77,6 +77,7 @@
   <section id="tab-boletos" class="mt16 hidden">
     <div class="filters">
       <input class="input" id="fl-q" placeholder="⌕ Nombre o folio" style="padding:11px">
+      <select class="input" id="fl-admin" style="padding:11px"><option value="">Admin: todos</option></select>
       <select class="input" id="fl-seller" style="padding:11px"><option value="">Vendedor: todos</option></select>
       <select class="input" id="fl-type" style="padding:11px"><option value="">Tipo: todos</option></select>
       <select class="input" id="fl-faculty" style="padding:11px"><option value="">Facultad: todas</option></select>
@@ -134,6 +135,9 @@
       </div>
       <div class="muted mt8" style="font-size:10px">El código de acceso de 4 dígitos se genera solo, al azar.</div>
       <div class="err mt8" id="sl-err"></div>
+    </div>
+    <div class="row mt12" style="max-width:320px">
+      <select class="input grow" id="sl-filter-admin" style="padding:11px"><option value="">Admin: todos</option></select>
     </div>
     <div class="tablewrap mt12">
       <table class="data"><thead><tr>
