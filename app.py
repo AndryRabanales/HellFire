@@ -830,11 +830,11 @@ def admin_summary():
         ORDER BY sold_cents DESC""").fetchall()
     # ventas DIRECTAS de cada admin (boletos que el admin generó él mismo).
     # Ese dinero ya lo tiene el admin en mano: cuenta como vendido y cobrado por él.
-    direct = db.execute("""
-        SELECT seller_name AS nm,
-               COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS sold
-        FROM tickets WHERE seller_id IS NULL AND seller_name LIKE 'Admin: %'
-        GROUP BY seller_name""").fetchall()
+    direct = db.execute(
+        "SELECT seller_name AS nm, "
+        "COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS sold "
+        "FROM tickets WHERE seller_id IS NULL AND seller_name LIKE ? "
+        "GROUP BY seller_name", ("Admin: %",)).fetchall()
     # nombre -> {sold, paid, direct}
     rows_map = {}
     for r in by_admin:
