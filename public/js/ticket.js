@@ -160,13 +160,16 @@ async function renderTicket(ticket, ev, imgOverride) {
   const nameFont = nameFontFor(ticket.buyer_name);
   fitText(ctx, ticket.buyer_name, padX, ty, W - padX * 2 - qrSize - 30, 42, '800 %px ' + nameFont);
   ty += 44;
-  ctx.fillStyle = 'rgba(246,241,231,.55)';
-  ctx.font = '600 21px Manrope, sans-serif';
-  ctx.fillText(ticket.faculty_name, padX, ty);
-  ty += 36;
+  if (ticket.faculty_name) {                    // Externo/VIP no llevan facultad
+    ctx.fillStyle = 'rgba(246,241,231,.55)';
+    ctx.font = '600 21px Manrope, sans-serif';
+    ctx.fillText(ticket.faculty_name, padX, ty);
+    ty += 36;
+  }
   ctx.fillStyle = '#ffb27a';
   ctx.font = '700 24px Manrope, sans-serif';
-  ctx.fillText(ticket.type_name, padX, ty);
+  // UADY y Externo son "General"; solo VIP se muestra como VIP
+  ctx.fillText(ticket.type_is_vip ? 'VIP' : 'General', padX, ty);
 
   return cv;
 }

@@ -556,7 +556,8 @@ async function loadCatalogs() {
     box.className = 'row';
     box.style.cssText = 'justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,120,40,.1)';
     box.innerHTML = `<div style="font:700 14px Manrope">${esc(t.name)}${t.is_vip ? ' <span style="color:#f3d27a">★</span>' : ''}
-        ${t.active ? '' : ' <span class="muted">(desactivado)</span>'}</div>
+        ${t.active ? '' : ' <span class="muted">(desactivado)</span>'}
+        <div class="muted" style="font-size:10px;margin-top:2px">${t.needs_faculty ? 'pide facultad' : 'sin facultad'}</div></div>
       <div style="font:700 14px 'Space Grotesk'">${fmtMoney(t.current_price_cents / 100)}
         ${t.current_phase ? `<span class="muted" style="font-size:10px"> · ${esc(t.current_phase)}</span>` : ''}</div>`;
     const eb = document.createElement('button');
@@ -605,6 +606,7 @@ function editType(t) {
     <div class="label mt12">Precio base ($) — aplica cuando ninguna fase está vigente</div>
     <input class="input" id="et-price" type="number" min="1" value="${t.price_cents / 100}">
     <label class="muted row mt12" style="gap:6px"><input type="checkbox" id="et-vip" ${t.is_vip ? 'checked' : ''}>Lleva distintivo ★ VIP en el boleto</label>
+    <label class="muted row mt8" style="gap:6px"><input type="checkbox" id="et-needfac" ${t.needs_faculty ? 'checked' : ''}>Pide facultad al vender (UADY)</label>
     <label class="muted row mt8" style="gap:6px"><input type="checkbox" id="et-active" ${t.active ? 'checked' : ''}>Disponible para la venta</label>
     <div class="muted mt12">El cambio de precio solo aplica a boletos nuevos; los ya generados conservan su precio.</div>
     <div class="err mt8" id="et-err"></div>
@@ -616,6 +618,7 @@ function editType(t) {
         name: $('#et-name').value.trim(),
         price: parseFloat($('#et-price').value),
         is_vip: $('#et-vip').checked,
+        needs_faculty: $('#et-needfac').checked,
         active: $('#et-active').checked,
       });
       closeModal(); toast('Tipo actualizado'); loadCatalogs();
@@ -630,8 +633,10 @@ $('#btn-tt-create').addEventListener('click', async () => {
       name: $('#tt-name').value.trim(),
       price: parseFloat($('#tt-price').value),
       is_vip: $('#tt-vip').checked,
+      needs_faculty: $('#tt-needfac').checked,
     });
-    $('#tt-name').value = ''; $('#tt-price').value = ''; $('#tt-vip').checked = false;
+    $('#tt-name').value = ''; $('#tt-price').value = '';
+    $('#tt-vip').checked = false; $('#tt-needfac').checked = true;
     loadCatalogs();
   } catch (e) { if (!guard(e)) $('#tt-err').textContent = e.message; }
 });

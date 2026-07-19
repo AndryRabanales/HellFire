@@ -49,7 +49,7 @@ function render(r) {
   const name = t ? `<div class="r-name">${esc(t.buyer_name || '')}</div>` : '';
   const type = t ? (t.type_is_vip
     ? '<div class="r-type vip">★ VIP</div>'
-    : `<div class="r-type gen">${esc(t.type_name || 'General')}</div>`) : '';
+    : '<div class="r-type gen">General</div>') : '';   // UADY y Externo son General
 
   box.className = 'show ' + cls;
   box.innerHTML = `<div class="r-title">${title}</div>${name}${type}` +

@@ -190,7 +190,8 @@ CREATE TABLE IF NOT EXISTS ticket_types (
   name TEXT NOT NULL,
   price_cents INTEGER NOT NULL,
   is_vip INTEGER NOT NULL DEFAULT 0,
-  active INTEGER NOT NULL DEFAULT 1
+  active INTEGER NOT NULL DEFAULT 1,
+  needs_faculty INTEGER NOT NULL DEFAULT 1   -- UADY pide facultad; VIP/Externo no
 );
 CREATE TABLE IF NOT EXISTS price_phases (
   -- fases de precio por tipo: al llegar la fecha de cada fase, el precio cambia solo
@@ -349,6 +350,8 @@ def init_db():
         for col in ("owner_admin_id INTEGER", "owner_admin_name TEXT",
                     "paid_cents INTEGER NOT NULL DEFAULT 0"):
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
+        db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
+                   "needs_faculty INTEGER NOT NULL DEFAULT 1")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
@@ -362,6 +365,9 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN owner_admin_name TEXT")
         if "paid_cents" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN paid_cents INTEGER NOT NULL DEFAULT 0")
+        ttcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
+        if "needs_faculty" not in ttcols:
+            db.execute("ALTER TABLE ticket_types ADD COLUMN needs_faculty INTEGER NOT NULL DEFAULT 1")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -395,9 +401,13 @@ def init_db():
         # primera vez: crear admin inicial + catálogo + 4 vendedores
         db.execute("INSERT INTO admins(username, pass_hash, created_at) VALUES(?,?,?)",
                    (init_user, hash_password(init_pass), now_iso()))
-        for t in [("General", 25000, 0), ("VIP", 50000, 1)]:
-            db.execute("INSERT INTO ticket_types(name, price_cents, is_vip) VALUES(?,?,?)", t)
-        for f in ["Ingeniería", "Medicina", "Derecho", "Economía", "Arquitectura", "Externo"]:
+        # 3 precios (UADY, Externo, VIP) en 2 tipos: UADY/Externo son "General" (no VIP);
+        # UADY pide facultad, Externo y VIP no.
+        for name, price, vip, needs in [("UADY", 25000, 0, 1), ("Externo", 30000, 0, 0),
+                                        ("VIP", 50000, 1, 0)]:
+            db.execute("INSERT INTO ticket_types(name, price_cents, is_vip, needs_faculty) "
+                       "VALUES(?,?,?,?)", (name, price, vip, needs))
+        for f in ["Ingeniería", "Medicina", "Derecho", "Economía", "Arquitectura"]:
             db.execute("INSERT INTO faculties(name) VALUES(?)", (f,))
         # RF-25: el sistema inicia con 4 códigos activos, uno por vendedor
         codes = []
@@ -449,6 +459,23 @@ def init_db():
         set_setting(db, "event_reset_v1", "1")
         db.commit()
         print(f"[OnFire] Limpieza total: solo queda el admin '{init_user}'.")
+
+    # Reestructura de una sola vez: 2 tipos "General" (UADY/Externo) + VIP, 3 precios.
+    # UADY pide facultad; Externo y VIP no. 'Externo' deja de ser facultad.
+    if setting(db, "types_uady_externo_v1") != "1":
+        db.execute("UPDATE ticket_types SET name='UADY', needs_faculty=1 WHERE name='General'")
+        db.execute("UPDATE ticket_types SET needs_faculty=0 WHERE is_vip=1")  # VIP sin facultad
+        if not db.execute("SELECT 1 FROM ticket_types WHERE name='Externo'").fetchone():
+            # precio inicial del Externo = el de UADY (ajústalo en Catálogos)
+            base = db.execute("SELECT price_cents FROM ticket_types WHERE name='UADY'").fetchone()
+            db.execute("INSERT INTO ticket_types(name, price_cents, is_vip, needs_faculty) "
+                       "VALUES(?,?,?,?)", ("Externo", (base["price_cents"] if base else 25000), 0, 0))
+        else:
+            db.execute("UPDATE ticket_types SET is_vip=0, needs_faculty=0 WHERE name='Externo'")
+        db.execute("DELETE FROM faculties WHERE name='Externo'")
+        set_setting(db, "types_uady_externo_v1", "1")
+        db.commit()
+        print("[OnFire] Tipos reestructurados: UADY / Externo / VIP.")
 
     db.commit()
     db.close()
@@ -702,6 +729,7 @@ def catalog():
     for r in db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY price_cents").fetchall():
         price, phase = effective_price(db, r)
         types.append({"id": r["id"], "name": r["name"], "is_vip": r["is_vip"],
+                      "needs_faculty": r["needs_faculty"],
                       "price_cents": price, "phase": phase,
                       "next_phase": next_phase(db, r)})
     facs = [dict(r) for r in db.execute(
@@ -731,14 +759,19 @@ def create_ticket():
     buyer = str(body.get("buyer_name", "")).strip()
     if len(buyer) < 3:
         return jsonify(error="Escribe el nombre completo del comprador"), 400
-    fac = db.execute("SELECT * FROM faculties WHERE id=? AND active=1",
-                     (body.get("faculty_id"),)).fetchone()
-    if not fac:
-        return jsonify(error="Elige una facultad válida"), 400
     tt = db.execute("SELECT * FROM ticket_types WHERE id=? AND active=1",
                     (body.get("type_id"),)).fetchone()
     if not tt:
         return jsonify(error="Elige un tipo de boleto válido"), 400
+    # la facultad solo se pide para tipos que la requieren (UADY); Externo y VIP no
+    if tt["needs_faculty"]:
+        fac = db.execute("SELECT * FROM faculties WHERE id=? AND active=1",
+                         (body.get("faculty_id"),)).fetchone()
+        if not fac:
+            return jsonify(error="Elige una facultad válida"), 400
+        fac_id, fac_name = fac["id"], fac["name"]
+    else:
+        fac_id, fac_name = None, ""
     price_now, _phase = effective_price(db, tt)   # precio de la fase vigente, congelado en el boleto
     # RF-43: el boleto queda ligado al vendedor que lo genera
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
@@ -764,7 +797,7 @@ def create_ticket():
                      type_id, type_name, type_is_vip, price_cents,
                      seller_id, seller_name, seller_code, status, created_at)
                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?)""",
-                    (folio, token, qr_payload, buyer, fac["id"], fac["name"], tt["id"], tt["name"],
+                    (folio, token, qr_payload, buyer, fac_id, fac_name, tt["id"], tt["name"],
                      tt["is_vip"], price_now, seller_id, seller_name,
                      seller_code, now_iso()))
                 db.commit()
@@ -1111,8 +1144,9 @@ def create_type():
     price = int(round(float(b.get("price", 0)) * 100))
     if not name or price <= 0:
         return jsonify(error="Nombre y precio válidos requeridos"), 400
-    db.execute("INSERT INTO ticket_types(name, price_cents, is_vip) VALUES(?,?,?)",
-               (name, price, 1 if b.get("is_vip") else 0))
+    needs_fac = 0 if b.get("needs_faculty") is False else 1
+    db.execute("INSERT INTO ticket_types(name, price_cents, is_vip, needs_faculty) VALUES(?,?,?,?)",
+               (name, price, 1 if b.get("is_vip") else 0, needs_fac))
     audit(db, s["admin"]["username"], "precio", f"Creó tipo '{name}' a ${price/100:.2f}")
     db.commit()
     return jsonify(ok=True)
@@ -1131,8 +1165,9 @@ def edit_type(tid):
     price = int(round(float(b.get("price", t["price_cents"] / 100)) * 100))
     active = 1 if b.get("active", t["active"]) else 0
     is_vip = 1 if b.get("is_vip", t["is_vip"]) else 0
-    db.execute("UPDATE ticket_types SET name=?, price_cents=?, active=?, is_vip=? WHERE id=?",
-               (name, price, active, is_vip, tid))
+    needs_fac = 1 if b.get("needs_faculty", t["needs_faculty"]) else 0
+    db.execute("UPDATE ticket_types SET name=?, price_cents=?, active=?, is_vip=?, needs_faculty=? WHERE id=?",
+               (name, price, active, is_vip, needs_fac, tid))
     if price != t["price_cents"]:
         # RF-38/90: cambio de precio auditado; boletos previos no cambian (RF-40)
         audit(db, s["admin"]["username"], "precio",

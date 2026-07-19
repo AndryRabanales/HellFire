@@ -81,6 +81,10 @@ function renderTypes() {
     el.addEventListener('click', () => { SELECTED_TYPE = t.id; renderTypes(); });
     box.appendChild(el);
   });
+  // la facultad solo se pide para tipos que la requieren (UADY); Externo y VIP no
+  const sel = CATALOG.types.find(t => t.id === SELECTED_TYPE);
+  const showFac = !sel || sel.needs_faculty;
+  $('#f-faculty-block').style.display = showFac ? '' : 'none';
   renderPhaseTimer();
 }
 
@@ -163,14 +167,19 @@ async function generate() {
   const btn = $('#btn-generate');
   const buyer = $('#f-buyer').value.trim();
   const faculty = $('#f-faculty').value;
+  const selType = CATALOG.types.find(t => t.id === SELECTED_TYPE);
   $('#f-err').textContent = '';
   if (buyer.length < 3) { $('#f-err').textContent = 'Escribe el nombre completo del comprador'; return; }
-  if (!faculty) { $('#f-err').textContent = 'Elige la facultad'; return; }
   if (!SELECTED_TYPE) { $('#f-err').textContent = 'Elige el tipo de boleto'; return; }
+  // la facultad solo es obligatoria para tipos que la requieren (UADY)
+  if (selType && selType.needs_faculty && !faculty) {
+    $('#f-err').textContent = 'Elige la facultad'; return;
+  }
   btn.disabled = true; btn.textContent = 'GENERANDO…';
   try {
     const r = await API.post('/api/tickets', {
-      buyer_name: buyer, faculty_id: Number(faculty), type_id: SELECTED_TYPE,
+      buyer_name: buyer, type_id: SELECTED_TYPE,
+      faculty_id: (selType && selType.needs_faculty) ? Number(faculty) : null,
     });
     LAST_TICKET = r.ticket;
     // sin pantalla de confirmación: se descarga al instante, se limpia el
