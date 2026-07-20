@@ -199,15 +199,16 @@ async function loadTicketsTable(silent) {
         ? `<span class="badge used">INGRESÓ</span>${t.used_at ? `<div class="muted" style="font-size:9px;margin-top:3px">${esc(t.used_at.slice(11, 16))} h</div>` : ''}`
         : '<span class="badge active">ACTIVO</span>';
     tr.innerHTML = `
-      <td style="font-family:'Space Grotesk';color:var(--ember-soft)">${esc(t.folio)}</td>
-      <td class="strike">${esc(t.buyer_name)}</td>
-      <td>${esc(t.faculty_name)}</td>
-      <td>${esc(t.type_name)}</td>
-      <td class="strike" style="font-family:'Space Grotesk'">${fmtMoney(t.price)}</td>
-      <td>${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
-      <td class="muted">${esc(t.created_at)}</td>
-      <td>${estado}</td>`;
+      <td data-label="Folio" style="font-family:'Space Grotesk';color:var(--ember-soft)">${esc(t.folio)}</td>
+      <td data-label="Comprador" class="strike cell-name">${esc(t.buyer_name)}</td>
+      <td data-label="Facultad">${esc(t.faculty_name)}</td>
+      <td data-label="Tipo">${esc(t.type_name)}</td>
+      <td data-label="Precio" class="strike" style="font-family:'Space Grotesk'">${fmtMoney(t.price)}</td>
+      <td data-label="Vendedor">${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
+      <td data-label="Fecha" class="muted">${esc(t.created_at)}</td>
+      <td data-label="Estado">${estado}</td>`;
     const td = document.createElement('td');
+    td.setAttribute('data-label', '');
     td.style.whiteSpace = 'nowrap';
     if (t.status !== 'void') {
       const dl = document.createElement('button');
@@ -280,8 +281,8 @@ async function loadRanking(silent) {
   _sigRanking = sig;
   $('#rk-body').innerHTML = r.ranking.map((s, i) => `
     <tr class="rank${i + 1}">
-      <td><span class="pos">${s.position}</span></td>
-      <td style="font-weight:700">${esc(s.name)}${s.deleted ? ' <span class="muted">(eliminado)</span>' : ''}</td>
+      <td data-label="Puesto"><span class="pos">${s.position}</span></td>
+      <td data-label="Vendedor" class="cell-name" style="font-weight:700">${esc(s.name)}${s.deleted ? ' <span class="muted">(eliminado)</span>' : ''}</td>
     </tr>`).join('');
 }
 
@@ -336,15 +337,16 @@ async function loadSellers(silent) {
           ? '<span class="badge active">COMPLETADO</span>'
           : `<b style="font-family:'Space Grotesk';color:var(--danger)">${fmtMoney(falta)}</b>`);
     tr.innerHTML = `
-      <td style="font-weight:700">${esc(s.name)}${adminLine}</td>
-      <td>${s.deleted ? '<span class="muted">—</span>' : `<span class="codechip">${esc(s.code)}</span>`}</td>
-      <td><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></td>
-      <td style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(s.paid)}</td>
-      <td>${faltante}</td>
-      <td>${s.deleted ? '<span class="badge void">Eliminado</span>'
+      <td data-label="Vendedor" class="cell-name" style="font-weight:700">${esc(s.name)}${adminLine}</td>
+      <td data-label="Código">${s.deleted ? '<span class="muted">—</span>' : `<span class="codechip">${esc(s.code)}</span>`}</td>
+      <td data-label="Vendido"><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></td>
+      <td data-label="Pagado" style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(s.paid)}</td>
+      <td data-label="Faltante">${faltante}</td>
+      <td data-label="Estado">${s.deleted ? '<span class="badge void">Eliminado</span>'
           : s.active ? '<span class="badge active">Activo</span>'
           : '<span class="badge used">Desactivado</span>'}</td>`;
     const td = document.createElement('td');
+    td.setAttribute('data-label', '');
     const mine = s.owner_admin_id == null || s.owner_admin_id === ME_ID;
     if (!s.deleted && mine) {
       const mk = (label, fn, cls) => {
