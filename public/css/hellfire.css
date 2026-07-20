@@ -171,6 +171,9 @@ table.data tr.void td.strike{text-decoration:line-through}
   table.data th{padding:8px 9px;font-size:8.5px}
   table.data td{padding:7px 9px;white-space:nowrap}
   table.data td.cell-name{font-weight:700}
+  /* nombres largos: se recortan con … para no ensanchar la columna */
+  table.data td.cell-name .clip{display:inline-block;max-width:135px;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
 
   /* Todo más compacto en móvil: pestañas, filtros, botones, títulos, etiquetas */
   .tab{padding:8px 12px;font-size:12px;border-radius:10px}

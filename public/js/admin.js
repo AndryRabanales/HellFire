@@ -200,7 +200,7 @@ async function loadTicketsTable(silent) {
         : '<span class="badge active">ACTIVO</span>';
     tr.innerHTML = `
       <td data-label="Folio" style="font-family:'Space Grotesk';color:var(--ember-soft)">${esc(t.folio)}</td>
-      <td data-label="Comprador" class="strike cell-name">${esc(t.buyer_name)}</td>
+      <td data-label="Comprador" class="strike cell-name"><span class="clip" title="${esc(t.buyer_name)}">${esc(t.buyer_name)}</span></td>
       <td data-label="Facultad">${esc(t.faculty_name)}</td>
       <td data-label="Tipo">${esc(t.type_name)}</td>
       <td data-label="Precio" class="strike" style="font-family:'Space Grotesk'">${fmtMoney(t.price)}</td>
@@ -282,7 +282,7 @@ async function loadRanking(silent) {
   $('#rk-body').innerHTML = r.ranking.map((s, i) => `
     <tr class="rank${i + 1}">
       <td data-label="Puesto"><span class="pos">${s.position}</span></td>
-      <td data-label="Vendedor" class="cell-name" style="font-weight:700">${esc(s.name)}${s.deleted ? ' <span class="muted">(eliminado)</span>' : ''}</td>
+      <td data-label="Vendedor" class="cell-name" style="font-weight:700"><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${s.deleted ? ' <span class="muted">(eliminado)</span>' : ''}</td>
     </tr>`).join('');
 }
 
@@ -337,7 +337,7 @@ async function loadSellers(silent) {
           ? '<span class="badge active">COMPLETADO</span>'
           : `<b style="font-family:'Space Grotesk';color:var(--danger)">${fmtMoney(falta)}</b>`);
     tr.innerHTML = `
-      <td data-label="Vendedor" class="cell-name" style="font-weight:700">${esc(s.name)}${adminLine}</td>
+      <td data-label="Vendedor" class="cell-name" style="font-weight:700"><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${adminLine}</td>
       <td data-label="Código">${s.deleted ? '<span class="muted">—</span>' : `<span class="codechip">${esc(s.code)}</span>`}</td>
       <td data-label="Vendido"><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></td>
       <td data-label="Pagado" style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(s.paid)}</td>
