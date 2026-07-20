@@ -164,33 +164,13 @@ table.data tr:last-child td{border-bottom:none}
 table.data tr.void td{opacity:.6}
 table.data tr.void td.strike{text-decoration:line-through}
 
-/* MÓVIL: las tablas anchas se vuelven tarjetas compactas (nombre como título,
-   resto como etiqueta:valor). Así los nombres largos ya no se parten feo. */
+/* MÓVIL: la tabla se mantiene (más clara) pero MÁS COMPACTA: celdas apretadas,
+   cada fila en una sola línea (la tabla se desliza en vez de partir los nombres). */
 @media (max-width:700px){
-  .tablewrap{overflow-x:visible;border:none;border-radius:0}
-  table.data{min-width:0;display:block;font-size:13px}
-  table.data thead{display:none}
-  table.data tbody{display:block}
-  table.data tr{display:flex;flex-direction:column;
-    background:rgba(255,255,255,.02);border:1px solid rgba(255,120,40,.18);
-    border-radius:13px;padding:11px 13px;margin-bottom:10px}
-  table.data td{display:flex;justify-content:space-between;align-items:baseline;gap:14px;
-    padding:5px 0;border-bottom:1px solid rgba(255,120,40,.08);
-    text-align:right;white-space:normal;vertical-align:baseline}
-  table.data td:last-child{border-bottom:none}
-  table.data td::before{content:attr(data-label);flex:0 0 auto;text-align:left;
-    font:600 9px "Space Grotesk";letter-spacing:.1em;text-transform:uppercase;
-    color:var(--ember-dim);padding-top:2px}
-  /* nombre: título del card, ancho completo, arriba de todo, sin etiqueta */
-  table.data td.cell-name{order:-1;display:block;text-align:left;
-    font:800 15px Manrope;color:var(--cream);word-break:break-word;
-    padding:0 0 8px;margin-bottom:6px;border-bottom:1px solid rgba(255,120,40,.16)}
-  table.data td.cell-name::before{display:none}
-  table.data td:empty{display:none}
-  /* celda de acciones (sin etiqueta): botones a la derecha */
-  table.data td[data-label=""]{justify-content:flex-end;flex-wrap:wrap;padding-top:8px}
-  table.data td[data-label=""]::before{display:none}
-  table.data tr.void td.strike{text-decoration:line-through}
+  table.data{font-size:11.5px;min-width:560px}
+  table.data th{padding:8px 9px;font-size:8.5px}
+  table.data td{padding:7px 9px;white-space:nowrap}
+  table.data td.cell-name{font-weight:700}
 }
 
 /* stats */
