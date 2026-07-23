@@ -247,6 +247,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
   detail TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,             -- ej. Local, Alcohol, DJ, Seguridad
+  amount_cents INTEGER NOT NULL DEFAULT 0,
+  account TEXT,                   -- quién lo paga (Russel, Osmar, Andry, o libre)
+  status TEXT NOT NULL DEFAULT 'pendiente',   -- pendiente | pagado
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
 """
 
 DEFAULT_SETTINGS = {
@@ -1456,6 +1465,110 @@ def get_audit():
     rows = db.execute("SELECT * FROM audit_log WHERE action != 'generacion' "
                       "ORDER BY id DESC LIMIT 500").fetchall()
     return jsonify(log=[dict(r) for r in rows])
+
+# ---- gastos de la fiesta (local, bebidas, DJ, etc.): cuánto se debe -------------
+
+def expenses_summary(db):
+    rows = db.execute("SELECT * FROM expenses ORDER BY id DESC").fetchall()
+    total = paid = pending = 0
+    by_account = {}
+    for r in rows:
+        c = r["amount_cents"] or 0
+        total += c
+        if r["status"] == "pagado":
+            paid += c
+        else:
+            pending += c
+        acc = (r["account"] or "").strip() or "Sin asignar"
+        b = by_account.setdefault(acc, {"total": 0, "paid": 0, "pending": 0})
+        b["total"] += c
+        b["paid"] += c if r["status"] == "pagado" else 0
+        b["pending"] += c if r["status"] != "pagado" else 0
+    accounts = [{"account": k, "total": money(v["total"]), "paid": money(v["paid"]),
+                 "pending": money(v["pending"])}
+                for k, v in sorted(by_account.items(), key=lambda kv: -kv[1]["total"])]
+    items = [{"id": r["id"], "name": r["name"], "amount": money(r["amount_cents"]),
+              "account": r["account"] or "", "status": r["status"],
+              "created_at": r["created_at"]} for r in rows]
+    return {"expenses": items, "total": money(total), "paid": money(paid),
+            "pending": money(pending), "by_account": accounts}
+
+@app.get("/api/admin/expenses")
+def list_expenses():
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    return jsonify(**expenses_summary(get_db()))
+
+@app.post("/api/admin/expenses")
+def create_expense():
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    b = request.json or {}
+    name = str(b.get("name", "")).strip()
+    if not name:
+        return jsonify(error="Escribe el nombre del gasto"), 400
+    try:
+        cents = int(round(float(b.get("amount", 0)) * 100))
+    except (TypeError, ValueError):
+        cents = 0
+    if cents < 0:
+        return jsonify(error="El monto no puede ser negativo"), 400
+    account = str(b.get("account", "")).strip()
+    status = "pagado" if b.get("status") == "pagado" else "pendiente"
+    db = get_db()
+    db.execute("INSERT INTO expenses(name, amount_cents, account, status, created_by, created_at) "
+               "VALUES(?,?,?,?,?,?)",
+               (name, cents, account, status, s["admin"]["username"], now_iso()))
+    audit(db, s["admin"]["username"], "gasto",
+          f"Agregó gasto '{name}': ${cents/100:,.2f} ({status}{', ' + account if account else ''})")
+    db.commit()
+    return jsonify(ok=True)
+
+@app.put("/api/admin/expenses/<int:eid>")
+def edit_expense(eid):
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    e = db.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
+    if not e:
+        return jsonify(error="no existe"), 404
+    b = request.json or {}
+    name = str(b.get("name", e["name"])).strip() or e["name"]
+    try:
+        cents = int(round(float(b.get("amount", e["amount_cents"] / 100)) * 100))
+    except (TypeError, ValueError):
+        cents = e["amount_cents"]
+    if cents < 0:
+        cents = 0
+    account = str(b.get("account", e["account"] or "")).strip()
+    status = b.get("status", e["status"])
+    status = "pagado" if status == "pagado" else "pendiente"
+    db.execute("UPDATE expenses SET name=?, amount_cents=?, account=?, status=? WHERE id=?",
+               (name, cents, account, status, eid))
+    if status != e["status"]:
+        audit(db, s["admin"]["username"], "gasto",
+              f"Marcó '{name}' como {status}")
+    else:
+        audit(db, s["admin"]["username"], "gasto", f"Editó gasto '{name}'")
+    db.commit()
+    return jsonify(ok=True)
+
+@app.delete("/api/admin/expenses/<int:eid>")
+def delete_expense(eid):
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    e = db.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
+    if not e:
+        return jsonify(error="no existe"), 404
+    db.execute("DELETE FROM expenses WHERE id=?", (eid,))
+    audit(db, s["admin"]["username"], "gasto", f"Eliminó gasto '{e['name']}'")
+    db.commit()
+    return jsonify(ok=True)
 
 @app.get("/api/admin/export")
 def export_xlsx():

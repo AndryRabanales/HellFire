@@ -57,6 +57,7 @@
     <button class="tab" data-tab="boletos">Boletos</button>
     <button class="tab" data-tab="vendedores">Vendedores</button>
     <button class="tab" data-tab="ranking">Ranking</button>
+    <button class="tab" data-tab="gastos">Gastos</button>
     <button class="tab" data-tab="catalogos">Catálogos</button>
     <button class="tab" data-tab="admins">Admins</button>
     <button class="tab" data-tab="ajustes">Ajustes</button>
@@ -129,6 +130,31 @@
         <th>Vendedor</th><th>Código</th><th>Vendido</th><th>Pagado a su admin</th>
         <th>Faltante</th><th>Estado</th><th style="min-width:230px">Acciones</th>
       </tr></thead><tbody id="sl-body"></tbody></table>
+    </div>
+  </section>
+
+  <!-- ===== Gastos de la fiesta ===== -->
+  <section id="tab-gastos" class="mt16 hidden">
+    <div class="stats" id="gx-stats"></div>
+    <div class="card mt16">
+      <div class="label">Nuevo gasto</div>
+      <div class="row" style="flex-wrap:wrap;gap:8px;align-items:flex-end">
+        <input class="input grow" id="gx-name" placeholder="Gasto (ej. Local, DJ, Alcohol)" style="min-width:160px;padding:11px">
+        <input class="input" id="gx-amount" type="number" min="0" placeholder="$ Monto" style="width:120px;padding:11px">
+        <input class="input" id="gx-account" placeholder="Quién paga (opcional)" style="width:170px;padding:11px">
+        <label class="muted row" style="gap:5px"><input type="checkbox" id="gx-paid">Ya pagado</label>
+        <button class="btn sm" id="btn-gx-create" style="padding:12px 16px">Agregar</button>
+      </div>
+      <div class="err mt8" id="gx-err"></div>
+    </div>
+    <div class="card mt12" id="gx-byaccount-card" style="display:none">
+      <div class="label">Por cuenta · cuánto puso cada quien</div>
+      <div id="gx-byaccount" class="mt8"></div>
+    </div>
+    <div class="tablewrap mt12">
+      <table class="data"><thead><tr>
+        <th>Gasto</th><th>Monto</th><th>Cuenta</th><th>Estado</th><th style="min-width:200px">Acciones</th>
+      </tr></thead><tbody id="gx-body"></tbody></table>
     </div>
   </section>
 

@@ -43,7 +43,7 @@ async function enter(name) {
 /* ---------------- tabs ---------------- */
 const loaders = {
   resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
-  ranking: loadRanking, vendedores: loadSellers,
+  ranking: loadRanking, vendedores: loadSellers, gastos: loadExpenses,
   catalogos: loadCatalogs, admins: loadAdmins, ajustes: loadSettings,
 };
 
@@ -286,10 +286,121 @@ async function loadRanking(silent) {
     </tr>`).join('');
 }
 
+/* ---------------- gastos de la fiesta ---------------- */
+let _sigGastos = '';
+async function loadExpenses(silent) {
+  const [g, sum] = await Promise.all([
+    API.get('/api/admin/expenses'),
+    API.get('/api/admin/summary').catch(() => null),
+  ]);
+  const sig = JSON.stringify([g.total, g.paid, g.pending, g.expenses.map(e => [e.id, e.name, e.amount, e.account, e.status])]);
+  if (silent && sig === _sigGastos) return;
+  _sigGastos = sig;
+  // tarjetas: pendiente (lo que se debe) destacado, pagado, total, y ganancia neta
+  const vendido = sum ? sum.total : 0;
+  const neta = vendido - g.total;
+  $('#gx-stats').innerHTML = `
+    <div class="stat" style="border-color:rgba(232,112,106,.4)">
+      <div class="sk">Se debe (pendiente)</div>
+      <div class="sv" style="color:var(--danger)">${fmtMoney(g.pending)}</div></div>
+    <div class="stat"><div class="sk">Ya pagado</div><div class="sv">${fmtMoney(g.paid)}</div></div>
+    <div class="stat"><div class="sk">Total de gastos</div><div class="sv">${fmtMoney(g.total)}</div></div>
+    <div class="stat"><div class="sk">Ganancia neta (vendido − gastos)</div>
+      <div class="sv" style="color:${neta >= 0 ? 'var(--ok)' : 'var(--danger)'}">${fmtMoney(neta)}</div>
+      <div class="muted" style="font-size:9px;margin-top:2px">vendido ${fmtMoney(vendido)}</div></div>`;
+  // desglose por cuenta (quién puso cuánto)
+  const bac = $('#gx-byaccount-card');
+  if (g.by_account.length) {
+    bac.style.display = '';
+    $('#gx-byaccount').innerHTML = g.by_account.map(a => `
+      <div class="row" style="justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,120,40,.1)">
+        <div style="font:700 13px Manrope;min-width:100px">${esc(a.account)}</div>
+        <div class="muted" style="font-size:12px">puso <b style="color:var(--cream)">${fmtMoney(a.total)}</b></div>
+        <div>${a.pending > 0 ? `<span class="badge used">debe ${fmtMoney(a.pending)}</span>` : '<span class="badge active">al día</span>'}</div>
+      </div>`).join('');
+  } else bac.style.display = 'none';
+  // tabla de gastos
+  const body = $('#gx-body');
+  body.innerHTML = '';
+  if (!g.expenses.length) { body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:16px">Aún no hay gastos. Agrega el primero arriba.</td></tr>'; return; }
+  g.expenses.forEach(e => {
+    const tr = document.createElement('tr');
+    const pagado = e.status === 'pagado';
+    tr.innerHTML = `
+      <td class="cell-name"><span class="clip" title="${esc(e.name)}">${esc(e.name)}</span></td>
+      <td style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(e.amount)}</td>
+      <td>${e.account ? esc(e.account) : '<span class="muted">—</span>'}</td>
+      <td>${pagado ? '<span class="badge active">Pagado</span>' : '<span class="badge used">Pendiente</span>'}</td>`;
+    const td = document.createElement('td');
+    td.setAttribute('data-label', '');
+    const mk = (label, fn, cls) => {
+      const b = document.createElement('button');
+      b.className = 'btn sm ' + (cls || 'ghost');
+      b.style.width = 'auto'; b.style.marginRight = '6px'; b.style.marginBottom = '4px';
+      b.textContent = label; b.onclick = fn;
+      td.appendChild(b);
+    };
+    mk(pagado ? 'Marcar pendiente' : 'Marcar pagado',
+       () => setExpenseStatus(e, pagado ? 'pendiente' : 'pagado'),
+       pagado ? 'ghost' : '');
+    mk('Editar', () => editExpense(e));
+    mk('Eliminar', () => deleteExpense(e), 'danger');
+    tr.appendChild(td);
+    body.appendChild(tr);
+  });
+}
+
+async function setExpenseStatus(e, status) {
+  try { await API.put('/api/admin/expenses/' + e.id, { status }); loadExpenses(); }
+  catch (err) { if (!guard(err)) toast(err.message); }
+}
+function editExpense(e) {
+  modal(`<div class="h1" style="font-size:18px">Editar gasto</div>
+    <div class="label mt12">Nombre</div><input class="input" id="ex-name" value="${esc(e.name)}">
+    <div class="label mt12">Monto ($)</div><input class="input" id="ex-amount" type="number" min="0" value="${e.amount}">
+    <div class="label mt12">Quién paga</div><input class="input" id="ex-account" value="${esc(e.account)}" placeholder="Opcional">
+    <label class="muted row mt12" style="gap:6px"><input type="checkbox" id="ex-paid" ${e.status === 'pagado' ? 'checked' : ''}>Ya pagado</label>
+    <div class="err mt8" id="ex-err"></div>
+    <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
+    <button class="btn grow" id="ex-save">Guardar</button></div>`);
+  $('#ex-save').onclick = async () => {
+    try {
+      await API.put('/api/admin/expenses/' + e.id, {
+        name: $('#ex-name').value.trim(), amount: parseFloat($('#ex-amount').value) || 0,
+        account: $('#ex-account').value.trim(), status: $('#ex-paid').checked ? 'pagado' : 'pendiente',
+      });
+      closeModal(); toast('Gasto actualizado'); loadExpenses();
+    } catch (err) { if (!guard(err)) $('#ex-err').textContent = err.message; }
+  };
+}
+function deleteExpense(e) {
+  modal(`<div class="h1" style="font-size:18px">¿Eliminar gasto?</div>
+    <div class="muted mt8">Se eliminará "${esc(e.name)}" (${fmtMoney(e.amount)}).</div>
+    <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
+    <button class="btn danger grow" id="dx-yes">Eliminar</button></div>`);
+  $('#dx-yes').onclick = async () => {
+    try { await API.del('/api/admin/expenses/' + e.id); closeModal(); loadExpenses(); }
+    catch (err) { if (!guard(err)) toast(err.message); }
+  };
+}
+$('#btn-gx-create').addEventListener('click', async () => {
+  $('#gx-err').textContent = '';
+  const name = $('#gx-name').value.trim();
+  if (!name) { $('#gx-err').textContent = 'Escribe el nombre del gasto'; return; }
+  try {
+    await API.post('/api/admin/expenses', {
+      name, amount: parseFloat($('#gx-amount').value) || 0,
+      account: $('#gx-account').value.trim(), status: $('#gx-paid').checked ? 'pagado' : 'pendiente',
+    });
+    $('#gx-name').value = ''; $('#gx-amount').value = ''; $('#gx-account').value = ''; $('#gx-paid').checked = false;
+    loadExpenses();
+  } catch (e) { if (!guard(e)) $('#gx-err').textContent = e.message; }
+});
+
 /* ---------------- movimientos (feed para todos los admins) ---------------- */
 const MV_ICON = { generacion: '🎟', anulacion: '✕', vendedor_creado: '👤', vendedor_eliminado: '✂',
                   usuarios: '👤', precio: '$', catalogo: '📋', ajustes: '⚙', exportacion: '⬇',
-                  inicializacion: '⚡', pago: '💰' };
+                  inicializacion: '⚡', pago: '💰', gasto: '🧾' };
 const MV_COLOR = { anulacion: 'rgba(232,112,106,.5)', vendedor_eliminado: 'rgba(232,112,106,.5)',
                    generacion: 'rgba(126,226,168,.4)', vendedor_creado: 'rgba(126,226,168,.4)' };
 let _sigMoves = '';
