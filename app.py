@@ -226,7 +226,17 @@ CREATE TABLE IF NOT EXISTS tickets (
   used_at TEXT,                    -- cuándo entró (primer escaneo en la puerta)
   voided_at TEXT,
   voided_by TEXT,
-  void_reason TEXT
+  void_reason TEXT,
+  group_id INTEGER              -- si el boleto es parte de un grupo (5 o 10), su id
+);
+CREATE TABLE IF NOT EXISTS groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  size INTEGER NOT NULL,             -- 5 o 10
+  names TEXT NOT NULL,               -- JSON: lista de integrantes en orden
+  representative TEXT,               -- solo en grupos de 10 (recibe la botella)
+  seller_id INTEGER,
+  seller_name TEXT NOT NULL,
+  created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
@@ -268,6 +278,7 @@ DEFAULT_SETTINGS = {
     "admin_session_minutes": "480",
     "ranking_winners": "3",
     "ranking_prizes": json.dumps([1000, 500, 250]),
+    "group_discount_pct": "20",   # % de descuento para grupos de 5 y 10 (solo Externo)
     # Flyers por tipo de boleto: uno para VIP y otro para General. Cada uno con su
     # imagen (base64 en la BD), posición y zoom. Las claves sin sufijo son el flyer
     # "legado" (una sola imagen) y sirven de respaldo si aún no se sube el del tipo.
@@ -361,6 +372,7 @@ def init_db():
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
                    "needs_faculty INTEGER NOT NULL DEFAULT 1")
+        db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id INTEGER")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
@@ -377,6 +389,9 @@ def init_db():
         ttcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
         if "needs_faculty" not in ttcols:
             db.execute("ALTER TABLE ticket_types ADD COLUMN needs_faculty INTEGER NOT NULL DEFAULT 1")
+        tkcols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
+        if "group_id" not in tkcols:
+            db.execute("ALTER TABLE tickets ADD COLUMN group_id INTEGER")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -761,7 +776,20 @@ def catalog():
                       "next_phase": next_phase(db, r)})
     facs = [dict(r) for r in db.execute(
         "SELECT id, name FROM faculties WHERE active=1 ORDER BY name").fetchall()]
-    return jsonify(types=types, faculties=facs,
+    # info del plan de grupos (5/10): solo aplica al tipo Externo
+    try:
+        group_pct = max(1, min(90, int(setting(db, "group_discount_pct") or 20)))
+    except ValueError:
+        group_pct = 20
+    externo = next((t for t in types if t["name"] == "Externo"), None)
+    group_info = None
+    if externo and externo["price_cents"] > 0:
+        group_price = round(externo["price_cents"] * (100 - group_pct) / 100)
+        group_info = {"type_id": externo["id"], "pct": group_pct,
+                      "normal_price_cents": externo["price_cents"],
+                      "group_price_cents": group_price,
+                      "savings_cents": externo["price_cents"] - group_price}
+    return jsonify(types=types, faculties=facs, group=group_info,
                    event_name=setting(db, "event_name"),
                    event_subtitle=setting(db, "event_subtitle"),
                    event_date_text=setting(db, "event_date_text"),
@@ -775,6 +803,42 @@ def ticket_public(t):
             "price": money(t["price_cents"]), "status": t["status"],
             "created_at": t["created_at"], "used_at": t["used_at"],
             "seller_name": t["seller_name"], "seller_code": t["seller_code"]}
+
+def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
+                        seller_id, seller_name, seller_code, group_id=None):
+    """Inserta un boleto con folio único (reintenta si choca) y devuelve la fila.
+    Compartido por la generación individual y la generación de grupos."""
+    prefix = setting(db, "folio_prefix")
+    with _write_lock:
+        base = db.execute(
+            "SELECT COALESCE(MAX(CAST(SUBSTR(folio, ?) AS INTEGER)),0) AS n FROM tickets",
+            (len(prefix) + 1,)).fetchone()["n"]
+        try:
+            base = max(base, int(setting(db, "folio_start") or 1) - 1)
+        except ValueError:
+            pass
+        for attempt in range(20):
+            n = base + 1 + attempt
+            folio = f"{prefix}{n:04d}"
+            token = secrets.token_urlsafe(12)   # RF-46: no adivinable ni secuencial
+            qr_payload = token
+            try:
+                cur = db.execute("""INSERT INTO tickets
+                    (folio, qr_token, qr_payload, buyer_name, faculty_id, faculty_name,
+                     type_id, type_name, type_is_vip, price_cents,
+                     seller_id, seller_name, seller_code, status, created_at, group_id)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?, ?)""",
+                    (folio, token, qr_payload, buyer, fac_id, fac_name, tt["id"], tt["name"],
+                     tt["is_vip"], price_cents, seller_id, seller_name,
+                     seller_code, now_iso(), group_id))
+                db.commit()
+                break
+            except IntegrityError:
+                db.rollback()   # Postgres: liberar la transacción abortada antes de reintentar
+                continue
+        else:
+            return None
+    return db.execute("SELECT * FROM tickets WHERE id=?", (cur.lastrowid,)).fetchone()
 
 @app.post("/api/tickets")
 def create_ticket():
@@ -805,44 +869,93 @@ def create_ticket():
                              "Pídele al administrador que lo defina en Catálogos."), 400
     # RF-43: el boleto queda ligado al vendedor que lo genera
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
-    prefix = setting(db, "folio_prefix")
-    with _write_lock:
-        # siguiente número a partir del folio más alto existente (robusto en ambos motores)
-        base = db.execute(
-            "SELECT COALESCE(MAX(CAST(SUBSTR(folio, ?) AS INTEGER)),0) AS n FROM tickets",
-            (len(prefix) + 1,)).fetchone()["n"]
-        # folio inicial configurable: el primer boleto no arranca en 0001
-        try:
-            base = max(base, int(setting(db, "folio_start") or 1) - 1)
-        except ValueError:
-            pass
-        for attempt in range(20):
-            n = base + 1 + attempt
-            folio = f"{prefix}{n:04d}"
-            token = secrets.token_urlsafe(12)   # RF-46: no adivinable ni secuencial
-            qr_payload = token                  # el QR lleva el token secreto
-            try:
-                cur = db.execute("""INSERT INTO tickets
-                    (folio, qr_token, qr_payload, buyer_name, faculty_id, faculty_name,
-                     type_id, type_name, type_is_vip, price_cents,
-                     seller_id, seller_name, seller_code, status, created_at)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?)""",
-                    (folio, token, qr_payload, buyer, fac_id, fac_name, tt["id"], tt["name"],
-                     tt["is_vip"], price_now, seller_id, seller_name,
-                     seller_code, now_iso()))
-                db.commit()
-                break
-            except IntegrityError:
-                db.rollback()   # Postgres: liberar la transacción abortada antes de reintentar
-                continue
-        else:
-            return jsonify(error="No se pudo generar el folio, intenta de nuevo"), 500
-    t = db.execute("SELECT * FROM tickets WHERE id=?", (cur.lastrowid,)).fetchone()
+    t = _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_now,
+                           seller_id, seller_name, seller_code)
+    if not t:
+        return jsonify(error="No se pudo generar el folio, intenta de nuevo"), 500
     audit(db, seller_name, "generacion",
           f"Generó el boleto {t['folio']} para {buyer} ({tt['name']})")
     db.commit()
     sync_excel_async()
     return jsonify(ticket=ticket_public(t))
+
+# ---- grupos de 5 y 10 (plan aparte, solo boletos Externo con descuento) --------
+
+@app.post("/api/groups")
+def create_group():
+    """Genera un grupo completo (5 o 10 integrantes): cada uno recibe su propio
+    boleto Externo con el precio de grupo (no editable). No se puede mezclar tipos:
+    un grupo es siempre 100% Externo. El de 10 lleva un representante (botella)."""
+    s = require_seller()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    b = request.json or {}
+    size = b.get("size")
+    if size not in (5, 10):
+        return jsonify(error="El grupo debe ser de exactamente 5 o 10 integrantes"), 400
+    names = b.get("names") or []
+    if not isinstance(names, list) or len(names) != size:
+        return jsonify(error=f"Escribe los {size} nombres del grupo"), 400
+    names = [str(n).strip() for n in names]
+    for n in names:
+        if len(n) < 3:
+            return jsonify(error="Cada integrante necesita su nombre completo"), 400
+    representative = None
+    if size == 10:
+        idx = b.get("representative_index")
+        if not isinstance(idx, int) or idx < 0 or idx >= 10:
+            return jsonify(error="Marca quién es el representante del grupo (recibe la botella)"), 400
+        representative = names[idx]
+    tt = db.execute("SELECT * FROM ticket_types WHERE name='Externo' AND active=1").fetchone()
+    if not tt:
+        return jsonify(error="El tipo Externo no está disponible para armar grupos"), 400
+    price_now, _phase = effective_price(db, tt)
+    if price_now <= 0:
+        return jsonify(error="El precio de Externo aún no está configurado"), 400
+    try:
+        pct = max(1, min(90, int(setting(db, "group_discount_pct") or 20)))
+    except ValueError:
+        pct = 20
+    group_price = round(price_now * (100 - pct) / 100)
+    seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
+    gcur = db.execute("INSERT INTO groups(size, names, representative, seller_id, seller_name, created_at) "
+                      "VALUES(?,?,?,?,?,?)",
+                      (size, json.dumps(names, ensure_ascii=False), representative,
+                       seller_id, seller_name, now_iso()))
+    db.commit()
+    gid = gcur.lastrowid
+    tickets_out = []
+    for name in names:
+        t = _insert_ticket_row(db, name, None, "", tt, group_price,
+                               seller_id, seller_name, seller_code, group_id=gid)
+        if not t:
+            return jsonify(error="No se pudo generar uno de los folios, intenta de nuevo"), 500
+        tickets_out.append(ticket_public(t))
+    audit(db, seller_name, "generacion",
+          f"Generó un grupo de {size} ({', '.join(names)}) a ${group_price/100:,.2f} c/u"
+          + (f" · representante: {representative}" if representative else ""))
+    db.commit()
+    sync_excel_async()
+    return jsonify(group_id=gid, size=size, representative=representative,
+                   price=money(group_price), normal_price=money(price_now),
+                   savings=money(price_now - group_price), tickets=tickets_out)
+
+@app.get("/api/admin/groups")
+def list_groups():
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    rows = db.execute("SELECT * FROM groups ORDER BY id DESC LIMIT 300").fetchall()
+    out = []
+    for r in rows:
+        folios = [dict(t) for t in db.execute(
+            "SELECT folio, status FROM tickets WHERE group_id=? ORDER BY id", (r["id"],)).fetchall()]
+        out.append({"id": r["id"], "size": r["size"], "names": json.loads(r["names"]),
+                    "representative": r["representative"], "seller_name": r["seller_name"],
+                    "created_at": r["created_at"], "tickets": folios})
+    return jsonify(groups=out)
 
 @app.get("/api/my-tickets")
 def my_tickets():
@@ -1597,7 +1710,7 @@ def get_settings():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     out = {k: setting(db, k) for k in ["event_name", "event_subtitle", "event_date_text",
-                                       "folio_start"]}
+                                       "folio_start", "group_discount_pct"]}
     out.update(flyer_info(db))
     return jsonify(out)
 
@@ -1628,6 +1741,13 @@ def save_settings():
             fs = 1
         set_setting(db, "folio_start", str(fs))
         changed.append(f"folio inicial {fs:04d}")
+    if "group_discount_pct" in b:
+        try:
+            pct = max(1, min(90, int(float(b["group_discount_pct"]))))
+        except (TypeError, ValueError):
+            pct = 20
+        set_setting(db, "group_discount_pct", str(pct))
+        changed.append(f"descuento de grupo {pct}%")
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
     for v in ("vip", "gen"):
         if f"flyer_focus_{v}" in b:
