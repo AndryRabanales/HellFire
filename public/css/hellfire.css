@@ -190,7 +190,8 @@ table.data tr.void td.strike{text-decoration:line-through}
 
   /* Todo más compacto en móvil: pestañas, filtros, botones, títulos, etiquetas */
   .tab{padding:8px 12px;font-size:12px;border-radius:10px}
-  .input,select.input,textarea.input{padding:11px;font-size:13px;border-radius:11px}
+  /* 16px es el mínimo que evita que Safari en iOS haga zoom automático al enfocar el campo */
+  .input,select.input,textarea.input{padding:11px;font-size:16px;border-radius:11px}
   .btn{padding:13px;font-size:13.5px;border-radius:13px}
   .btn.sm{padding:7px 11px;font-size:11px;border-radius:9px}
   .label{font-size:8.5px;margin-bottom:5px}
