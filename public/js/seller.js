@@ -217,8 +217,9 @@ function renderGroupPriceBar() {
     <div class="gp-save">Ahorran ${fmtMoney(total)} en total (${fmtMoney(g.savings_cents / 100)} c/u)</div>`;
 }
 
-// cada fila lleva una columna fija "Boleto N" (no un placeholder que desaparece
-// al escribir), para que nunca se pierda de vista a cuál boleto corresponde.
+// cada integrante va en su propia tarjeta (borde + ficha numerada), para que
+// se vean claramente separados y nunca se pierda de vista a cuál boleto
+// corresponde cada nombre.
 function renderGroupNames() {
   const box = $('#group-names');
   box.innerHTML = '';
@@ -226,12 +227,16 @@ function renderGroupNames() {
     const row = document.createElement('div');
     row.className = 'grouprow';
     const num = document.createElement('div');
-    num.className = 'gr-num'; num.textContent = 'Boleto ' + (i + 1);
+    num.className = 'gr-num'; num.textContent = i + 1;
     row.appendChild(num);
+    const col = document.createElement('div');
+    col.style.cssText = 'flex:1;min-width:0';
+    col.innerHTML = `<div class="gr-label">Boleto ${i + 1}</div>`;
     const input = document.createElement('input');
     input.className = 'input grow'; input.dataset.idx = i;
     input.placeholder = 'Nombre completo';
-    row.appendChild(input);
+    col.appendChild(input);
+    row.appendChild(col);
     if (GROUP_SIZE === 10) {
       const rep = document.createElement('button');
       rep.className = 'repbtn'; rep.type = 'button'; rep.title = 'Marcar como representante (botella)';
@@ -246,18 +251,22 @@ function renderGroupNames() {
   }
 }
 
-// tras generar: NO se sale de la pantalla. Cada nombre queda subrayado con su
-// propio botón ⬇ (descarga bajo demanda, la más confiable en iPhone porque es
-// un toque real del usuario), y abajo el monto final + ahorro para captura.
+// tras generar: NO se sale de la pantalla. Cada tarjeta pasa a verde con su
+// número en ✓, el nombre queda subrayado con su propio botón ⬇ (descarga bajo
+// demanda, la más confiable en iPhone porque es un toque real del usuario), y
+// abajo el monto final + ahorro para captura de pantalla.
 function showGroupResult(r) {
   GROUP_RESULT = r;
   const box = $('#group-names');
   box.innerHTML = r.tickets.map((t, i) => `
-    <div class="grouprow">
-      <div class="gr-num">Boleto ${i + 1}</div>
-      <div style="flex:1;font:700 14px Manrope;color:var(--cream);
-        text-decoration:underline;text-decoration-color:#7ee2a8;text-underline-offset:4px">
-        ${esc(t.buyer_name)}${r.representative === t.buyer_name ? ' <span style="color:#f3d27a">★</span>' : ''}
+    <div class="grouprow done">
+      <div class="gr-num">${i + 1}</div>
+      <div style="flex:1;min-width:0">
+        <div class="gr-label">Boleto ${i + 1}</div>
+        <div style="font:700 14px Manrope;color:var(--cream);
+          text-decoration:underline;text-decoration-color:#7ee2a8;text-underline-offset:4px">
+          ${esc(t.buyer_name)}${r.representative === t.buyer_name ? ' <span style="color:#f3d27a">★</span>' : ''}
+        </div>
       </div>
       <button class="iconbtn" data-idx="${i}" title="Descargar boleto">⬇</button>
     </div>`).join('');

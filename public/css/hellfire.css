@@ -99,13 +99,26 @@ select.input option{background:#160603;color:var(--cream)}
 .typeopt.sel .tname{color:var(--ember-soft)}
 .typeopt.sel .tprice{color:var(--cream)}
 
-/* plan de grupo (5/10): fila de integrante + botón de representante */
-.grouprow{display:flex;align-items:center;gap:8px}
-/* columna fija "Boleto N": no desaparece como un placeholder, así nunca se
-   pierde de vista a cuál boleto corresponde cada nombre */
-.gr-num{flex:0 0 62px;font:700 11px "Space Grotesk";color:var(--ember-soft);
-  letter-spacing:.02em;white-space:nowrap}
-.repbtn{flex:none;width:38px;height:38px;border-radius:11px;border:1.5px solid var(--line-strong);
+/* plan de grupo (5/10): cada integrante en su propia tarjeta, bien separada,
+   con una ficha numerada (naranja mientras se escribe, verde ✓ ya generado) */
+.grouprow{position:relative;display:flex;align-items:center;gap:12px;
+  padding:11px 14px 11px 12px;border-radius:15px;
+  background:linear-gradient(135deg,rgba(255,255,255,.025),rgba(255,255,255,.01));
+  border:1px solid rgba(255,120,40,.16);overflow:hidden;transition:border-color .15s,background .15s}
+.grouprow::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
+  background:linear-gradient(180deg,var(--ember),rgba(255,110,30,.15))}
+.grouprow.done{border-color:rgba(126,226,168,.32);background:linear-gradient(135deg,rgba(126,226,168,.07),rgba(126,226,168,.015))}
+.grouprow.done::before{background:linear-gradient(180deg,#7ee2a8,rgba(126,226,168,.15))}
+.gr-num{flex:0 0 32px;width:32px;height:32px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font:800 13px "Space Grotesk";color:#1a0800;
+  background:linear-gradient(150deg,#ff9a52,#e8480d);box-shadow:0 0 10px rgba(255,110,30,.35)}
+.grouprow.done .gr-num{background:linear-gradient(150deg,#9df0bb,#4fc985);
+  color:#06280f;box-shadow:0 0 10px rgba(126,226,168,.4)}
+.gr-label{font:700 9px "Space Grotesk";letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ember-dim);margin-bottom:4px}
+.grouprow.done .gr-label{color:rgba(126,226,168,.75)}
+.repbtn{flex:none;width:36px;height:36px;border-radius:11px;border:1.5px solid var(--line-strong);
   background:transparent;color:rgba(246,241,231,.3);font-size:16px;cursor:pointer;transition:all .12s}
 .repbtn.sel{background:rgba(243,210,122,.14);border-color:#f3d27a;color:#f3d27a;
   box-shadow:0 0 12px rgba(243,210,122,.35)}
