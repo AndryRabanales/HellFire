@@ -236,6 +236,9 @@ table.data tr.void td.strike{text-decoration:line-through}
   .stat .sk{font-size:8px}
   .card{padding:13px}
   .filters{gap:7px}
+  /* formularios de alta (admin, vendedor, gasto): los campos van cada uno en
+     su propia línea en vez de encimarse y cortar el placeholder a la mitad */
+  #ad-user,#ad-pass,#sl-name,#gx-name,#gx-amount,#gx-account{min-width:100%!important}
 }
 
 /* stats */
