@@ -165,6 +165,110 @@ function clearForm() {
   $('#f-err').textContent = '';
 }
 
+/* ---------------- plan de grupo (5 o 10, solo Externo, -20%) ---------------- */
+let GROUP_SIZE = null;      // null | 5 | 10
+let GROUP_REP_IDX = null;   // índice del representante (solo grupo de 10)
+
+function enterGroupMode(size) {
+  if (!CATALOG.group) {
+    toast('El precio de Externo aún no está configurado. Pídele al admin que lo defina.');
+    return;
+  }
+  GROUP_SIZE = size;
+  GROUP_REP_IDX = null;
+  $('#mode-individual').classList.add('hidden');
+  $('#group-switch').classList.add('hidden');
+  $('#mode-group').classList.remove('hidden');
+  $('#btn-generate').classList.add('hidden');
+  $('#btn-generate-group').classList.remove('hidden');
+  $('#btn-generate-group').textContent = 'GENERAR GRUPO DE ' + size + '  🎟';
+  $('#f-hint').textContent = 'Grupo de ' + size + ' · un boleto Externo por integrante';
+  $('#f-err').textContent = '';
+  renderGroupPriceBar();
+  renderGroupNames();
+}
+
+function exitGroupMode() {
+  GROUP_SIZE = null; GROUP_REP_IDX = null;
+  $('#mode-individual').classList.remove('hidden');
+  $('#group-switch').classList.remove('hidden');
+  $('#mode-group').classList.add('hidden');
+  $('#btn-generate').classList.remove('hidden');
+  $('#btn-generate-group').classList.add('hidden');
+  $('#f-hint').textContent = 'Los datos del comprador';
+  $('#f-err').textContent = '';
+  $('#group-names').innerHTML = '';
+}
+
+function renderGroupPriceBar() {
+  const g = CATALOG.group;
+  const total = g.savings_cents * GROUP_SIZE / 100;
+  $('#group-price-bar').innerHTML = `
+    <div class="gp-line">Boleto Externo en grupo de ${GROUP_SIZE}</div>
+    <div class="gp-price">${fmtMoney(g.group_price_cents / 100)}
+      <span style="font-size:13px;color:var(--cream-45);text-decoration:line-through;margin-left:6px">${fmtMoney(g.normal_price_cents / 100)}</span></div>
+    <div class="gp-save">Ahorran ${fmtMoney(total)} en total (${fmtMoney(g.savings_cents / 100)} c/u)</div>`;
+}
+
+function renderGroupNames() {
+  const box = $('#group-names');
+  box.innerHTML = '';
+  for (let i = 0; i < GROUP_SIZE; i++) {
+    const row = document.createElement('div');
+    row.className = 'grouprow';
+    const input = document.createElement('input');
+    input.className = 'input grow'; input.dataset.idx = i;
+    input.placeholder = 'Integrante ' + (i + 1) + ' · nombre completo';
+    row.appendChild(input);
+    if (GROUP_SIZE === 10) {
+      const rep = document.createElement('button');
+      rep.className = 'repbtn'; rep.type = 'button'; rep.title = 'Marcar como representante (botella)';
+      rep.textContent = '★';
+      rep.addEventListener('click', () => {
+        GROUP_REP_IDX = (GROUP_REP_IDX === i) ? null : i;
+        $$('#group-names .repbtn').forEach((b, bi) => b.classList.toggle('sel', bi === GROUP_REP_IDX));
+      });
+      row.appendChild(rep);
+    }
+    box.appendChild(row);
+  }
+}
+
+async function generateGroup() {
+  const btn = $('#btn-generate-group');
+  const inputs = [...document.querySelectorAll('#group-names input')];
+  const names = inputs.map(i => i.value.trim());
+  $('#f-err').textContent = '';
+  const emptyIdx = names.findIndex(n => n.length < 3);
+  if (emptyIdx !== -1) {
+    $('#f-err').textContent = `Escribe el nombre completo del integrante ${emptyIdx + 1}`;
+    return;
+  }
+  if (GROUP_SIZE === 10 && GROUP_REP_IDX === null) {
+    $('#f-err').textContent = 'Marca quién es el representante del grupo (★, recibe la botella)';
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'GENERANDO…';
+  try {
+    const r = await API.post('/api/groups', {
+      size: GROUP_SIZE, names,
+      representative_index: GROUP_SIZE === 10 ? GROUP_REP_IDX : null,
+    });
+    exitGroupMode();
+    for (let i = 0; i < r.tickets.length; i++) {
+      btn.textContent = `DESCARGANDO ${i + 1}/${r.tickets.length}…`;
+      await downloadTicket(r.tickets[i], CATALOG);
+    }
+    toast(`Grupo de ${r.size} generado y descargado ✓ (ahorraron ${r.savings} c/u)`);
+  } catch (e) {
+    if (e.data && e.data._unauthorized) return sessionLost();
+    $('#f-err').textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    if (GROUP_SIZE) btn.textContent = 'GENERAR GRUPO DE ' + GROUP_SIZE + '  🎟';
+  }
+}
+
 async function generate() {
   const btn = $('#btn-generate');
   const buyer = $('#f-buyer').value.trim();
@@ -278,6 +382,10 @@ bindLogin();
 $('#btn-logout-1').addEventListener('click', logout);
 $('#btn-logout-2').addEventListener('click', logout);
 $('#btn-generate').addEventListener('click', generate);
+$('#btn-generate-group').addEventListener('click', generateGroup);
+$('#btn-group-5').addEventListener('click', () => enterGroupMode(5));
+$('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
+$('#btn-group-back').addEventListener('click', exitGroupMode);
 $('#btn-history').addEventListener('click', () => { show('history'); loadHistory(); });
 $('#btn-back').addEventListener('click', () => show('form'));
 $('#btn-another').addEventListener('click', () => { clearForm(); show('form'); });  // RF-48

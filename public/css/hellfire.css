@@ -99,6 +99,19 @@ select.input option{background:#160603;color:var(--cream)}
 .typeopt.sel .tname{color:var(--ember-soft)}
 .typeopt.sel .tprice{color:var(--cream)}
 
+/* plan de grupo (5/10): fila de integrante + botón de representante */
+.grouprow{display:flex;align-items:center;gap:8px}
+.repbtn{flex:none;width:38px;height:38px;border-radius:11px;border:1.5px solid var(--line-strong);
+  background:transparent;color:rgba(246,241,231,.3);font-size:16px;cursor:pointer;transition:all .12s}
+.repbtn.sel{background:rgba(243,210,122,.14);border-color:#f3d27a;color:#f3d27a;
+  box-shadow:0 0 12px rgba(243,210,122,.35)}
+.group-price-bar{margin-top:2px;padding:12px 14px;border-radius:13px;
+  background:linear-gradient(135deg,rgba(255,122,46,.10),rgba(255,122,46,.03));
+  border:1px solid rgba(255,122,46,.3);text-align:center}
+.group-price-bar .gp-line{font:600 12px Manrope;color:var(--cream-60)}
+.group-price-bar .gp-price{font:800 22px "Space Grotesk";color:var(--ember);margin-top:3px}
+.group-price-bar .gp-save{font:700 11px Manrope;color:#7ee2a8;margin-top:3px}
+
 /* historial */
 .trow{display:flex;align-items:center;gap:10px;padding:11px 10px 11px 13px;border-radius:13px;
   background:rgba(255,255,255,.035);border:1px solid rgba(255,120,40,.14)}
