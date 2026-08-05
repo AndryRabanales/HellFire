@@ -168,6 +168,7 @@ function clearForm() {
 /* ---------------- plan de grupo (5 o 10, solo Externo, -20%) ---------------- */
 let GROUP_SIZE = null;      // null | 5 | 10
 let GROUP_REP_IDX = null;   // índice del representante (solo grupo de 10)
+let GROUP_RESULT = null;    // respuesta de /api/groups una vez generado (hasta tocar "Listo")
 
 function enterGroupMode(size) {
   if (!CATALOG.group) {
@@ -176,12 +177,16 @@ function enterGroupMode(size) {
   }
   GROUP_SIZE = size;
   GROUP_REP_IDX = null;
+  GROUP_RESULT = null;
   $('#mode-individual').classList.add('hidden');
   $('#group-switch').classList.add('hidden');
   $('#mode-group').classList.remove('hidden');
   $('#btn-generate').classList.add('hidden');
   $('#btn-generate-group').classList.remove('hidden');
   $('#btn-generate-group').textContent = 'GENERAR GRUPO DE ' + size + '  🎟';
+  $('#btn-group-done').classList.add('hidden');
+  $('#btn-group-back').classList.remove('hidden');
+  $('#group-result-bar').classList.add('hidden');
   $('#f-hint').textContent = 'Grupo de ' + size + ' · un boleto Externo por integrante';
   $('#f-err').textContent = '';
   renderGroupPriceBar();
@@ -189,12 +194,14 @@ function enterGroupMode(size) {
 }
 
 function exitGroupMode() {
-  GROUP_SIZE = null; GROUP_REP_IDX = null;
+  GROUP_SIZE = null; GROUP_REP_IDX = null; GROUP_RESULT = null;
   $('#mode-individual').classList.remove('hidden');
   $('#group-switch').classList.remove('hidden');
   $('#mode-group').classList.add('hidden');
   $('#btn-generate').classList.remove('hidden');
   $('#btn-generate-group').classList.add('hidden');
+  $('#btn-group-done').classList.add('hidden');
+  $('#group-result-bar').classList.add('hidden');
   $('#f-hint').textContent = 'Los datos del comprador';
   $('#f-err').textContent = '';
   $('#group-names').innerHTML = '';
@@ -234,6 +241,40 @@ function renderGroupNames() {
   }
 }
 
+// tras generar: NO se sale de la pantalla. Cada nombre queda subrayado con su
+// propio botón ⬇ (descarga bajo demanda, la más confiable en iPhone porque es
+// un toque real del usuario), y abajo el monto final + ahorro para captura.
+function showGroupResult(r) {
+  GROUP_RESULT = r;
+  const box = $('#group-names');
+  box.innerHTML = r.tickets.map((t, i) => `
+    <div class="grouprow">
+      <div style="flex:1;font:700 14px Manrope;color:var(--cream);
+        text-decoration:underline;text-decoration-color:#7ee2a8;text-underline-offset:4px">
+        ${esc(t.buyer_name)}${r.representative === t.buyer_name ? ' <span style="color:#f3d27a">★</span>' : ''}
+      </div>
+      <button class="iconbtn" data-idx="${i}" title="Descargar boleto">⬇</button>
+    </div>`).join('');
+  box.querySelectorAll('.iconbtn').forEach(b => {
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try { await downloadTicket(r.tickets[Number(b.dataset.idx)], CATALOG); }
+      finally { b.disabled = false; }
+    });
+  });
+  const totalFinal = r.tickets.reduce((s, t) => s + t.price, 0);
+  const totalSavings = r.savings * r.size;
+  $('#group-result-bar').classList.remove('hidden');
+  $('#group-result-bar').innerHTML = `
+    <div class="gp-line">Grupo de ${r.size} generado ✓</div>
+    <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
+    <div class="gp-save">Ahorraron ${fmtMoney(totalSavings)} en total (${fmtMoney(r.savings)} c/u)</div>`;
+  $('#f-hint').textContent = 'Descarga cada boleto abajo';
+  $('#btn-generate-group').classList.add('hidden');
+  $('#btn-group-back').classList.add('hidden');
+  $('#btn-group-done').classList.remove('hidden');
+}
+
 async function generateGroup() {
   const btn = $('#btn-generate-group');
   const inputs = [...document.querySelectorAll('#group-names input')];
@@ -254,18 +295,13 @@ async function generateGroup() {
       size: GROUP_SIZE, names,
       representative_index: GROUP_SIZE === 10 ? GROUP_REP_IDX : null,
     });
-    exitGroupMode();
-    for (let i = 0; i < r.tickets.length; i++) {
-      btn.textContent = `DESCARGANDO ${i + 1}/${r.tickets.length}…`;
-      await downloadTicket(r.tickets[i], CATALOG);
-    }
-    toast(`Grupo de ${r.size} generado y descargado ✓ (ahorraron ${r.savings} c/u)`);
+    showGroupResult(r);
   } catch (e) {
     if (e.data && e.data._unauthorized) return sessionLost();
     $('#f-err').textContent = e.message;
   } finally {
     btn.disabled = false;
-    if (GROUP_SIZE) btn.textContent = 'GENERAR GRUPO DE ' + GROUP_SIZE + '  🎟';
+    if (!GROUP_RESULT) btn.textContent = 'GENERAR GRUPO DE ' + GROUP_SIZE + '  🎟';
   }
 }
 
@@ -386,6 +422,7 @@ $('#btn-generate-group').addEventListener('click', generateGroup);
 $('#btn-group-5').addEventListener('click', () => enterGroupMode(5));
 $('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
 $('#btn-group-back').addEventListener('click', exitGroupMode);
+$('#btn-group-done').addEventListener('click', exitGroupMode);
 $('#btn-history').addEventListener('click', () => { show('history'); loadHistory(); });
 $('#btn-back').addEventListener('click', () => show('form'));
 $('#btn-another').addEventListener('click', () => { clearForm(); show('form'); });  // RF-48
