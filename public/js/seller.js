@@ -172,7 +172,7 @@ let GROUP_RESULT = null;    // respuesta de /api/groups una vez generado (hasta 
 
 function enterGroupMode(size) {
   if (!CATALOG.group) {
-    toast('El precio de Externo aún no está configurado. Pídele al admin que lo defina.');
+    toast('El precio de grupo aún no está configurado. Pídele al admin que lo defina.');
     return;
   }
   GROUP_SIZE = size;
@@ -187,7 +187,7 @@ function enterGroupMode(size) {
   $('#btn-group-done').classList.add('hidden');
   $('#btn-group-back').classList.remove('hidden');
   $('#group-result-bar').classList.add('hidden');
-  $('#f-hint').textContent = 'Grupo de ' + size + ' · un boleto Externo por integrante';
+  $('#f-hint').textContent = 'Grupo de ' + size + ' · un boleto por integrante';
   $('#f-err').textContent = '';
   renderGroupPriceBar();
   renderGroupNames();
@@ -211,21 +211,26 @@ function renderGroupPriceBar() {
   const g = CATALOG.group;
   const total = g.savings_cents * GROUP_SIZE / 100;
   $('#group-price-bar').innerHTML = `
-    <div class="gp-line">Boleto Externo en grupo de ${GROUP_SIZE}</div>
+    <div class="gp-line">Precio por boleto · grupo de ${GROUP_SIZE}</div>
     <div class="gp-price">${fmtMoney(g.group_price_cents / 100)}
       <span style="font-size:13px;color:var(--cream-45);text-decoration:line-through;margin-left:6px">${fmtMoney(g.normal_price_cents / 100)}</span></div>
     <div class="gp-save">Ahorran ${fmtMoney(total)} en total (${fmtMoney(g.savings_cents / 100)} c/u)</div>`;
 }
 
+// cada fila lleva una columna fija "Boleto N" (no un placeholder que desaparece
+// al escribir), para que nunca se pierda de vista a cuál boleto corresponde.
 function renderGroupNames() {
   const box = $('#group-names');
   box.innerHTML = '';
   for (let i = 0; i < GROUP_SIZE; i++) {
     const row = document.createElement('div');
     row.className = 'grouprow';
+    const num = document.createElement('div');
+    num.className = 'gr-num'; num.textContent = 'Boleto ' + (i + 1);
+    row.appendChild(num);
     const input = document.createElement('input');
     input.className = 'input grow'; input.dataset.idx = i;
-    input.placeholder = 'Integrante ' + (i + 1) + ' · nombre completo';
+    input.placeholder = 'Nombre completo';
     row.appendChild(input);
     if (GROUP_SIZE === 10) {
       const rep = document.createElement('button');
@@ -249,6 +254,7 @@ function showGroupResult(r) {
   const box = $('#group-names');
   box.innerHTML = r.tickets.map((t, i) => `
     <div class="grouprow">
+      <div class="gr-num">Boleto ${i + 1}</div>
       <div style="flex:1;font:700 14px Manrope;color:var(--cream);
         text-decoration:underline;text-decoration-color:#7ee2a8;text-underline-offset:4px">
         ${esc(t.buyer_name)}${r.representative === t.buyer_name ? ' <span style="color:#f3d27a">★</span>' : ''}
@@ -266,7 +272,7 @@ function showGroupResult(r) {
   const totalSavings = r.savings * r.size;
   $('#group-result-bar').classList.remove('hidden');
   $('#group-result-bar').innerHTML = `
-    <div class="gp-line">Grupo de ${r.size} generado ✓</div>
+    <div class="gp-line">¡Listo! Grupo de ${r.size} generado ✓</div>
     <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
     <div class="gp-save">Ahorraron ${fmtMoney(totalSavings)} en total (${fmtMoney(r.savings)} c/u)</div>`;
   $('#f-hint').textContent = 'Descarga cada boleto abajo';

@@ -101,6 +101,10 @@ select.input option{background:#160603;color:var(--cream)}
 
 /* plan de grupo (5/10): fila de integrante + botón de representante */
 .grouprow{display:flex;align-items:center;gap:8px}
+/* columna fija "Boleto N": no desaparece como un placeholder, así nunca se
+   pierde de vista a cuál boleto corresponde cada nombre */
+.gr-num{flex:0 0 62px;font:700 11px "Space Grotesk";color:var(--ember-soft);
+  letter-spacing:.02em;white-space:nowrap}
 .repbtn{flex:none;width:38px;height:38px;border-radius:11px;border:1.5px solid var(--line-strong);
   background:transparent;color:rgba(246,241,231,.3);font-size:16px;cursor:pointer;transition:all .12s}
 .repbtn.sel{background:rgba(243,210,122,.14);border-color:#f3d27a;color:#f3d27a;
