@@ -14,6 +14,10 @@
   .pos{font:800 18px "Space Grotesk"}
   .codechip{font:700 13px "Space Grotesk";letter-spacing:.18em;color:var(--ember-soft);
     background:rgba(255,110,30,.12);border:1px solid var(--line-strong);border-radius:8px;padding:5px 9px}
+  @media (max-width:700px){
+    .codechip{font-size:11px;letter-spacing:.1em;padding:4px 7px}
+    .pos{font-size:15px}
+  }
   .live-chip{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;flex:none;
     font:700 11px Manrope;color:var(--ok);padding:6px 12px;border-radius:20px;
     border:1px solid rgba(126,226,168,.5);background:rgba(126,226,168,.12)}

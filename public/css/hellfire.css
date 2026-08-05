@@ -230,10 +230,7 @@ table.data tr.void td.strike{text-decoration:line-through}
   .sub,.kicker{font-size:9px}
   .avatar{width:30px;height:30px;border-radius:9px;font-size:14px}
   .linkout{font-size:10px}
-  .codechip{font-size:11px;padding:4px 7px;letter-spacing:.12em}
   .badge{font-size:9px}
-  .stat .sv{font-size:20px}
-  .stat .sk{font-size:8px}
   .card{padding:13px}
   .filters{gap:7px}
   /* formularios de alta (admin, vendedor, gasto): los campos van cada uno en
@@ -247,6 +244,15 @@ table.data tr.void td.strike{text-decoration:line-through}
 .stat .sk{font:600 8.5px "Space Grotesk";letter-spacing:.14em;text-transform:uppercase;color:var(--ember-dim)}
 .stat .sv{font:800 24px "Space Grotesk";color:var(--cream);margin-top:4px}
 .stat .sv small{font-size:13px;color:var(--cream-45)}
+@media (max-width:700px){
+  /* los montos de las tarjetas (Resumen, Gastos) no necesitan ser tan grandes
+     en el teléfono — antes esta regla estaba ANTES de la base de arriba en el
+     archivo y por eso nunca ganaba, aunque el código fuera correcto */
+  .stat{padding:11px}
+  .stat .sk{font-size:7.5px}
+  .stat .sv{font-size:18px}
+  .stat .sv small{font-size:11px}
+}
 
 /* modales */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(3px);
