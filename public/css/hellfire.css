@@ -105,16 +105,16 @@ select.input option{background:#160603;color:var(--cream)}
 .grouprow{display:flex;align-items:center;gap:12px;padding:12px 14px;
   border-radius:14px;background:var(--card);border:1px solid var(--line);
   transition:border-color .15s,background .15s}
-.grouprow.done{background:rgba(126,226,168,.05);border-color:rgba(126,226,168,.28)}
+.grouprow.done{background:rgba(243,210,122,.06);border-color:rgba(243,210,122,.32)}
 .gr-num{flex:0 0 30px;height:30px;border-radius:9px;
   display:flex;align-items:center;justify-content:center;
   font:800 13px "Space Grotesk";color:var(--ember-soft);
   background:rgba(255,110,30,.12);border:1px solid var(--line-strong)}
-.grouprow.done .gr-num{color:var(--ok);background:rgba(126,226,168,.12);
-  border-color:rgba(126,226,168,.4)}
+.grouprow.done .gr-num{color:#f3d27a;background:rgba(243,210,122,.14);
+  border-color:rgba(243,210,122,.45)}
 .gr-label{font:700 9px "Space Grotesk";letter-spacing:.1em;text-transform:uppercase;
   color:var(--ember-dim);margin-bottom:4px}
-.grouprow.done .gr-label{color:rgba(126,226,168,.7)}
+.grouprow.done .gr-label{color:rgba(243,210,122,.8)}
 .repbtn{flex:none;width:36px;height:36px;border-radius:11px;border:1.5px solid var(--line-strong);
   background:transparent;color:rgba(246,241,231,.3);font-size:16px;cursor:pointer;transition:all .12s}
 .repbtn.sel{background:rgba(243,210,122,.14);border-color:#f3d27a;color:#f3d27a;
@@ -124,7 +124,7 @@ select.input option{background:#160603;color:var(--cream)}
   border:1px solid rgba(255,122,46,.3);text-align:center}
 .group-price-bar .gp-line{font:600 12px Manrope;color:var(--cream-60)}
 .group-price-bar .gp-price{font:800 22px "Space Grotesk";color:var(--ember);margin-top:3px}
-.group-price-bar .gp-save{font:700 11px Manrope;color:#7ee2a8;margin-top:3px}
+.group-price-bar .gp-save{font:700 11px Manrope;color:#f3d27a;margin-top:3px}
 
 /* historial */
 .trow{display:flex;align-items:center;gap:10px;padding:11px 10px 11px 13px;border-radius:13px;

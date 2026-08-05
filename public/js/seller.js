@@ -264,7 +264,7 @@ function showGroupResult(r) {
       <div style="flex:1;min-width:0">
         <div class="gr-label">Boleto ${i + 1}</div>
         <div style="font:700 14px Manrope;color:var(--cream);
-          text-decoration:underline;text-decoration-color:#7ee2a8;text-underline-offset:4px">
+          text-decoration:underline;text-decoration-color:#f3d27a;text-underline-offset:4px">
           ${esc(t.buyer_name)}${r.representative === t.buyer_name ? ' <span style="color:#f3d27a">★</span>' : ''}
         </div>
       </div>
