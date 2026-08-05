@@ -186,7 +186,7 @@ function enterGroupMode(size) {
   $('#btn-generate-group').textContent = 'GENERAR GRUPO DE ' + size + '  🎟';
   $('#btn-group-done').classList.add('hidden');
   $('#btn-group-back').classList.remove('hidden');
-  $('#group-result-bar').classList.add('hidden');
+  $('#group-result-bar').classList.add('hidden'); $('#group-result-bar').classList.remove('done');
   $('#f-hint').textContent = 'Grupo de ' + size + ' · un boleto por integrante';
   $('#f-err').textContent = '';
   renderGroupPriceBar();
@@ -201,7 +201,7 @@ function exitGroupMode() {
   $('#btn-generate').classList.remove('hidden');
   $('#btn-generate-group').classList.add('hidden');
   $('#btn-group-done').classList.add('hidden');
-  $('#group-result-bar').classList.add('hidden');
+  $('#group-result-bar').classList.add('hidden'); $('#group-result-bar').classList.remove('done');
   $('#f-hint').textContent = 'Los datos del comprador';
   $('#f-err').textContent = '';
   $('#group-names').innerHTML = '';
@@ -264,7 +264,7 @@ function showGroupResult(r) {
       <div style="flex:1;min-width:0">
         <div class="gr-label">Boleto ${i + 1}</div>
         <div style="font:700 14px Manrope;color:var(--cream);
-          text-decoration:underline;text-decoration-color:#f3d27a;text-underline-offset:4px">
+          text-decoration:underline;text-decoration-color:#ff5c5c;text-underline-offset:4px">
           ${esc(t.buyer_name)}${r.representative === t.buyer_name ? ' <span style="color:#f3d27a">★</span>' : ''}
         </div>
       </div>
@@ -280,6 +280,7 @@ function showGroupResult(r) {
   const totalFinal = r.tickets.reduce((s, t) => s + t.price, 0);
   const totalSavings = r.savings * r.size;
   $('#group-result-bar').classList.remove('hidden');
+  $('#group-result-bar').classList.add('done');
   $('#group-result-bar').innerHTML = `
     <div class="gp-line">¡Listo! Grupo de ${r.size} generado ✓</div>
     <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
