@@ -947,13 +947,17 @@ def list_groups():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    rows = db.execute("SELECT * FROM groups ORDER BY id DESC LIMIT 300").fetchall()
+    rows = db.execute("""
+        SELECT g.*, s.owner_admin_name FROM groups g
+        LEFT JOIN sellers s ON s.id = g.seller_id
+        ORDER BY g.id DESC LIMIT 300""").fetchall()
     out = []
     for r in rows:
         folios = [dict(t) for t in db.execute(
             "SELECT folio, status FROM tickets WHERE group_id=? ORDER BY id", (r["id"],)).fetchall()]
         out.append({"id": r["id"], "size": r["size"], "names": json.loads(r["names"]),
                     "representative": r["representative"], "seller_name": r["seller_name"],
+                    "owner_admin_name": r["owner_admin_name"],
                     "created_at": r["created_at"], "tickets": folios})
     return jsonify(groups=out)
 

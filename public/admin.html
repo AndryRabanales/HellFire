@@ -135,13 +135,9 @@
   </section>
 
   <!-- ===== Grupos (5/10 con descuento, plan aparte de Externo) ===== -->
-  <section id="tab-grupos" class="mt16 hidden">
+  <section id="tab-grupos" class="mt16 hidden" style="max-width:640px">
     <div class="muted" style="margin-bottom:10px">Grupos de 5 o 10 generados por los vendedores (boletos Externo con descuento). El de 10 lleva representante — es quien recibe la botella.</div>
-    <div class="tablewrap">
-      <table class="data"><thead><tr>
-        <th>Tamaño</th><th>Integrantes</th><th>Representante</th><th>Vendedor</th><th>Fecha</th>
-      </tr></thead><tbody id="gr-body"></tbody></table>
-    </div>
+    <div id="gr-list" style="display:flex;flex-direction:column;gap:10px"></div>
   </section>
 
   <!-- ===== Gastos de la fiesta ===== -->

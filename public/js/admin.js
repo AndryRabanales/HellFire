@@ -279,17 +279,44 @@ async function loadGroups(silent) {
   const sig = JSON.stringify(r.groups.map(g => [g.id, g.names.length, g.representative]));
   if (silent && sig === _sigGrupos) return;
   _sigGrupos = sig;
-  const body = $('#gr-body');
-  if (!r.groups.length) { body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:16px">Aún no se ha generado ningún grupo.</td></tr>'; return; }
-  body.innerHTML = r.groups.map(g => {
-    const names = g.names.map((n, i) => n + (g.representative === n ? ' ★' : '')).join(', ');
-    return `<tr>
-      <td data-label="Tamaño"><b>${g.size}</b></td>
-      <td data-label="Integrantes" class="cell-name"><span class="clip" style="max-width:220px" title="${esc(names)}">${esc(names)}</span></td>
-      <td data-label="Representante">${g.representative ? `<span class="badge active">★ ${esc(g.representative)}</span>` : '<span class="muted">—</span>'}</td>
-      <td data-label="Vendedor">${esc(g.seller_name)}</td>
-      <td data-label="Fecha" class="muted">${esc(g.created_at)}</td>
-    </tr>`;
+  const list = $('#gr-list');
+  if (!r.groups.length) {
+    list.innerHTML = '<div class="muted" style="padding:16px 0">Aún no se ha generado ningún grupo.</div>';
+    return;
+  }
+  // "Grupo N de 10 · Danniree": N cuenta cada grupo de ESE tamaño que hizo ESE vendedor,
+  // en el orden en que los fue generando (1º, 2º…), para identificarlos sin ambigüedad.
+  const seen = {}, seqOf = {};
+  [...r.groups].sort((a, b) => a.id - b.id).forEach(g => {
+    const key = g.seller_name + '|' + g.size;
+    seen[key] = (seen[key] || 0) + 1;
+    seqOf[g.id] = seen[key];
+  });
+  list.innerHTML = r.groups.map(g => {
+    const adminLine = g.owner_admin_name
+      ? ` · Admin: <b style="color:var(--ember-soft)">${esc(g.owner_admin_name)}</b>` : '';
+    const repLine = g.representative
+      ? `<div class="mt8" style="background:rgba(126,226,168,.08);border:1px solid rgba(126,226,168,.32);
+           border-radius:10px;padding:8px 12px;font:700 12px Manrope;color:#7ee2a8;line-height:1.4">
+           ★ Representante (botella): ${esc(g.representative)}</div>`
+      : '';
+    const members = g.names.map((nm, i) => `
+      <div style="font:600 12.5px Manrope;color:var(--cream-60);padding:4px 0;line-height:1.3">
+        <span class="muted" style="font-size:10px">${i + 1}.</span> ${esc(nm)}${nm === g.representative ? ' <span style="color:#f3d27a">★</span>' : ''}
+      </div>`).join('');
+    return `<div class="card">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">
+        <div>
+          <div style="font:800 15px Manrope">Grupo ${seqOf[g.id]} de ${g.size}</div>
+          <div class="muted" style="font-size:11px;margin-top:2px">Vendedor: <b style="color:var(--cream)">${esc(g.seller_name)}</b>${adminLine}</div>
+        </div>
+        <div class="muted" style="font-size:10px;text-align:right;white-space:nowrap">${esc(g.created_at)}</div>
+      </div>
+      ${repLine}
+      <div class="mt10" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:0 14px;border-top:1px solid rgba(255,120,40,.14);padding-top:10px">
+        ${members}
+      </div>
+    </div>`;
   }).join('');
 }
 
