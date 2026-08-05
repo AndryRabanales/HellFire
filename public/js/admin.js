@@ -277,25 +277,48 @@ $('#btn-export').addEventListener('click', async () => {
 
 /* ---------------- grupos (5/10) ---------------- */
 let _sigGrupos = '';
+let GR_FILTER = '';   // '' = todos, '5', '10'
+let GR_ALL = [];      // último resultado del servidor, para filtrar sin re-pedir
+
+function renderGroupFilterCounts() {
+  const c5 = GR_ALL.filter(g => g.size === 5).length;
+  const c10 = GR_ALL.filter(g => g.size === 10).length;
+  $$('#gr-filter button').forEach(b => {
+    const label = b.dataset.size === '' ? 'General' : `Grupos de ${b.dataset.size}`;
+    const count = b.dataset.size === '' ? GR_ALL.length : (b.dataset.size === '5' ? c5 : c10);
+    b.textContent = `${label} (${count})`;
+    b.classList.toggle('sel', b.dataset.size === GR_FILTER);
+  });
+}
+
 async function loadGroups(silent) {
   const r = await API.get('/api/admin/groups');
   const sig = JSON.stringify(r.groups.map(g => [g.id, g.names.length, g.representative]));
   if (silent && sig === _sigGrupos) return;
   _sigGrupos = sig;
+  GR_ALL = r.groups;
+  renderGroupFilterCounts();
   const list = $('#gr-list');
-  if (!r.groups.length) {
+  const shown = GR_FILTER ? GR_ALL.filter(g => String(g.size) === GR_FILTER) : GR_ALL;
+  if (!GR_ALL.length) {
     list.innerHTML = '<div class="muted" style="padding:16px 0">Aún no se ha generado ningún grupo.</div>';
+    return;
+  }
+  if (!shown.length) {
+    list.innerHTML = `<div class="muted" style="padding:16px 0">Sin grupos de ${esc(GR_FILTER)} todavía.</div>`;
     return;
   }
   // "Grupo N de 10 · Danniree": N cuenta cada grupo de ESE tamaño que hizo ESE vendedor,
   // en el orden en que los fue generando (1º, 2º…), para identificarlos sin ambigüedad.
+  // Se numera sobre TODOS los grupos (no solo los filtrados), para que el número no
+  // cambie según el filtro activo.
   const seen = {}, seqOf = {};
-  [...r.groups].sort((a, b) => a.id - b.id).forEach(g => {
+  [...GR_ALL].sort((a, b) => a.id - b.id).forEach(g => {
     const key = g.seller_name + '|' + g.size;
     seen[key] = (seen[key] || 0) + 1;
     seqOf[g.id] = seen[key];
   });
-  list.innerHTML = r.groups.map(g => {
+  list.innerHTML = shown.map(g => {
     const adminLine = g.owner_admin_name
       ? ` · Admin: <b style="color:var(--ember-soft)">${esc(g.owner_admin_name)}</b>` : '';
     const repLine = g.representative
@@ -322,6 +345,14 @@ async function loadGroups(silent) {
     </div>`;
   }).join('');
 }
+
+$$('#gr-filter button').forEach(b => {
+  b.addEventListener('click', () => {
+    GR_FILTER = b.dataset.size;
+    _sigGrupos = '';   // fuerza el re-render aunque los datos no hayan cambiado
+    loadGroups();
+  });
+});
 
 /* ---------------- ranking ---------------- */
 let _sigRanking = '';
