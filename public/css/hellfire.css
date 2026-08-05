@@ -248,10 +248,11 @@ table.data tr.void td.strike{text-decoration:line-through}
   /* los montos de las tarjetas (Resumen, Gastos) no necesitan ser tan grandes
      en el teléfono — antes esta regla estaba ANTES de la base de arriba en el
      archivo y por eso nunca ganaba, aunque el código fuera correcto */
-  .stat{padding:11px}
-  .stat .sk{font-size:7.5px}
-  .stat .sv{font-size:18px}
-  .stat .sv small{font-size:11px}
+  .stat{padding:9px}
+  .stat .sk{font-size:7px}
+  .stat .sv{font-size:15px}
+  .stat .sv small{font-size:10px}
+  .stats{gap:7px}
 }
 
 /* modales */
