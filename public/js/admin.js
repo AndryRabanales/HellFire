@@ -43,7 +43,7 @@ async function enter(name) {
 /* ---------------- tabs ---------------- */
 const loaders = {
   resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
-  ranking: loadRanking, vendedores: loadSellers, grupos: loadGroups, gastos: loadExpenses,
+  ranking: loadRanking, vendedores: loadSellers, gastos: loadExpenses,
   catalogos: loadCatalogs, admins: loadAdmins, ajustes: loadSettings,
 };
 
@@ -271,27 +271,6 @@ $('#btn-export').addEventListener('click', async () => {
     toast('Excel exportado ✓ (quedó registrado en auditoría)');
   } catch (e) { toast(e.message); }
 });
-
-/* ---------------- grupos (5/10) ---------------- */
-let _sigGrupos = '';
-async function loadGroups(silent) {
-  const r = await API.get('/api/admin/groups');
-  const sig = JSON.stringify(r.groups.map(g => [g.id, g.names.length, g.representative]));
-  if (silent && sig === _sigGrupos) return;
-  _sigGrupos = sig;
-  const body = $('#gr-body');
-  if (!r.groups.length) { body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:16px">Aún no se ha generado ningún grupo.</td></tr>'; return; }
-  body.innerHTML = r.groups.map(g => {
-    const names = g.names.map((n, i) => n + (g.representative === n ? ' ★' : '')).join(', ');
-    return `<tr>
-      <td data-label="Tamaño"><b>${g.size}</b></td>
-      <td data-label="Integrantes" class="cell-name"><span class="clip" style="max-width:220px" title="${esc(names)}">${esc(names)}</span></td>
-      <td data-label="Representante">${g.representative ? `<span class="badge active">★ ${esc(g.representative)}</span>` : '<span class="muted">—</span>'}</td>
-      <td data-label="Vendedor">${esc(g.seller_name)}</td>
-      <td data-label="Fecha" class="muted">${esc(g.created_at)}</td>
-    </tr>`;
-  }).join('');
-}
 
 /* ---------------- ranking ---------------- */
 let _sigRanking = '';
@@ -962,7 +941,6 @@ async function loadSettings() {
   $('#st-subtitle').value = s.event_subtitle;
   $('#st-date').value = s.event_date_text;
   $('#st-folio').value = s.folio_start || '1';
-  $('#st-group-pct').value = s.group_discount_pct || '20';
   for (const v of ['vip', 'gen']) {
     const st = FLY_ED[v];
     st.focus = parseFloat(s['flyer_focus_' + v]) || 0.5;
@@ -988,7 +966,6 @@ $('#btn-st-save').addEventListener('click', async () => {
       event_name: $('#st-name').value, event_subtitle: $('#st-subtitle').value,
       event_date_text: $('#st-date').value,
       folio_start: parseInt($('#st-folio').value, 10) || 1,
-      group_discount_pct: parseInt($('#st-group-pct').value, 10) || 20,
     });
     $('#st-ok').textContent = 'Ajustes guardados ✓';
     setTimeout(() => $('#st-ok').textContent = '', 2500);
