@@ -36,6 +36,13 @@ const API = {
 function $(sel, root) { return (root || document).querySelector(sel); }
 function $$(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
 
+// ícono de descarga en SVG plano: el carácter "⬇" se renderiza como emoji A
+// COLOR en iOS (círculo azul) e ignora el color del botón; este SVG usa
+// currentColor, así que siempre respeta el naranja/crema del tema.
+const DL_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
+  'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:block">' +
+  '<path d="M12 4v12M6 12l6 6 6-6"/></svg>';
+
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g,
     c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

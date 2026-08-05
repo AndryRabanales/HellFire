@@ -100,31 +100,35 @@ select.input option{background:#160603;color:var(--cream)}
 .typeopt.sel .tprice{color:var(--cream)}
 
 /* plan de grupo (5/10): cada integrante en su propia tarjeta, con el mismo
-   lenguaje visual plano que el resto del sistema (chip con fondo tenue +
-   borde, sin degradados ni brillos) — solo cambia de tono al generarse. */
-.grouprow{display:flex;align-items:center;gap:12px;padding:12px 14px;
-  border-radius:14px;background:var(--card);border:1px solid var(--line);
+   degradado cálido que ya usa la barra de precio — para que todo el bloque se
+   vea como una sola pieza, no como estilos distintos pegados. */
+.grouprow{display:flex;align-items:center;gap:13px;padding:13px 15px;
+  border-radius:16px;
+  background:linear-gradient(135deg,rgba(255,122,46,.08),rgba(255,122,46,.02));
+  border:1px solid rgba(255,120,40,.24);
+  box-shadow:0 2px 10px rgba(0,0,0,.15);
   transition:border-color .15s,background .15s}
-.grouprow.done{background:rgba(243,210,122,.06);border-color:rgba(243,210,122,.32)}
-.gr-num{flex:0 0 30px;height:30px;border-radius:9px;
+.grouprow.done{background:linear-gradient(135deg,rgba(243,210,122,.12),rgba(243,210,122,.02));
+  border-color:rgba(243,210,122,.4)}
+.gr-num{flex:0 0 34px;height:34px;border-radius:11px;
   display:flex;align-items:center;justify-content:center;
-  font:800 13px "Space Grotesk";color:var(--ember-soft);
-  background:rgba(255,110,30,.12);border:1px solid var(--line-strong)}
-.grouprow.done .gr-num{color:#f3d27a;background:rgba(243,210,122,.14);
-  border-color:rgba(243,210,122,.45)}
-.gr-label{font:700 9px "Space Grotesk";letter-spacing:.1em;text-transform:uppercase;
+  font:800 14px "Space Grotesk";color:#1a0800;
+  background:linear-gradient(160deg,#ff9a52,#e8480d)}
+.grouprow.done .gr-num{background:linear-gradient(160deg,#f6dfa0,#dba43f);color:#3a2400}
+.gr-label{font:700 9px "Space Grotesk";letter-spacing:.12em;text-transform:uppercase;
   color:var(--ember-dim);margin-bottom:4px}
-.grouprow.done .gr-label{color:rgba(243,210,122,.8)}
+.grouprow.done .gr-label{color:rgba(243,210,122,.85)}
 .repbtn{flex:none;width:36px;height:36px;border-radius:11px;border:1.5px solid var(--line-strong);
   background:transparent;color:rgba(246,241,231,.3);font-size:16px;cursor:pointer;transition:all .12s}
 .repbtn.sel{background:rgba(243,210,122,.14);border-color:#f3d27a;color:#f3d27a;
   box-shadow:0 0 12px rgba(243,210,122,.35)}
-.group-price-bar{margin-top:2px;padding:12px 14px;border-radius:13px;
-  background:linear-gradient(135deg,rgba(255,122,46,.10),rgba(255,122,46,.03));
-  border:1px solid rgba(255,122,46,.3);text-align:center}
+.group-price-bar{margin-top:2px;padding:14px 16px;border-radius:16px;
+  background:linear-gradient(135deg,rgba(255,122,46,.13),rgba(255,122,46,.03));
+  border:1px solid rgba(255,122,46,.35);text-align:center;
+  box-shadow:0 2px 14px rgba(0,0,0,.18)}
 .group-price-bar .gp-line{font:600 12px Manrope;color:var(--cream-60)}
-.group-price-bar .gp-price{font:800 22px "Space Grotesk";color:var(--ember);margin-top:3px}
-.group-price-bar .gp-save{font:700 11px Manrope;color:#f3d27a;margin-top:3px}
+.group-price-bar .gp-price{font:800 24px "Space Grotesk";color:var(--ember);margin-top:4px}
+.group-price-bar .gp-save{font:700 11px Manrope;color:#f3d27a;margin-top:4px}
 
 /* historial */
 .trow{display:flex;align-items:center;gap:10px;padding:11px 10px 11px 13px;border-radius:13px;

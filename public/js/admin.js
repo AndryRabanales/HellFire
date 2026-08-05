@@ -212,7 +212,7 @@ async function loadTicketsTable(silent) {
     td.style.whiteSpace = 'nowrap';
     if (t.status !== 'void') {
       const dl = document.createElement('button');
-      dl.className = 'iconbtn'; dl.title = 'Descargar boleto'; dl.textContent = '⬇';
+      dl.className = 'iconbtn'; dl.title = 'Descargar boleto'; dl.innerHTML = DL_ICON;
       dl.onclick = async () => { dl.disabled = true; try { await downloadTicket(t, EV); } finally { dl.disabled = false; } };
       td.appendChild(dl);
       // la tachita aparece SOLO si el servidor dice que este admin puede anularlo

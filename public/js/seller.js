@@ -268,7 +268,7 @@ function showGroupResult(r) {
           ${esc(t.buyer_name)}${r.representative === t.buyer_name ? ' <span style="color:#f3d27a">★</span>' : ''}
         </div>
       </div>
-      <button class="iconbtn" data-idx="${i}" title="Descargar boleto">⬇</button>
+      <button class="iconbtn" data-idx="${i}" title="Descargar boleto">${DL_ICON}</button>
     </div>`).join('');
   box.querySelectorAll('.iconbtn').forEach(b => {
     b.addEventListener('click', async () => {
@@ -406,7 +406,7 @@ async function loadHistory() {
         row.insertAdjacentHTML('beforeend', '<div class="badge-void">Anulado</div>');   // RF-75
       } else {
         const b = document.createElement('button');   // RF-71/76: re-descarga solo no anulados
-        b.className = 'iconbtn'; b.title = 'Descargar imagen'; b.textContent = '⬇';
+        b.className = 'iconbtn'; b.title = 'Descargar imagen'; b.innerHTML = DL_ICON;
         b.addEventListener('click', async () => {
           b.disabled = true;
           try { await downloadTicket(t, CATALOG); toast('Boleto descargado'); }
@@ -443,10 +443,11 @@ $('#btn-back').addEventListener('click', () => show('form'));
 $('#btn-another').addEventListener('click', () => { clearForm(); show('form'); });  // RF-48
 $('#btn-download').addEventListener('click', async () => {
   const b = $('#btn-download');
+  const restore = b.innerHTML;
   b.disabled = true; b.textContent = 'Generando imagen…';
   try { await downloadTicket(LAST_TICKET, CATALOG); toast('Boleto descargado ✓'); }
   catch (e) { toast('No se pudo descargar: ' + e.message); }
-  finally { b.disabled = false; b.textContent = '⬇  Descargar boleto'; }
+  finally { b.disabled = false; b.innerHTML = restore; }
 });
 $('#h-search').addEventListener('input', () => {
   clearTimeout(_searchTimer);
