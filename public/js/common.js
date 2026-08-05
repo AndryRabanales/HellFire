@@ -42,6 +42,12 @@ function $$(sel, root) { return Array.from((root || document).querySelectorAll(s
 const DL_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
   'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="display:block">' +
   '<path d="M12 4v12M6 12l6 6 6-6"/></svg>';
+// check de "ya descargado": mismo lenguaje SVG plano, para marcar el botón
+// una vez que el vendedor ya se llevó ese boleto (evita descargas repetidas
+// por accidente y le confirma cuáles le faltan).
+const CHECK_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
+  'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="display:block">' +
+  '<path d="M5 13l4 4L19 7"/></svg>';
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g,

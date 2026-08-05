@@ -1386,6 +1386,11 @@ def list_sellers():
         d["paid"] = money(d.get("paid_cents") or 0)
         d.pop("paid_cents", None)
         d["settled"] = d["total"] > 0 and d["paid"] >= d["total"]   # Completado
+        # el código de 4 dígitos es la credencial de acceso del vendedor: solo su
+        # admin dueño lo ve (el resto sigue viendo nombre/ventas/pagos para
+        # transparencia, tal como antes — solo se oculta el código)
+        if not owns_seller(s["admin"], r):
+            d["code"] = None
         out.append(d)
     return jsonify(sellers=out)
 

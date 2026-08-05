@@ -497,7 +497,9 @@ async function loadSellers(silent) {
           : `<b style="font-family:'Space Grotesk';color:var(--danger)">${fmtMoney(falta)}</b>`);
     tr.innerHTML = `
       <td data-label="Vendedor" class="cell-name" style="font-weight:700"><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${adminLine}</td>
-      <td data-label="Código">${s.deleted ? '<span class="muted">—</span>' : `<span class="codechip">${esc(s.code)}</span>`}</td>
+      <td data-label="Código">${s.deleted ? '<span class="muted">—</span>'
+          : s.code ? `<span class="codechip">${esc(s.code)}</span>`
+          : '<span class="muted" style="font-size:10px" title="Solo su admin puede verlo">🔒 privado</span>'}</td>
       <td data-label="Vendido"><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></td>
       <td data-label="Pagado" style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(s.paid)}</td>
       <td data-label="Faltante">${faltante}</td>

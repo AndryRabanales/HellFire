@@ -6,6 +6,7 @@ let SELLER_NAME = '';
 let SELECTED_TYPE = null;
 let LAST_TICKET = null;
 let PIN = '';
+const DOWNLOADED = new Set();   // ids de boletos ya descargados en esta sesión
 
 const views = ['login', 'form', 'done', 'history'];
 function show(view) {
@@ -273,8 +274,14 @@ function showGroupResult(r) {
   box.querySelectorAll('.iconbtn').forEach(b => {
     b.addEventListener('click', async () => {
       b.disabled = true;
-      try { await downloadTicket(r.tickets[Number(b.dataset.idx)], CATALOG); }
-      finally { b.disabled = false; }
+      try {
+        await downloadTicket(r.tickets[Number(b.dataset.idx)], CATALOG);
+        // marca el botón como "ya descargado" (check + relleno), para que el
+        // vendedor sepa de un vistazo cuáles boletos del grupo le faltan
+        b.innerHTML = CHECK_ICON;
+        b.classList.add('grabbed');
+        b.title = 'Ya descargado · toca para volver a descargarlo';
+      } finally { b.disabled = false; }
     });
   });
   const totalFinal = r.tickets.reduce((s, t) => s + t.price, 0);
@@ -407,11 +414,21 @@ async function loadHistory() {
         row.insertAdjacentHTML('beforeend', '<div class="badge-void">Anulado</div>');   // RF-75
       } else {
         const b = document.createElement('button');   // RF-71/76: re-descarga solo no anulados
-        b.className = 'iconbtn'; b.title = 'Descargar imagen'; b.innerHTML = DL_ICON;
+        b.className = 'iconbtn';
+        const already = DOWNLOADED.has(t.id);
+        if (already) b.classList.add('grabbed');
+        b.title = already ? 'Ya descargado · toca para volver a descargarlo' : 'Descargar imagen';
+        b.innerHTML = already ? CHECK_ICON : DL_ICON;
         b.addEventListener('click', async () => {
           b.disabled = true;
-          try { await downloadTicket(t, CATALOG); toast('Boleto descargado'); }
-          finally { b.disabled = false; }
+          try {
+            await downloadTicket(t, CATALOG);
+            toast('Boleto descargado');
+            DOWNLOADED.add(t.id);
+            b.innerHTML = CHECK_ICON;
+            b.classList.add('grabbed');
+            b.title = 'Ya descargado · toca para volver a descargarlo';
+          } finally { b.disabled = false; }
         });
         row.appendChild(b);
       }
