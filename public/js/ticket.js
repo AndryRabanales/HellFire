@@ -168,18 +168,7 @@ async function renderTicket(ticket, ev, imgOverride) {
   ctx.setLineDash([]);
 
   const padX = 44;
-  let contentTop = FLY + 20;
-  if (ev.event_date_text) {                     // fecha y lugar del evento: su propio encabezado
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#ffb27a';
-    ctx.font = '700 14px "Space Grotesk", monospace';
-    letterSpaced(ctx, ev.event_date_text.toUpperCase(), W / 2, FLY + 24, 1.2);
-    ctx.textAlign = 'left';
-    ctx.strokeStyle = 'rgba(255,150,80,.2)';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padX, FLY + 42); ctx.lineTo(W - padX, FLY + 42); ctx.stroke();
-    contentTop = FLY + 62;
-  }
+  const contentTop = FLY + 28;   // la ubicación/fecha ya va en el flyer, no se repite aquí
 
   const qrSize = 224;                                  // QR grande, fácil de escanear
   const qrX = W - padX - qrSize, qrY = contentTop;
@@ -232,10 +221,11 @@ async function renderTicket(ticket, ev, imgOverride) {
       ctx.fillStyle = 'rgba(255,150,80,.5)';
       ctx.fillText('· ' + ticket.phase_name, padX + w1 + 12 + w2 + 10, ty);
     }
-  } else if (ticket.phase_name) {
-    ctx.font = '600 15px "Space Grotesk", monospace';
-    ctx.fillStyle = 'rgba(246,241,231,.4)';
-    ctx.fillText(ticket.phase_name + ' · ' + fmtMoney(ticket.price), padX, ty);
+  } else {
+    ctx.font = '700 20px Manrope, sans-serif';
+    ctx.fillStyle = '#ff8a4d';
+    const priceTxt = fmtMoney(ticket.price) + (ticket.phase_name ? '  ·  ' + ticket.phase_name : '');
+    ctx.fillText(priceTxt, padX, ty);
   }
 
   return cv;
