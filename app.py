@@ -227,7 +227,10 @@ CREATE TABLE IF NOT EXISTS tickets (
   voided_at TEXT,
   voided_by TEXT,
   void_reason TEXT,
-  group_id INTEGER              -- si el boleto es parte de un grupo (5 o 10), su id
+  group_id INTEGER,             -- si el boleto es parte de un grupo (5 o 10), su id
+  phase_name TEXT,               -- fase de precio vigente al generar (congelada), para el boleto
+  group_size INTEGER,            -- 5 o 10 si es de grupo (congelado)
+  normal_price_cents INTEGER     -- precio individual antes del descuento de grupo (congelado, solo grupos)
 );
 CREATE TABLE IF NOT EXISTS groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -279,13 +282,20 @@ DEFAULT_SETTINGS = {
     "ranking_winners": "3",
     "ranking_prizes": json.dumps([1000, 500, 250]),
     "group_discount_pct": "20",   # % de descuento para grupos de 5 y 10 (solo Externo)
-    # Flyers por tipo de boleto: uno para VIP y otro para General. Cada uno con su
-    # imagen (base64 en la BD), posición y zoom. Las claves sin sufijo son el flyer
-    # "legado" (una sola imagen) y sirven de respaldo si aún no se sube el del tipo.
+    # Flyers por tipo de boleto: UADY, Externo, VIP, Grupo de 5 y Grupo de 10. Cada uno
+    # con su imagen (base64 en la BD), posición y zoom. "gen" es el flyer "General" de
+    # antes del cambio y sigue de respaldo (UADY/Externo caían ahí); las claves sin
+    # sufijo son el flyer legado de una sola imagen, el último respaldo de todos.
     "flyer_file": "", "flyer_data": "", "flyer_mime": "",
     "flyer_focus": "0.5", "flyer_scale": "1",
     "flyer_data_vip": "", "flyer_mime_vip": "", "flyer_focus_vip": "", "flyer_scale_vip": "",
     "flyer_data_gen": "", "flyer_mime_gen": "", "flyer_focus_gen": "", "flyer_scale_gen": "",
+    "flyer_data_uady": "", "flyer_mime_uady": "", "flyer_focus_uady": "", "flyer_scale_uady": "",
+    "flyer_data_externo": "", "flyer_mime_externo": "", "flyer_focus_externo": "", "flyer_scale_externo": "",
+    "flyer_data_grupo5": "", "flyer_mime_grupo5": "", "flyer_focus_grupo5": "", "flyer_scale_grupo5": "",
+    "flyer_data_grupo10": "", "flyer_mime_grupo10": "", "flyer_focus_grupo10": "", "flyer_scale_grupo10": "",
+    # Ultra VIP: en pruebas de diseño, aún no es un tipo de boleto vendible (oculto en las boleteras)
+    "flyer_data_ultravip": "", "flyer_mime_ultravip": "", "flyer_focus_ultravip": "", "flyer_scale_ultravip": "",
     "max_login_attempts": "8",
     "lockout_minutes": "10",
 }
@@ -298,12 +308,35 @@ def set_setting(db, key, value):
     db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
+FLYER_VARIANTS = ("uady", "externo", "vip", "grupo5", "grupo10", "ultravip")
+FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
+               "grupo5": "Grupo de 5", "grupo10": "Grupo de 10", "ultravip": "Ultra VIP"}
+# cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
+# relacionado antes de caer al flyer legado de una sola imagen
+FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo5": "externo", "grupo10": "externo",
+                   "ultravip": "vip"}
+# Ultra VIP es solo una prueba de diseño: no hay tipo de boleto que lo use todavía,
+# así que no aparece en las boleteras ni se puede vender aunque tenga flyer subido.
+
+def _flyer_chain(v):
+    chain = [v]
+    nxt = FLYER_FALLBACK.get(v)
+    while nxt and nxt not in chain:
+        chain.append(nxt)
+        nxt = FLYER_FALLBACK.get(nxt)
+    return chain
+
 def flyer_info(db):
-    """Configuración de los dos flyers (vip/gen) para el frontend, con respaldo
-    al flyer legado de una sola imagen."""
+    """Configuración de los flyers (uno por tipo de boleto) para el frontend, con
+    respaldo en cadena hasta el flyer legado de una sola imagen."""
     out = {}
-    for v in ("vip", "gen"):
-        has = bool(setting(db, f"flyer_data_{v}") or setting(db, "flyer_data"))
+    for v in FLYER_VARIANTS:
+        data = None
+        for vv in _flyer_chain(v):
+            data = setting(db, f"flyer_data_{vv}")
+            if data:
+                break
+        has = bool(data or setting(db, "flyer_data"))
         out[f"flyer_{v}"] = has
         out[f"flyer_focus_{v}"] = float(setting(db, f"flyer_focus_{v}")
                                         or setting(db, "flyer_focus") or 0.5)
@@ -373,6 +406,9 @@ def init_db():
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
                    "needs_faculty INTEGER NOT NULL DEFAULT 1")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id INTEGER")
+        db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phase_name TEXT")
+        db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_size INTEGER")
+        db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS normal_price_cents INTEGER")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
@@ -392,6 +428,12 @@ def init_db():
         tkcols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "group_id" not in tkcols:
             db.execute("ALTER TABLE tickets ADD COLUMN group_id INTEGER")
+        if "phase_name" not in tkcols:
+            db.execute("ALTER TABLE tickets ADD COLUMN phase_name TEXT")
+        if "group_size" not in tkcols:
+            db.execute("ALTER TABLE tickets ADD COLUMN group_size INTEGER")
+        if "normal_price_cents" not in tkcols:
+            db.execute("ALTER TABLE tickets ADD COLUMN normal_price_cents INTEGER")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -802,10 +844,13 @@ def ticket_public(t):
             "type_name": t["type_name"], "type_is_vip": t["type_is_vip"],
             "price": money(t["price_cents"]), "status": t["status"],
             "created_at": t["created_at"], "used_at": t["used_at"],
-            "seller_name": t["seller_name"], "seller_code": t["seller_code"]}
+            "seller_name": t["seller_name"], "seller_code": t["seller_code"],
+            "phase_name": t["phase_name"], "group_size": t["group_size"],
+            "normal_price": money(t["normal_price_cents"]) if t["normal_price_cents"] else None}
 
 def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
-                        seller_id, seller_name, seller_code, group_id=None):
+                        seller_id, seller_name, seller_code, group_id=None,
+                        phase_name=None, group_size=None, normal_price_cents=None):
     """Inserta un boleto con folio único (reintenta si choca) y devuelve la fila.
     Compartido por la generación individual y la generación de grupos."""
     prefix = setting(db, "folio_prefix")
@@ -826,11 +871,12 @@ def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
                 cur = db.execute("""INSERT INTO tickets
                     (folio, qr_token, qr_payload, buyer_name, faculty_id, faculty_name,
                      type_id, type_name, type_is_vip, price_cents,
-                     seller_id, seller_name, seller_code, status, created_at, group_id)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?, ?)""",
+                     seller_id, seller_name, seller_code, status, created_at, group_id,
+                     phase_name, group_size, normal_price_cents)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?, ?, ?, ?, ?)""",
                     (folio, token, qr_payload, buyer, fac_id, fac_name, tt["id"], tt["name"],
                      tt["is_vip"], price_cents, seller_id, seller_name,
-                     seller_code, now_iso(), group_id))
+                     seller_code, now_iso(), group_id, phase_name, group_size, normal_price_cents))
                 db.commit()
                 break
             except IntegrityError:
@@ -863,14 +909,14 @@ def create_ticket():
         fac_id, fac_name = fac["id"], fac["name"]
     else:
         fac_id, fac_name = None, ""
-    price_now, _phase = effective_price(db, tt)   # precio de la fase vigente, congelado en el boleto
+    price_now, phase_name = effective_price(db, tt)   # precio de la fase vigente, congelado en el boleto
     if price_now <= 0:   # el sistema no vende hasta que el admin defina el precio
         return jsonify(error="El precio de este boleto aún no está configurado. "
                              "Pídele al administrador que lo defina en Catálogos."), 400
     # RF-43: el boleto queda ligado al vendedor que lo genera
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
     t = _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_now,
-                           seller_id, seller_name, seller_code)
+                           seller_id, seller_name, seller_code, phase_name=phase_name)
     if not t:
         return jsonify(error="No se pudo generar el folio, intenta de nuevo"), 500
     audit(db, seller_name, "generacion",
@@ -910,7 +956,7 @@ def create_group():
     tt = db.execute("SELECT * FROM ticket_types WHERE name='Externo' AND active=1").fetchone()
     if not tt:
         return jsonify(error="El tipo Externo no está disponible para armar grupos"), 400
-    price_now, _phase = effective_price(db, tt)
+    price_now, phase_name = effective_price(db, tt)
     if price_now <= 0:
         return jsonify(error="El precio de Externo aún no está configurado"), 400
     try:
@@ -928,7 +974,9 @@ def create_group():
     tickets_out = []
     for name in names:
         t = _insert_ticket_row(db, name, None, "", tt, group_price,
-                               seller_id, seller_name, seller_code, group_id=gid)
+                               seller_id, seller_name, seller_code, group_id=gid,
+                               phase_name=phase_name, group_size=size,
+                               normal_price_cents=price_now)
         if not t:
             return jsonify(error="No se pudo generar uno de los folios, intenta de nuevo"), 500
         tickets_out.append(ticket_public(t))
@@ -1758,7 +1806,7 @@ def save_settings():
         set_setting(db, "group_discount_pct", str(pct))
         changed.append(f"descuento de grupo {pct}%")
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
-    for v in ("vip", "gen"):
+    for v in FLYER_VARIANTS:
         if f"flyer_focus_{v}" in b:
             set_setting(db, f"flyer_focus_{v}", _clamp(b[f"flyer_focus_{v}"], 0, 1, 0.5))
             changed.append(f"flyer_focus_{v}")
@@ -1777,7 +1825,9 @@ def upload_flyer():
     f = request.files.get("flyer")
     if not f:
         return jsonify(error="Sube una imagen"), 400
-    variant = "vip" if request.form.get("variant") == "vip" else "gen"
+    variant = request.form.get("variant")
+    if variant not in FLYER_VARIANTS:
+        return jsonify(error="Tipo de flyer inválido"), 400
     ext = os.path.splitext(f.filename or "")[1].lower()
     mimes = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
     if ext not in mimes:
@@ -1789,20 +1839,29 @@ def upload_flyer():
     set_setting(db, f"flyer_mime_{variant}", mimes[ext])
     set_setting(db, f"flyer_focus_{variant}", _clamp(request.form.get("flyer_focus"), 0, 1, 0.5))
     set_setting(db, f"flyer_scale_{variant}", _clamp(request.form.get("flyer_scale"), 1, 3, 1))
-    audit(db, s["admin"]["username"], "ajustes",
-          f"Subió el flyer {'VIP' if variant == 'vip' else 'General'}")
+    audit(db, s["admin"]["username"], "ajustes", f"Subió el flyer {FLYER_LABEL[variant]}")
     db.commit()
     return jsonify(ok=True)
 
 @app.get("/flyer")
 def serve_flyer():
-    """Sirve el flyer del tipo pedido (?v=vip|gen), con respaldo al flyer legado."""
+    """Sirve el flyer del tipo pedido (?v=uady|externo|vip|grupo5|grupo10), con
+    respaldo en cadena hasta el flyer legado de una sola imagen."""
     db = get_db()
-    v = "vip" if request.args.get("v") == "vip" else "gen"
-    data = setting(db, f"flyer_data_{v}") or setting(db, "flyer_data")
+    v = request.args.get("v")
+    if v not in FLYER_VARIANTS:
+        v = "externo"
+    data = mime = None
+    for vv in _flyer_chain(v):
+        data = setting(db, f"flyer_data_{vv}")
+        if data:
+            mime = setting(db, f"flyer_mime_{vv}") or "image/png"
+            break
+    if not data:
+        data = setting(db, "flyer_data")
+        mime = setting(db, "flyer_mime") or "image/png"
     if not data:
         return "", 404
-    mime = setting(db, f"flyer_mime_{v}") or setting(db, "flyer_mime") or "image/png"
     resp = Response(base64.b64decode(data), mimetype=mime)
     resp.headers["Cache-Control"] = "no-cache"
     return resp

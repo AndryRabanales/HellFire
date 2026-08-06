@@ -882,20 +882,37 @@ $('#btn-ad-create').addEventListener('click', async () => {
   } catch (e) { if (!guard(e)) $('#ad-err').textContent = e.message; }
 });
 
-/* ---------------- ajustes: dos flyers (VIP y General) ---------------- */
+/* ---------------- ajustes: un flyer por tipo de boleto ---------------- */
 const FLYER_META = {
+  uady: { label: 'Flyer UADY',
+          sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                    faculty_name: 'Ingeniería', type_name: 'UADY', type_is_vip: 0,
+                    price: 150, phase_name: 'Fase 1' } },
+  externo: { label: 'Flyer Externo',
+             sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                       faculty_name: '', type_name: 'Externo', type_is_vip: 0,
+                       price: 175, phase_name: 'Fase 1' } },
   vip: { label: '★ Flyer VIP',
          sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
-                   faculty_name: 'Externo', type_name: 'VIP', type_is_vip: 1, price: 500 } },
-  gen: { label: 'Flyer General',
-         sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
-                   faculty_name: 'Externo', type_name: 'General', type_is_vip: 0, price: 200 } },
+                   faculty_name: '', type_name: 'VIP', type_is_vip: 1,
+                   price: 500, phase_name: 'Fase 1' } },
+  grupo5: { label: 'Flyer Grupo de 5',
+            sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                      faculty_name: '', type_name: 'Externo', type_is_vip: 0,
+                      price: 153, normal_price: 175, group_size: 5, phase_name: 'Fase 1' } },
+  grupo10: { label: 'Flyer Grupo de 10',
+             sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                       faculty_name: '', type_name: 'Externo', type_is_vip: 0,
+                       price: 161, normal_price: 175, group_size: 10, phase_name: 'Fase 1' } },
+  ultravip: { label: '★ Flyer Ultra VIP', hidden: true,
+              sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                        faculty_name: '', type_name: 'Ultra VIP', type_is_vip: 1,
+                        price: 600, phase_name: 'Fase 1' } },
 };
+const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo5', 'grupo10', 'ultravip'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
-const FLY_ED = {
-  vip: { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null },
-  gen: { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null },
-};
+const FLY_ED = {};
+for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null };
 
 function loadImg(src) {
   return new Promise(res => {
@@ -908,11 +925,16 @@ function loadImg(src) {
 
 function buildFlyerEditor(variant) {
   const st = FLY_ED[variant];
+  const meta = FLYER_META[variant];
   const root = document.createElement('div');
-  root.style.cssText = 'border:1px solid var(--line);border-radius:14px;padding:12px';
+  root.style.cssText = 'border:1px solid var(--line);border-radius:14px;padding:12px'
+    + (meta.hidden ? ';border-style:dashed' : '');
   root.innerHTML = `
-    <div class="label">${FLYER_META[variant].label}</div>
-    <input type="file" accept="image/png,image/jpeg,image/webp" class="input" style="padding:10px;font-size:12px" data-f="file">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <div class="label" style="margin:0">${meta.label}</div>
+      ${meta.hidden ? '<span class="muted" style="font-size:10px;border:1px solid var(--line);border-radius:20px;padding:2px 8px">oculto · no se vende</span>' : ''}
+    </div>
+    <input type="file" accept="image/png,image/jpeg,image/webp" class="input" style="padding:10px;font-size:12px;margin-top:8px" data-f="file">
     <div data-f="wrap" style="display:none">
       <div class="mt8" style="display:flex;justify-content:center;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:12px;padding:10px">
         <canvas data-f="cv" style="width:150px;max-width:100%;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.6);cursor:grab"></canvas>
@@ -984,7 +1006,7 @@ function buildFlyerEditor(variant) {
         fd.append('flyer_scale', st.scale);
         await API.post('/api/admin/flyer', fd);
         st.isNew = false;
-        st.ui.ok.textContent = 'Guardado ✓ — los boletos ' + (variant === 'vip' ? 'VIP' : 'General') + ' usarán este flyer';
+        st.ui.ok.textContent = 'Guardado ✓ — los boletos ' + FLYER_META[variant].label.replace(/^★?\s*Flyer\s*/, '') + ' usarán este flyer';
       } else {
         await API.post('/api/admin/settings', {
           ['flyer_focus_' + variant]: st.focus, ['flyer_scale_' + variant]: st.scale,
@@ -1000,11 +1022,10 @@ function buildFlyerEditor(variant) {
   return root;
 }
 
-// construir los dos editores una sola vez
+// construir un editor por variante, una sola vez
 (() => {
   const cont = $('#flyer-editors');
-  cont.appendChild(buildFlyerEditor('vip'));
-  cont.appendChild(buildFlyerEditor('gen'));
+  for (const v of FLYER_VARIANTS) cont.appendChild(buildFlyerEditor(v));
 })();
 
 let _fpBusy = {};
@@ -1026,7 +1047,7 @@ async function loadSettings() {
   $('#st-date').value = s.event_date_text;
   $('#st-folio').value = s.folio_start || '1';
   $('#st-group-pct').value = s.group_discount_pct || '20';
-  for (const v of ['vip', 'gen']) {
+  for (const v of FLYER_VARIANTS) {
     const st = FLY_ED[v];
     st.focus = parseFloat(s['flyer_focus_' + v]) || 0.5;
     st.scale = parseFloat(s['flyer_scale_' + v]) || 1;

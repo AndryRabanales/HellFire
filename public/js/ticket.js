@@ -54,8 +54,52 @@ function nameFontFor(text) {
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, Number(v))); }
 
-/* Dos flyers: 'vip' y 'gen'. Cada boleto usa el de su tipo. */
-const _flyerCache = { vip: undefined, gen: undefined };
+/* Un flyer por tipo de boleto: uady, externo, vip, grupo5, grupo10. */
+const _flyerCache = { uady: undefined, externo: undefined, vip: undefined, grupo5: undefined, grupo10: undefined };
+function flyerVariantFor(ticket) {
+  if (ticket.group_size === 5) return 'grupo5';
+  if (ticket.group_size === 10) return 'grupo10';
+  if (ticket.type_is_vip) return 'vip';
+  return ticket.type_name === 'UADY' ? 'uady' : 'externo';
+}
+// etiqueta visible del tipo: la gente debe saber si es UADY, Externo, VIP o Grupo
+function ticketTypeLabel(ticket) {
+  if (ticket.group_size) return 'Grupo';
+  if (ticket.type_is_vip) return 'VIP';
+  return ticket.type_name === 'UADY' ? 'UADY' : 'Externo';
+}
+
+/* insignia del tipo de boleto: grupo y VIP llevan degradado (categorías especiales),
+   UADY/Externo llevan un contorno más discreto (categorías regulares) */
+function ticketBadgeSpec(ticket) {
+  if (ticket.group_size)
+    return { text: 'GRUPO ' + ticket.group_size, grad: ['#ff7a4d', '#c81e3a'], textColor: '#fff3ee' };
+  if (ticket.type_is_vip)
+    return { text: '★ VIP', grad: ['#f3d27a', '#d9a53a'], textColor: '#3a1e00' };
+  return { text: ticketTypeLabel(ticket).toUpperCase(), ghost: true };
+}
+
+function drawTicketBadge(ctx, spec, x, y) {
+  ctx.font = '800 15px Manrope, sans-serif';   // Manrope sí dibuja bien el glifo ★
+  const tw = ctx.measureText(spec.text).width;
+  const bh = 30, bw = tw + 26;
+  if (spec.ghost) {
+    ctx.strokeStyle = 'rgba(255,150,80,.55)';
+    ctx.lineWidth = 1.4;
+    roundRect(ctx, x, y, bw, bh, 8); ctx.stroke();
+    ctx.fillStyle = '#ffb27a';
+  } else {
+    const gg = ctx.createLinearGradient(x, y, x + bw, y + bh);
+    gg.addColorStop(0, spec.grad[0]); gg.addColorStop(1, spec.grad[1]);
+    ctx.fillStyle = gg;
+    roundRect(ctx, x, y, bw, bh, 8); ctx.fill();
+    ctx.fillStyle = spec.textColor;
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(spec.text, x + bw / 2, y + bh / 2 + 1);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  return bw;
+}
 function loadFlyer(variant, hasFlyer) {
   if (!hasFlyer) return Promise.resolve(null);
   if (_flyerCache[variant] !== undefined) return Promise.resolve(_flyerCache[variant]);
@@ -74,7 +118,7 @@ function loadFlyer(variant, hasFlyer) {
                 — sirve para la vista previa del admin antes de subir. */
 async function renderTicket(ticket, ev, imgOverride) {
   await document.fonts.ready;
-  const variant = ticket.type_is_vip ? 'vip' : 'gen';   // cada tipo usa SU flyer
+  const variant = flyerVariantFor(ticket);   // cada tipo usa SU flyer
   const flyer = imgOverride !== undefined ? imgOverride
     : await loadFlyer(variant, ev['flyer_' + variant]);
   // Boleto de alto medio (800×1550): cómodo al descargarlo, sin verse "zoom".
@@ -124,8 +168,21 @@ async function renderTicket(ticket, ev, imgOverride) {
   ctx.setLineDash([]);
 
   const padX = 44;
+  let contentTop = FLY + 20;
+  if (ev.event_date_text) {                     // fecha y lugar del evento: su propio encabezado
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffb27a';
+    ctx.font = '700 14px "Space Grotesk", monospace';
+    letterSpaced(ctx, ev.event_date_text.toUpperCase(), W / 2, FLY + 24, 1.2);
+    ctx.textAlign = 'left';
+    ctx.strokeStyle = 'rgba(255,150,80,.2)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padX, FLY + 42); ctx.lineTo(W - padX, FLY + 42); ctx.stroke();
+    contentTop = FLY + 62;
+  }
+
   const qrSize = 224;                                  // QR grande, fácil de escanear
-  const qrX = W - padX - qrSize, qrY = FLY + 28;
+  const qrX = W - padX - qrSize, qrY = contentTop;
   ctx.shadowColor = 'rgba(255,110,30,.35)'; ctx.shadowBlur = 24;
   drawQR(ctx, ticket.qr_payload || ticket.qr_token, qrX, qrY, qrSize);
   ctx.shadowBlur = 0;
@@ -134,28 +191,14 @@ async function renderTicket(ticket, ev, imgOverride) {
   ctx.font = '600 13px "Space Grotesk", monospace';
   letterSpaced(ctx, 'ESCANÉALO EN LA PUERTA', qrX + qrSize / 2, qrY + qrSize + 22, 1.6);
 
-  // texto de la banda: a nombre de · nombre · facultad · tipo (sin precio)
+  // columna izquierda: insignia del tipo · a nombre de · nombre · facultad · precio
   ctx.textAlign = 'left';
-  let ty = FLY + 66;
+  let ty = contentTop;
   ctx.fillStyle = 'rgba(255,150,80,.6)';
   ctx.font = '600 15px "Space Grotesk", monospace';
-  letterSpaced(ctx, 'A NOMBRE DE', padX, ty, 2.6);
-  if (ticket.type_is_vip) {
-    const label = '★ VIP';
-    ctx.font = '800 17px Manrope, sans-serif';   // Manrope sí dibuja bien el glifo ★
-    const tw = ctx.measureText(label).width;
-    const bh = 32, bw = tw + 30;                  // la caja se ajusta al texto
-    const bx = padX + 178, by = ty - 22;
-    const gg = ctx.createLinearGradient(bx, by, bx + bw, by + bh);
-    gg.addColorStop(0, '#f3d27a'); gg.addColorStop(1, '#d9a53a');
-    ctx.fillStyle = gg;
-    roundRect(ctx, bx, by, bw, bh, 9); ctx.fill();
-    ctx.fillStyle = '#3a1e00';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';   // centrado real, sin recortes
-    ctx.fillText(label, bx + bw / 2, by + bh / 2 + 1);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  }
-  ty += 54;
+  letterSpaced(ctx, 'A NOMBRE DE', padX, ty + 12, 2.6);
+  drawTicketBadge(ctx, ticketBadgeSpec(ticket), padX + 178, ty - 9);
+  ty += 60;
   ctx.fillStyle = '#f6f1e7';
   const nameFont = nameFontFor(ticket.buyer_name);
   fitText(ctx, ticket.buyer_name, padX, ty, W - padX * 2 - qrSize - 30, 42, '800 %px ' + nameFont);
@@ -166,10 +209,34 @@ async function renderTicket(ticket, ev, imgOverride) {
     ctx.fillText(ticket.faculty_name, padX, ty);
     ty += 36;
   }
-  ctx.fillStyle = '#ffb27a';
-  ctx.font = '700 24px Manrope, sans-serif';
-  // UADY y Externo son "General"; solo VIP se muestra como VIP
-  ctx.fillText(ticket.type_is_vip ? 'VIP' : 'General', padX, ty);
+  ty += 10;
+
+  // línea de precio: transparencia contra fraude — cada quien ve en su boleto
+  // cuánto se registró que pagó
+  if (ticket.group_size) {
+    const normalTxt = fmtMoney(ticket.normal_price);
+    const paidTxt = fmtMoney(ticket.price);
+    ctx.font = '600 16px "Space Grotesk", monospace';
+    ctx.fillStyle = 'rgba(246,241,231,.4)';
+    ctx.fillText(normalTxt, padX, ty);
+    const w1 = ctx.measureText(normalTxt).width;
+    ctx.strokeStyle = 'rgba(246,241,231,.5)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(padX - 2, ty - 6); ctx.lineTo(padX + w1 + 2, ty - 6); ctx.stroke();
+    ctx.font = '800 18px Manrope, sans-serif';
+    ctx.fillStyle = '#ff8a4d';
+    ctx.fillText(paidTxt, padX + w1 + 12, ty + 1);
+    if (ticket.phase_name) {
+      const w2 = ctx.measureText(paidTxt).width;
+      ctx.font = '600 12px "Space Grotesk", monospace';
+      ctx.fillStyle = 'rgba(255,150,80,.5)';
+      ctx.fillText('· ' + ticket.phase_name, padX + w1 + 12 + w2 + 10, ty);
+    }
+  } else if (ticket.phase_name) {
+    ctx.font = '600 15px "Space Grotesk", monospace';
+    ctx.fillStyle = 'rgba(246,241,231,.4)';
+    ctx.fillText(ticket.phase_name + ' · ' + fmtMoney(ticket.price), padX, ty);
+  }
 
   return cv;
 }
