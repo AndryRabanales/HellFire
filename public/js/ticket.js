@@ -132,14 +132,7 @@ async function renderTicket(ticket, ev, imgOverride) {
 
   const focusY = clamp(ev['flyer_focus_' + variant] ?? ev.flyer_focus ?? 0.5, 0, 1);
   const scale = clamp(ev['flyer_scale_' + variant] ?? ev.flyer_scale ?? 1, 1, 3);
-  if (flyer) {
-    const s = (W / flyer.width) * scale;   // llena el ANCHO a escala natural (sin zoom)
-    const dw = flyer.width * s, dh = flyer.height * s;
-    ctx.save();
-    ctx.beginPath(); ctx.rect(0, 0, W, FLY); ctx.clip();               // no invade la banda
-    ctx.drawImage(flyer, (W - dw) / 2, (FLY - dh) * focusY, dw, dh);
-    ctx.restore();
-  } else {
+  const drawPlaceholder = () => {
     // placeholder con el nombre del evento (estilo del mockup de acceso)
     const g = ctx.createRadialGradient(W / 2, 80, 40, W / 2, FLY * 0.42, FLY);
     g.addColorStop(0, '#3a0f04'); g.addColorStop(0.45, '#160603'); g.addColorStop(1, '#050302');
@@ -153,6 +146,23 @@ async function renderTicket(ticket, ev, imgOverride) {
     ctx.font = '800 104px Cinzel, serif';
     ctx.fillText(ev.event_name || 'EVENTO', W / 2, FLY * 0.42 + 30);
     ctx.shadowBlur = 0;
+  };
+  // si el flyer no cargó bien (archivo dañado, dimensiones inválidas, lo que sea),
+  // jamás debe tronar la descarga del boleto — cae al placeholder y ya
+  if (flyer && flyer.width > 0 && flyer.height > 0) {
+    try {
+      const s = (W / flyer.width) * scale;   // llena el ANCHO a escala natural (sin zoom)
+      const dw = flyer.width * s, dh = flyer.height * s;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, 0, W, FLY); ctx.clip();             // no invade la banda
+      ctx.drawImage(flyer, (W - dw) / 2, (FLY - dh) * focusY, dw, dh);
+      ctx.restore();
+    } catch (e) {
+      ctx.restore();
+      drawPlaceholder();
+    }
+  } else {
+    drawPlaceholder();
   }
   // degradado suave hacia la banda
   const fade = ctx.createLinearGradient(0, FLY - 160, 0, FLY);
