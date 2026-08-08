@@ -95,7 +95,7 @@
         Exportar a Excel</button>
     </div>
     <div class="tablewrap mt8">
-      <table class="data"><thead><tr>
+      <table class="data cardsm"><thead><tr>
         <th>Folio</th><th>Comprador</th><th>Facultad</th><th>Tipo</th><th>Precio</th>
         <th>Vendedor</th><th>Fecha</th><th>Estado</th><th></th>
       </tr></thead><tbody id="bt-body"></tbody></table>
@@ -133,7 +133,7 @@
       <select class="input grow" id="sl-filter-admin" style="padding:11px"><option value="">Admin: todos</option></select>
     </div>
     <div class="tablewrap mt12">
-      <table class="data"><thead><tr>
+      <table class="data cardsm"><thead><tr>
         <th>Vendedor</th><th>Código</th><th>Vendido</th><th>Pagado a su admin</th>
         <th>Faltante</th><th>Estado</th><th style="min-width:230px">Acciones</th>
       </tr></thead><tbody id="sl-body"></tbody></table>
@@ -170,7 +170,7 @@
       <div id="gx-byaccount" class="mt8"></div>
     </div>
     <div class="tablewrap mt12">
-      <table class="data"><thead><tr>
+      <table class="data cardsm"><thead><tr>
         <th>Gasto</th><th>Monto</th><th>Cuenta</th><th>Estado</th><th style="min-width:200px">Acciones</th>
       </tr></thead><tbody id="gx-body"></tbody></table>
     </div>
@@ -229,7 +229,6 @@
       <div class="label">Evento</div>
       <input class="input" id="st-name" placeholder="Nombre del evento">
       <input class="input mt8" id="st-subtitle" placeholder="Subtítulo (ej. Noche de brujas)">
-      <input class="input mt8" id="st-date" placeholder="Fecha y lugar (texto del boleto)">
       <div class="label mt12">Folio inicial</div>
       <div class="muted" style="margin-bottom:6px;font-size:11px">Número del primer boleto (ej. 4180 → HF-4180). Así nadie sabe cuántos llevamos vendidos. Solo aplica si aún no hay boletos con número mayor.</div>
       <input class="input" id="st-folio" type="number" min="1" max="9999" placeholder="1" style="max-width:160px">

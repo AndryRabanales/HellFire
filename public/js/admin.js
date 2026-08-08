@@ -409,10 +409,10 @@ async function loadExpenses(silent) {
     const tr = document.createElement('tr');
     const pagado = e.status === 'pagado';
     tr.innerHTML = `
-      <td class="cell-name"><span class="clip" title="${esc(e.name)}">${esc(e.name)}</span></td>
-      <td style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(e.amount)}</td>
-      <td>${e.account ? esc(e.account) : '<span class="muted">—</span>'}</td>
-      <td>${pagado ? '<span class="badge active">Pagado</span>' : '<span class="badge used">Pendiente</span>'}</td>`;
+      <td data-label="Gasto" class="cell-name"><span class="clip" title="${esc(e.name)}">${esc(e.name)}</span></td>
+      <td data-label="Monto" style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(e.amount)}</td>
+      <td data-label="Cuenta">${e.account ? esc(e.account) : '<span class="muted">—</span>'}</td>
+      <td data-label="Estado">${pagado ? '<span class="badge active">Pagado</span>' : '<span class="badge used">Pendiente</span>'}</td>`;
     const td = document.createElement('td');
     td.setAttribute('data-label', '');
     const mk = (label, fn, cls) => {
@@ -1044,7 +1044,6 @@ async function loadSettings() {
   const s = await API.get('/api/admin/settings');
   $('#st-name').value = s.event_name;
   $('#st-subtitle').value = s.event_subtitle;
-  $('#st-date').value = s.event_date_text;
   $('#st-folio').value = s.folio_start || '1';
   $('#st-group-pct').value = s.group_discount_pct || '20';
   for (const v of FLYER_VARIANTS) {
@@ -1070,7 +1069,6 @@ $('#btn-st-save').addEventListener('click', async () => {
   try {
     await API.post('/api/admin/settings', {
       event_name: $('#st-name').value, event_subtitle: $('#st-subtitle').value,
-      event_date_text: $('#st-date').value,
       folio_start: parseInt($('#st-folio').value, 10) || 1,
       group_discount_pct: parseInt($('#st-group-pct').value, 10) || 20,
     });
