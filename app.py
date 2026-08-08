@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS sellers (
   owner_admin_id INTEGER,          -- admin que creó al vendedor (su dueño)
   owner_admin_name TEXT,           -- nombre del admin dueño (etiqueta visible)
   paid_cents INTEGER NOT NULL DEFAULT 0,  -- dinero que el vendedor ya entregó a su admin
+  hidden INTEGER NOT NULL DEFAULT 0,      -- vendedor de INVITADOS: sus boletos no cuentan como venta
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ticket_types (
@@ -401,7 +402,8 @@ def init_db():
         for col in ("qr_payload TEXT", "used_at TEXT"):
             db.execute(f"ALTER TABLE tickets ADD COLUMN IF NOT EXISTS {col}")
         for col in ("owner_admin_id INTEGER", "owner_admin_name TEXT",
-                    "paid_cents INTEGER NOT NULL DEFAULT 0"):
+                    "paid_cents INTEGER NOT NULL DEFAULT 0",
+                    "hidden INTEGER NOT NULL DEFAULT 0"):
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
                    "needs_faculty INTEGER NOT NULL DEFAULT 1")
@@ -422,6 +424,8 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN owner_admin_name TEXT")
         if "paid_cents" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN paid_cents INTEGER NOT NULL DEFAULT 0")
+        if "hidden" not in scols:
+            db.execute("ALTER TABLE sellers ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
         ttcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
         if "needs_faculty" not in ttcols:
             db.execute("ALTER TABLE ticket_types ADD COLUMN needs_faculty INTEGER NOT NULL DEFAULT 1")
@@ -561,6 +565,25 @@ def init_db():
         db.commit()
         print(f"[OnFire] RESET de lanzamiento: solo admin '{init_user}', precios en 0.")
 
+    # VENDEDOR DE INVITADOS (oculto). Va AL FINAL, después de todos los resets, para
+    # que ninguna limpieza lo borre. Su código vive en la variable de entorno
+    # GUEST_SELLER_CODE, no en la base: si algún día se borra o se recrea la base, al
+    # arrancar se vuelve a crear el MISMO código y los boletos de invitados siguen
+    # escaneando. Sus boletos NO cuentan como venta en ninguna pantalla del panel.
+    guest_code = (os.environ.get("GUEST_SELLER_CODE") or "").strip()
+    if guest_code:
+        row = db.execute("SELECT * FROM sellers WHERE code=?", (guest_code,)).fetchone()
+        if row:   # ya existe: asegurar que siga oculto y utilizable
+            if not row["hidden"] or not row["active"] or row["deleted"]:
+                db.execute("UPDATE sellers SET hidden=1, active=1, deleted=0 WHERE id=?",
+                           (row["id"],))
+        else:
+            db.execute("INSERT INTO sellers(name, code, hidden, created_at) VALUES(?,?,1,?)",
+                       (os.environ.get("GUEST_SELLER_NAME") or "Invitados",
+                        guest_code, now_iso()))
+            print("[OnFire] Vendedor de invitados (oculto) listo.")
+        db.commit()
+
     db.commit()
     db.close()
 
@@ -625,6 +648,7 @@ def seller_summary(db):
           COALESCE(SUM(CASE WHEN t.status='void' THEN 1 ELSE 0 END),0)  AS count_void,
           COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS total_cents
         FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id
+        WHERE s.hidden=0
         GROUP BY s.id ORDER BY total_cents DESC""").fetchall()]
 
 def sync_excel():
@@ -632,7 +656,8 @@ def sync_excel():
     (Es un archivo derivado; la fuente de verdad es la base de datos.)"""
     try:
         db = db_connect()
-        rows = db.execute("SELECT * FROM tickets ORDER BY id").fetchall()
+        rows = db.execute(
+            f"SELECT * FROM tickets WHERE {NOT_GUEST} ORDER BY id").fetchall()
         summary = seller_summary(db)
         db.close()
         wb = build_workbook(rows, summary)
@@ -667,6 +692,18 @@ def backup_loop():
 def audit(db, actor, action, detail):
     db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
                (actor, action, detail, now_iso()))
+
+# Los boletos de INVITADOS (vendedor oculto) no son una venta: se excluyen del
+# resumen, la cobranza, el ranking, el listado de boletos y los movimientos. Siguen
+# existiendo como fila normal en tickets, que es lo que el escáner necesita para
+# validarlos en la puerta.
+NOT_GUEST = "seller_id NOT IN (SELECT id FROM sellers WHERE hidden=1)"
+
+def is_guest_seller(seller_row):
+    try:
+        return bool(seller_row["hidden"])
+    except (KeyError, IndexError, TypeError):
+        return False
 
 def create_session(db, role, user_id):
     minutes = int(setting(db, "admin_session_minutes" if role == "admin" else "session_minutes"))
@@ -919,8 +956,9 @@ def create_ticket():
                            seller_id, seller_name, seller_code, phase_name=phase_name)
     if not t:
         return jsonify(error="No se pudo generar el folio, intenta de nuevo"), 500
-    audit(db, seller_name, "generacion",
-          f"Generó el boleto {t['folio']} para {buyer} ({tt['name']})")
+    if not is_guest_seller(s["seller"]):   # los invitados no dejan rastro en Movimientos
+        audit(db, seller_name, "generacion",
+              f"Generó el boleto {t['folio']} para {buyer} ({tt['name']})")
     db.commit()
     sync_excel_async()
     return jsonify(ticket=ticket_public(t))
@@ -935,6 +973,10 @@ def create_group():
     s = require_seller()
     if not s:
         return jsonify(error="sin sesión"), 401
+    # los grupos salen en su propia pestaña del panel: el vendedor de invitados no
+    # los usa (sus boletos se generan uno por uno y no deben aparecer en ningún lado)
+    if is_guest_seller(s["seller"]):
+        return jsonify(error="Esta cuenta genera boletos de invitado uno por uno"), 403
     db = get_db()
     b = request.json or {}
     size = b.get("size")
@@ -1080,12 +1122,13 @@ def admin_summary():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    tot = db.execute("""SELECT
+    tot = db.execute(f"""SELECT
         SUM(CASE WHEN status!='void' THEN 1 ELSE 0 END) AS n,
         SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS cents,
         SUM(CASE WHEN status='used' THEN 1 ELSE 0 END) AS entered
-        FROM tickets""").fetchone()
-    paid = db.execute("SELECT COALESCE(SUM(paid_cents),0) AS c FROM sellers").fetchone()["c"]
+        FROM tickets WHERE {NOT_GUEST}""").fetchone()
+    paid = db.execute(
+        "SELECT COALESCE(SUM(paid_cents),0) AS c FROM sellers WHERE hidden=0").fetchone()["c"]
     # desglose por admin: cuánto han vendido sus vendedores y cuánto ya cobró (todos lo ven)
     by_admin = db.execute("""
         SELECT COALESCE(s.owner_admin_name, 'Sin asignar') AS admin_name,
@@ -1094,7 +1137,7 @@ def admin_summary():
         FROM sellers s
         LEFT JOIN (SELECT seller_id, SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS sold
                    FROM tickets GROUP BY seller_id) tk ON tk.seller_id = s.id
-        WHERE s.deleted=0
+        WHERE s.deleted=0 AND s.hidden=0
         GROUP BY COALESCE(s.owner_admin_name, 'Sin asignar')
         ORDER BY sold_cents DESC""").fetchall()
     admins = [{"admin": r["admin_name"], "sold": money(r["sold_cents"]),
@@ -1109,7 +1152,8 @@ def ticket_filters(prefix=""):
     prefix: alias de la tabla tickets cuando la consulta usa JOIN (ej. "t.")."""
     a = request.args
     p = prefix
-    where, params = [], []
+    # los boletos de invitados nunca aparecen en el listado ni en la exportación
+    where, params = [f"{p}{NOT_GUEST}"], []
     if a.get("admin"):   # boletos de un admin: los de SUS vendedores + los que él generó
         if a["admin"] == "__none__":
             where.append(f"{p}seller_id IN (SELECT id FROM sellers WHERE owner_admin_name IS NULL)")
@@ -1211,6 +1255,7 @@ def ranking():
           COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS cents,
           MAX(CASE WHEN t.status!='void' THEN t.created_at END) AS reached_at
         FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id
+        WHERE s.hidden=0
         GROUP BY s.id
         ORDER BY cents DESC, reached_at ASC""").fetchall()
     out = [{"position": i + 1, "name": r["name"], "deleted": bool(r["deleted"])}
@@ -1426,6 +1471,7 @@ def list_sellers():
                COUNT(t.id) AS tickets_all,
                COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS total_cents
         FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id
+        WHERE s.hidden=0
         GROUP BY s.id ORDER BY s.deleted, s.id""").fetchall()
     out = []
     for r in rows:
@@ -1449,7 +1495,10 @@ def set_seller_paid(sid):
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0", (sid,)).fetchone()
+    # hidden=0: el vendedor de invitados no se puede tocar desde el panel (si se
+    # borrara, sus boletos viejos reaparecerían como venta en el resumen)
+    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0 AND hidden=0",
+                     (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
     if not owns_seller(s["admin"], sel):
@@ -1510,7 +1559,10 @@ def edit_seller(sid):
         return jsonify(error="sin sesión"), 401
     db = get_db()
     b = request.json or {}
-    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0", (sid,)).fetchone()
+    # hidden=0: el vendedor de invitados no se puede tocar desde el panel (si se
+    # borrara, sus boletos viejos reaparecerían como venta en el resumen)
+    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0 AND hidden=0",
+                     (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
     if not owns_seller(s["admin"], sel):
@@ -1536,7 +1588,10 @@ def toggle_seller(sid):
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0", (sid,)).fetchone()
+    # hidden=0: el vendedor de invitados no se puede tocar desde el panel (si se
+    # borrara, sus boletos viejos reaparecerían como venta en el resumen)
+    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0 AND hidden=0",
+                     (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
     if not owns_seller(s["admin"], sel):
@@ -1557,7 +1612,10 @@ def delete_seller(sid):
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0", (sid,)).fetchone()
+    # hidden=0: el vendedor de invitados no se puede tocar desde el panel (si se
+    # borrara, sus boletos viejos reaparecerían como venta en el resumen)
+    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0 AND hidden=0",
+                     (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
     if not owns_seller(s["admin"], sel):
