@@ -716,6 +716,28 @@ def is_guest_seller(seller_row):
     except (KeyError, IndexError, TypeError):
         return False
 
+# DOBLE TOQUE del código de invitados: el primer intento se rechaza con EXACTAMENTE
+# el mismo mensaje que un código inválido, y el segundo (dentro de la ventana) sí
+# entra. Así, quien ande probando claves al azar cree que falló y sigue de largo.
+# Vive en memoria: gunicorn corre con --workers 1, así que todos los hilos la comparten.
+# Si el servicio reinicia se olvida, y lo único que pasa es tocar dos veces otra vez.
+GUEST_KNOCK_SECONDS = 180
+_guest_knock = {}
+_knock_lock = threading.Lock()
+
+def guest_knock_ok(ip):
+    """False en el primer intento (hay que repetir el código); True en el segundo."""
+    now = time.time()
+    with _knock_lock:
+        for k, t in list(_guest_knock.items()):   # limpia toques viejos
+            if now - t > GUEST_KNOCK_SECONDS:
+                _guest_knock.pop(k, None)
+        if _guest_knock.get(ip) is None:
+            _guest_knock[ip] = now
+            return False
+        _guest_knock.pop(ip, None)
+        return True
+
 def create_session(db, role, user_id):
     minutes = int(setting(db, "admin_session_minutes" if role == "admin" else "session_minutes"))
     token = secrets.token_urlsafe(24)
@@ -788,15 +810,22 @@ def login_code():
     key = f"code:{ip}"
     if rate_limited(db, key):
         return jsonify(error="Demasiados intentos. Espera unos minutos."), 429
+    # RF-28: mensaje genérico. El código de invitados usa ESTE MISMO texto en su
+    # primer intento; si fuera distinto, delataría que ese código sí existe.
+    BAD = "Código incorrecto. Intenta de nuevo."
     code = str((request.json or {}).get("code", "")).strip()
     if not re.fullmatch(r"\d{4}", code):
         record_attempt(db, key); db.commit()
-        return jsonify(error="Código incorrecto"), 401   # RF-28 mensaje genérico
+        return jsonify(error=BAD), 401
     seller = db.execute(
         "SELECT * FROM sellers WHERE code=? AND active=1 AND deleted=0", (code,)).fetchone()
     if not seller:
         record_attempt(db, key); db.commit()
-        return jsonify(error="Código incorrecto"), 401
+        return jsonify(error=BAD), 401
+    if is_guest_seller(seller) and not guest_knock_ok(ip):
+        # primer toque del código de invitados: se rechaza como si fuera inválido.
+        # No cuenta como intento fallido, para que el dueño no se autobloquee.
+        return jsonify(error=BAD), 401
     clear_attempts(db, key)
     token = create_session(db, "seller", seller["id"])
     db.commit()
