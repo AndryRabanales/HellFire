@@ -716,6 +716,15 @@ def is_guest_seller(seller_row):
     except (KeyError, IndexError, TypeError):
         return False
 
+def ticket_is_guest(db, t):
+    """True si el boleto lo generó el vendedor de invitados. Se usa para que los
+    endpoints que buscan un boleto POR ID (que es consecutivo y por tanto se puede
+    ir adivinando) respondan 'no existe' a los admins."""
+    if t is None or t["seller_id"] is None:
+        return False
+    row = db.execute("SELECT hidden FROM sellers WHERE id=?", (t["seller_id"],)).fetchone()
+    return bool(row and row["hidden"])
+
 # DOBLE TOQUE del código de invitados: el primer intento se rechaza con EXACTAMENTE
 # el mismo mensaje que un código inválido, y el segundo (dentro de la ventana) sí
 # entra. Así, quien ande probando claves al azar cree que falló y sigue de largo.
@@ -927,18 +936,28 @@ def ticket_public(t):
 
 def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
                         seller_id, seller_name, seller_code, group_id=None,
-                        phase_name=None, group_size=None, normal_price_cents=None):
+                        phase_name=None, group_size=None, normal_price_cents=None,
+                        guest=False):
     """Inserta un boleto con folio único (reintenta si choca) y devuelve la fila.
-    Compartido por la generación individual y la generación de grupos."""
-    prefix = setting(db, "folio_prefix")
+    Compartido por la generación individual y la generación de grupos.
+
+    Los boletos de invitado llevan su PROPIA serie de folios (INV-). Si tomaran
+    números de la serie de venta, en el Excel quedarían huecos (…0001, 0003…) y
+    eso delataría que hubo boletos que nadie puede ver. El folio no se imprime en
+    el boleto ni lo muestra el escáner, así que el prefijo distinto no se nota."""
+    prefix = "INV-" if guest else setting(db, "folio_prefix")
     with _write_lock:
+        # el máximo se busca SOLO dentro de la misma serie, para que las dos
+        # numeraciones (venta e invitados) avancen sin estorbarse
         base = db.execute(
-            "SELECT COALESCE(MAX(CAST(SUBSTR(folio, ?) AS INTEGER)),0) AS n FROM tickets",
-            (len(prefix) + 1,)).fetchone()["n"]
-        try:
-            base = max(base, int(setting(db, "folio_start") or 1) - 1)
-        except ValueError:
-            pass
+            f"SELECT COALESCE(MAX(CAST(SUBSTR(folio, ?) AS INTEGER)),0) AS n "
+            f"FROM tickets WHERE folio {LIKE} ?",
+            (len(prefix) + 1, prefix + "%")).fetchone()["n"]
+        if not guest:   # el folio inicial configurable solo aplica a la venta
+            try:
+                base = max(base, int(setting(db, "folio_start") or 1) - 1)
+            except ValueError:
+                pass
         for attempt in range(20):
             n = base + 1 + attempt
             folio = f"{prefix}{n:04d}"
@@ -993,7 +1012,8 @@ def create_ticket():
     # RF-43: el boleto queda ligado al vendedor que lo genera
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
     t = _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_now,
-                           seller_id, seller_name, seller_code, phase_name=phase_name)
+                           seller_id, seller_name, seller_code, phase_name=phase_name,
+                           guest=is_guest_seller(s["seller"]))
     if not t:
         return jsonify(error="No se pudo generar el folio, intenta de nuevo"), 500
     if not is_guest_seller(s["seller"]):   # los invitados no dejan rastro en Movimientos
@@ -1121,6 +1141,10 @@ def get_ticket(tid):
         return jsonify(error="no existe"), 404
     if s["role"] == "seller" and t["seller_id"] != s["seller"]["id"]:
         return jsonify(error="no existe"), 404   # RF-74: nunca boletos de otro
+    # para un admin, los boletos de invitado no existen (los ids son consecutivos,
+    # así que sin esto bastaría con irlos probando uno por uno para verlos)
+    if s["role"] == "admin" and ticket_is_guest(db, t):
+        return jsonify(error="no existe"), 404
     return jsonify(ticket=ticket_public(t))
 
 # ---------------------------------------------------------------- API: escaneo en la puerta
@@ -1266,7 +1290,7 @@ def void_ticket(tid):
     if not reason:
         return jsonify(error="Escribe el motivo de la anulación"), 400
     t = db.execute("SELECT * FROM tickets WHERE id=?", (tid,)).fetchone()
-    if not t:
+    if not t or ticket_is_guest(db, t):   # los de invitado no existen para el admin
         return jsonify(error="no existe"), 404
     if t["status"] == "void":
         return jsonify(error="Ya estaba anulado"), 400
