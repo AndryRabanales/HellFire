@@ -572,17 +572,28 @@ def init_db():
     # escaneando. Sus boletos NO cuentan como venta en ninguna pantalla del panel.
     guest_code = (os.environ.get("GUEST_SELLER_CODE") or "").strip()
     if guest_code:
-        row = db.execute("SELECT * FROM sellers WHERE code=?", (guest_code,)).fetchone()
-        if row:   # ya existe: asegurar que siga oculto y utilizable
-            if not row["hidden"] or not row["active"] or row["deleted"]:
-                db.execute("UPDATE sellers SET hidden=1, active=1, deleted=0 WHERE id=?",
-                           (row["id"],))
+        if not re.fullmatch(r"\d{4}", guest_code):
+            print(f"[OnFire] AVISO: GUEST_SELLER_CODE='{guest_code}' no sirve. "
+                  "Debe ser EXACTAMENTE 4 dígitos (ej. 4821). No se creó el vendedor de invitados.")
         else:
-            db.execute("INSERT INTO sellers(name, code, hidden, created_at) VALUES(?,?,1,?)",
-                       (os.environ.get("GUEST_SELLER_NAME") or "Invitados",
-                        guest_code, now_iso()))
-            print("[OnFire] Vendedor de invitados (oculto) listo.")
-        db.commit()
+            row = db.execute("SELECT * FROM sellers WHERE code=?", (guest_code,)).fetchone()
+            if row and not row["hidden"]:
+                # ese código ya es de un vendedor REAL: no lo tocamos. Convertirlo en
+                # oculto borraría sus ventas del resumen sin que nadie se diera cuenta.
+                print(f"[OnFire] AVISO: el código {guest_code} ya es del vendedor "
+                      f"'{row['name']}'. Elige otro GUEST_SELLER_CODE; no se creó "
+                      "el vendedor de invitados.")
+            elif row:   # ya es el de invitados: asegurar que siga utilizable
+                if not row["active"] or row["deleted"]:
+                    db.execute("UPDATE sellers SET active=1, deleted=0 WHERE id=?", (row["id"],))
+                    db.commit()
+                print("[OnFire] Vendedor de invitados (oculto) listo.")
+            else:
+                db.execute("INSERT INTO sellers(name, code, hidden, created_at) VALUES(?,?,1,?)",
+                           (os.environ.get("GUEST_SELLER_NAME") or "Invitados",
+                            guest_code, now_iso()))
+                db.commit()
+                print("[OnFire] Vendedor de invitados (oculto) creado.")
 
     db.commit()
     db.close()
