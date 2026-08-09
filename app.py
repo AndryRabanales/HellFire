@@ -200,7 +200,8 @@ CREATE TABLE IF NOT EXISTS price_phases (
   type_id INTEGER NOT NULL,
   name TEXT NOT NULL,              -- ej. Preventa, Fase 2, General
   price_cents INTEGER NOT NULL,
-  starts_on TEXT NOT NULL          -- fecha AAAA-MM-DD desde la que aplica
+  starts_on TEXT NOT NULL,         -- fecha AAAA-MM-DD desde la que aplica
+  group_pct INTEGER                -- % de descuento de grupo de ESTA fase (NULL = usar el de Ajustes)
 );
 CREATE TABLE IF NOT EXISTS faculties (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -282,7 +283,7 @@ DEFAULT_SETTINGS = {
     "admin_session_minutes": "480",
     "ranking_winners": "3",
     "ranking_prizes": json.dumps([1000, 500, 250]),
-    "group_discount_pct": "20",   # % de descuento para grupos de 5 y 10 (solo Externo)
+    "group_discount_pct": "10",   # % de descuento para grupos de 5 y 10 (solo Externo)
     # Flyers por tipo de boleto: UADY, Externo, VIP, Grupo de 5 y Grupo de 10. Cada uno
     # con su imagen (base64 en la BD), posición y zoom. "gen" es el flyer "General" de
     # antes del cambio y sigue de respaldo (UADY/Externo caían ahí); las claves sin
@@ -356,6 +357,27 @@ def effective_price(db, type_row):
         return ph["price_cents"], ph["name"]
     return type_row["price_cents"], None
 
+def group_pct_now(db, externo_row):
+    """% de descuento de grupo vigente HOY.
+
+    Sale de la fase de precio activa del Externo, para que el descuento viaje junto
+    con el precio: la brecha UADY-Externo es fija ($25) pero un % crece en pesos al
+    subir los precios, así que si no bajara por fase, el boleto de grupo terminaría
+    más barato que el de UADY. Si no hay fase vigente (o esa fase no trae %), se usa
+    el valor de Ajustes, que es el que aplica a la fase inicial."""
+    def limpio(v, por_defecto=10):
+        try:
+            return max(1, min(90, int(v)))
+        except (TypeError, ValueError):
+            return por_defecto
+    hoy = now_dt().strftime("%Y-%m-%d")
+    ph = db.execute("""SELECT group_pct FROM price_phases WHERE type_id=? AND starts_on<=?
+                       ORDER BY starts_on DESC, id DESC LIMIT 1""",
+                    (externo_row["id"], hoy)).fetchone()
+    if ph and ph["group_pct"] is not None:
+        return limpio(ph["group_pct"])
+    return limpio(setting(db, "group_discount_pct"))
+
 def next_phase(db, type_row):
     """La próxima fase cuya fecha aún NO llegó (el siguiente cambio de precio).
     Devuelve {name, price_cents, starts_on} o None si no hay más fases futuras."""
@@ -411,6 +433,7 @@ def init_db():
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phase_name TEXT")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_size INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS normal_price_cents INTEGER")
+        db.execute("ALTER TABLE price_phases ADD COLUMN IF NOT EXISTS group_pct INTEGER")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
@@ -438,6 +461,9 @@ def init_db():
             db.execute("ALTER TABLE tickets ADD COLUMN group_size INTEGER")
         if "normal_price_cents" not in tkcols:
             db.execute("ALTER TABLE tickets ADD COLUMN normal_price_cents INTEGER")
+        pcols = [r["name"] for r in db.execute("PRAGMA table_info(price_phases)").fetchall()]
+        if "group_pct" not in pcols:
+            db.execute("ALTER TABLE price_phases ADD COLUMN group_pct INTEGER")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -904,14 +930,12 @@ def catalog():
                       "next_phase": next_phase(db, r)})
     facs = [dict(r) for r in db.execute(
         "SELECT id, name FROM faculties WHERE active=1 ORDER BY name").fetchall()]
-    # info del plan de grupos (5/10): solo aplica al tipo Externo
-    try:
-        group_pct = max(1, min(90, int(setting(db, "group_discount_pct") or 20)))
-    except ValueError:
-        group_pct = 20
+    # info del plan de grupos (5/10): solo aplica al tipo Externo. El % lo manda la
+    # fase vigente (ver group_pct_now), no un valor fijo.
     externo = next((t for t in types if t["name"] == "Externo"), None)
     group_info = None
     if externo and externo["price_cents"] > 0:
+        group_pct = group_pct_now(db, externo)
         group_price = round(externo["price_cents"] * (100 - group_pct) / 100)
         group_info = {"type_id": externo["id"], "pct": group_pct,
                       "normal_price_cents": externo["price_cents"],
@@ -1061,10 +1085,7 @@ def create_group():
     price_now, phase_name = effective_price(db, tt)
     if price_now <= 0:
         return jsonify(error="El precio de Externo aún no está configurado"), 400
-    try:
-        pct = max(1, min(90, int(setting(db, "group_discount_pct") or 20)))
-    except ValueError:
-        pct = 20
+    pct = group_pct_now(db, tt)   # el % de la fase vigente
     group_price = round(price_now * (100 - pct) / 100)
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
     gcur = db.execute("INSERT INTO groups(size, names, representative, seller_id, seller_name, created_at) "
@@ -1397,6 +1418,12 @@ def create_phase_all():
     name = str(b.get("name", "")).strip()
     date = str(b.get("starts_on", "")).strip()
     prices = b.get("prices") or {}
+    # % de descuento de grupo de esta fase (opcional: si no viene, hereda el de Ajustes)
+    gp = b.get("group_pct")
+    try:
+        gp = max(1, min(90, int(gp))) if gp not in (None, "") else None
+    except (TypeError, ValueError):
+        gp = None
     if not name or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         return jsonify(error="Falta el nombre o la fecha (AAAA-MM-DD) de la fase"), 400
     db = get_db()
@@ -1414,8 +1441,8 @@ def create_phase_all():
             return jsonify(error=f"Pon un precio válido para {t['name']}"), 400
         parsed.append((t["id"], cents))
     for tid, cents in parsed:
-        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on) VALUES(?,?,?,?)",
-                   (tid, name, cents, date))
+        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, group_pct) "
+                   "VALUES(?,?,?,?,?)", (tid, name, cents, date, gp))
     audit(db, s["admin"]["username"], "precio",
           f"Creó la fase '{name}' desde {date} (todos los tipos)")
     db.commit()
@@ -1924,7 +1951,7 @@ def save_settings():
         try:
             pct = max(1, min(90, int(float(b["group_discount_pct"]))))
         except (TypeError, ValueError):
-            pct = 20
+            pct = 10
         set_setting(db, "group_discount_pct", str(pct))
         changed.append(f"descuento de grupo {pct}%")
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)

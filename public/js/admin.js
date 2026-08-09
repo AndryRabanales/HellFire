@@ -678,8 +678,9 @@ function renderPhases(types) {
   const groups = {};   // clave "fecha|nombre" -> {name, starts_on, byType:{id:price_cents}}
   types.forEach(t => (t.phases || []).forEach(p => {
     const key = p.starts_on + '|' + p.name;
-    (groups[key] = groups[key] || { name: p.name, starts_on: p.starts_on, byType: {} })
-      .byType[t.id] = p.price_cents;
+    const g = (groups[key] = groups[key] || { name: p.name, starts_on: p.starts_on, byType: {}, group_pct: null });
+    g.byType[t.id] = p.price_cents;
+    if (p.group_pct != null) g.group_pct = p.group_pct;   // el % viaja con la fase
   }));
   const arr = Object.values(groups).sort((a, b) => a.starts_on < b.starts_on ? -1 : 1);
   const today = new Date().toLocaleDateString('en-CA');   // AAAA-MM-DD local
@@ -711,7 +712,9 @@ function renderPhases(types) {
     pr.innerHTML = types.map(t => {
       const c = g.byType[t.id];
       return `<span style="font:600 11px Manrope;color:var(--cream-60)">${esc(t.name)}${t.is_vip ? ' ★' : ''}: <b style="color:var(--ember-soft)">${c != null ? fmtMoney(c / 100) : '—'}</b></span>`;
-    }).join('');
+    }).join('') + (g.group_pct != null
+      ? `<span style="font:700 11px Manrope;color:#ff8a4d">Grupo: −${g.group_pct}%</span>`
+      : '<span style="font:600 11px Manrope;color:var(--cream-45)">Grupo: hereda Ajustes</span>');
     row.appendChild(pr);
     list.appendChild(row);
   });
@@ -725,7 +728,16 @@ function renderPhases(types) {
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
       ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)}${t.is_vip ? ' ★' : ''} — precio nuevo
         <input class="input" type="number" min="1" placeholder="$" data-ph-price="${t.id}" style="width:110px;padding:9px;font-size:12px"></label>`).join('')}
+      <label style="font:600 10px Manrope;color:#ff8a4d;display:flex;flex-direction:column;gap:3px">Descuento grupo %
+        <input class="input" type="number" min="1" max="90" placeholder="%" id="ph-gpct" style="width:100px;padding:9px;font-size:12px"></label>
       <button class="btn sm" id="btn-ph-create" style="width:auto">+ Fase</button>
+    </div>
+    <div class="muted mt8" style="font-size:10.5px;line-height:1.6">
+      El <b style="color:#ff8a4d">descuento de grupo baja en cada fase</b> a propósito: la diferencia
+      entre UADY y Externo es siempre $25, pero un % crece en pesos al subir los precios. Si no bajara,
+      el boleto de grupo terminaría más barato que el de UADY y a un estudiante le convendría colarse
+      a un grupo de externos. Sugerido: <b>Fase 2 → 10%</b>, <b>Fase 3 → 8%</b>, <b>Fase 4 → 7%</b>
+      (la fase inicial usa el % de Ajustes). Si lo dejas vacío, hereda el de Ajustes.
     </div>`;
   $('#btn-ph-create').onclick = async () => {
     const prices = {};
@@ -734,9 +746,11 @@ function renderPhases(types) {
       if (v) prices[t.id] = parseFloat(v);
     });
     $('#ph-err').textContent = '';
+    const gp = $('#ph-gpct').value.trim();
     try {
       await API.post('/api/admin/phases-all',
-        { name: $('#ph-name').value.trim(), starts_on: $('#ph-date').value, prices });
+        { name: $('#ph-name').value.trim(), starts_on: $('#ph-date').value, prices,
+          group_pct: gp === '' ? null : parseInt(gp, 10) });
       loadCatalogs();
     } catch (e) { if (!guard(e)) $('#ph-err').textContent = e.message; }
   };
@@ -1045,7 +1059,7 @@ async function loadSettings() {
   $('#st-name').value = s.event_name;
   $('#st-subtitle').value = s.event_subtitle;
   $('#st-folio').value = s.folio_start || '1';
-  $('#st-group-pct').value = s.group_discount_pct || '20';
+  $('#st-group-pct').value = s.group_discount_pct || '10';
   for (const v of FLYER_VARIANTS) {
     const st = FLY_ED[v];
     st.focus = parseFloat(s['flyer_focus_' + v]) || 0.5;
@@ -1070,7 +1084,7 @@ $('#btn-st-save').addEventListener('click', async () => {
     await API.post('/api/admin/settings', {
       event_name: $('#st-name').value, event_subtitle: $('#st-subtitle').value,
       folio_start: parseInt($('#st-folio').value, 10) || 1,
-      group_discount_pct: parseInt($('#st-group-pct').value, 10) || 20,
+      group_discount_pct: parseInt($('#st-group-pct').value, 10) || 10,
     });
     $('#st-ok').textContent = 'Ajustes guardados ✓';
     setTimeout(() => $('#st-ok').textContent = '', 2500);
