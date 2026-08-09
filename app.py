@@ -591,6 +591,27 @@ def init_db():
         db.commit()
         print(f"[OnFire] RESET de lanzamiento: solo admin '{init_user}', precios en 0.")
 
+    # RESET v3 — borrón y cuenta nueva antes del lanzamiento. Se pidió además porque
+    # un administrador dejó el equipo: se borran TODAS las sesiones y todos los demás
+    # admins, así que quien haya salido pierde el acceso al instante.
+    # SE CONSERVA: los flyers y demás ajustes (viven en settings), los precios y tipos
+    # de boleto, las facultades, y el vendedor de invitados (se recrea abajo desde
+    # GUEST_SELLER_CODE). Corre una sola vez y se marca con su bandera.
+    if setting(db, "event_reset_v3") != "1":
+        for table in ("tickets", "groups", "sellers", "price_phases",
+                      "expenses", "audit_log", "login_attempts", "sessions"):
+            db.execute(f"DELETE FROM {table}")
+        db.execute("DELETE FROM admins WHERE username != ?", (init_user,))
+        db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
+                   ("sistema", "inicializacion",
+                    "Sistema reiniciado para el lanzamiento: boletos, vendedores, gastos "
+                    f"y movimientos borrados. Sesiones cerradas. Único admin: {init_user}",
+                    now_iso()))
+        set_setting(db, "event_reset_v3", "1")
+        db.commit()
+        print(f"[OnFire] RESET v3: base limpia, sesiones cerradas, único admin '{init_user}'. "
+              "Se conservaron flyers, precios y facultades.")
+
     # VENDEDOR DE INVITADOS (oculto). Va AL FINAL, después de todos los resets, para
     # que ninguna limpieza lo borre. Su código vive en la variable de entorno
     # GUEST_SELLER_CODE, no en la base: si algún día se borra o se recrea la base, al
