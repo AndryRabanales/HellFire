@@ -100,6 +100,74 @@ function drawTicketBadge(ctx, spec, x, y) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   return bw;
 }
+
+/* Acomoda el nombre del comprador en el ancho disponible. Antes se encogía hasta
+   18px y un nombre largo quedaba ilegible; ahora prefiere PARTIRLO EN DOS LÍNEAS
+   antes que achicarlo tanto, y solo recorta si es una sola palabra kilométrica. */
+function medirNombre(ctx, texto, maxW, fuente) {
+  const nombre = (texto || '').trim();
+  const cabe = (t, tam) => {
+    ctx.font = `800 ${tam}px ${fuente}`;
+    return ctx.measureText(t).width <= maxW;
+  };
+  for (const tam of [40, 36, 33]) {          // 1) una línea, lo más grande que quepa
+    if (cabe(nombre, tam)) return { lineas: [nombre], tam, alto: tam * 1.12, fuente };
+  }
+  const palabras = nombre.split(/\s+/);
+  if (palabras.length > 1) {                 // 2) dos líneas, cortando lo más parejo
+    for (const tam of [34, 30, 27, 24]) {
+      ctx.font = `800 ${tam}px ${fuente}`;
+      let mejor = null;
+      for (let i = 1; i < palabras.length; i++) {
+        const a = palabras.slice(0, i).join(' '), b = palabras.slice(i).join(' ');
+        const wa = ctx.measureText(a).width, wb = ctx.measureText(b).width;
+        if (wa <= maxW && wb <= maxW) {
+          const dif = Math.abs(wa - wb);     // el corte más equilibrado se ve mejor
+          if (!mejor || dif < mejor.dif) mejor = { a, b, dif };
+        }
+      }
+      if (mejor) return { lineas: [mejor.a, mejor.b], tam, alto: tam * 1.12, fuente };
+    }
+  }
+  const tam = 24;                            // 3) último recurso: recortar con …
+  ctx.font = `800 ${tam}px ${fuente}`;
+  let t = nombre;
+  while (t.length > 4 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+  return { lineas: [t + '…'], tam, alto: tam * 1.12, fuente };
+}
+
+/* Precio pagado. En grupo se muestra el precio normal TACHADO junto al que pagó,
+   para que el descuento se vea; el comprador es así testigo de lo que se registró. */
+function dibujarPrecio(ctx, ticket, x, y) {
+  ctx.textAlign = 'left';
+  const fase = ticket.phase_name;
+  const pintaFase = (px) => {
+    if (!fase) return;
+    ctx.font = '600 12px "Space Grotesk", monospace';
+    ctx.fillStyle = 'rgba(255,150,80,.5)';
+    ctx.fillText(fase, px, y);
+  };
+  if (ticket.group_size && ticket.normal_price) {
+    const normal = fmtMoney(ticket.normal_price), pagado = fmtMoney(ticket.price);
+    ctx.font = '600 17px "Space Grotesk", monospace';
+    ctx.fillStyle = 'rgba(246,241,231,.38)';
+    ctx.fillText(normal, x, y);
+    const w1 = ctx.measureText(normal).width;
+    ctx.strokeStyle = 'rgba(246,241,231,.45)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x - 2, y - 6); ctx.lineTo(x + w1 + 2, y - 6); ctx.stroke();
+    ctx.font = '800 28px Manrope, sans-serif';
+    ctx.fillStyle = '#ff8a4d';
+    ctx.fillText(pagado, x + w1 + 14, y + 3);
+    pintaFase(x + w1 + 14 + ctx.measureText(pagado).width + 12);
+  } else {
+    const pagado = fmtMoney(ticket.price);
+    ctx.font = '800 28px Manrope, sans-serif';
+    ctx.fillStyle = '#ff8a4d';
+    ctx.fillText(pagado, x, y + 3);
+    pintaFase(x + ctx.measureText(pagado).width + 12);
+  }
+}
 function loadFlyer(variant, hasFlyer) {
   if (!hasFlyer) return Promise.resolve(null);
   if (_flyerCache[variant] !== undefined) return Promise.resolve(_flyerCache[variant]);
@@ -178,10 +246,8 @@ async function renderTicket(ticket, ev, imgOverride) {
   ctx.setLineDash([]);
 
   const padX = 44;
-  const contentTop = FLY + 28;   // la ubicación/fecha ya va en el flyer, no se repite aquí
-
   const qrSize = 224;                                  // QR grande, fácil de escanear
-  const qrX = W - padX - qrSize, qrY = contentTop;
+  const qrX = W - padX - qrSize, qrY = FLY + 26;
   ctx.shadowColor = 'rgba(255,110,30,.35)'; ctx.shadowBlur = 24;
   drawQR(ctx, ticket.qr_payload || ticket.qr_token, qrX, qrY, qrSize);
   ctx.shadowBlur = 0;
@@ -190,52 +256,41 @@ async function renderTicket(ticket, ev, imgOverride) {
   ctx.font = '600 13px "Space Grotesk", monospace';
   letterSpaced(ctx, 'ESCANÉALO EN LA PUERTA', qrX + qrSize / 2, qrY + qrSize + 22, 1.6);
 
-  // columna izquierda: insignia del tipo · a nombre de · nombre · facultad · precio
+  // ---- columna izquierda. El contenido se reparte en TODA la altura de la banda:
+  // la etiqueta arriba, el precio anclado abajo y el nombre ocupando el centro. Así
+  // no queda un hueco muerto abajo y da igual si el nombre usa una línea o dos.
+  const colW = qrX - padX - 28;          // ancho libre antes del QR
   ctx.textAlign = 'left';
-  let ty = contentTop;
-  ctx.fillStyle = 'rgba(255,150,80,.6)';
-  ctx.font = '600 15px "Space Grotesk", monospace';
-  letterSpaced(ctx, 'A NOMBRE DE', padX, ty + 12, 2.6);
-  drawTicketBadge(ctx, ticketBadgeSpec(ticket), padX + 178, ty - 9);
-  ty += 60;
-  ctx.fillStyle = '#f6f1e7';
-  const nameFont = nameFontFor(ticket.buyer_name);
-  fitText(ctx, ticket.buyer_name, padX, ty, W - padX * 2 - qrSize - 30, 42, '800 %px ' + nameFont);
-  ty += 44;
-  if (ticket.faculty_name) {                    // Externo/VIP no llevan facultad
-    ctx.fillStyle = 'rgba(246,241,231,.55)';
-    ctx.font = '600 21px Manrope, sans-serif';
-    ctx.fillText(ticket.faculty_name, padX, ty);
-    ty += 36;
-  }
-  ty += 10;
 
-  // línea de precio: transparencia contra fraude — cada quien ve en su boleto
-  // cuánto se registró que pagó
-  if (ticket.group_size) {
-    const normalTxt = fmtMoney(ticket.normal_price);
-    const paidTxt = fmtMoney(ticket.price);
-    ctx.font = '600 16px "Space Grotesk", monospace';
-    ctx.fillStyle = 'rgba(246,241,231,.4)';
-    ctx.fillText(normalTxt, padX, ty);
-    const w1 = ctx.measureText(normalTxt).width;
-    ctx.strokeStyle = 'rgba(246,241,231,.5)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.moveTo(padX - 2, ty - 6); ctx.lineTo(padX + w1 + 2, ty - 6); ctx.stroke();
-    ctx.font = '800 18px Manrope, sans-serif';
-    ctx.fillStyle = '#ff8a4d';
-    ctx.fillText(paidTxt, padX + w1 + 12, ty + 1);
-    if (ticket.phase_name) {
-      const w2 = ctx.measureText(paidTxt).width;
-      ctx.font = '600 12px "Space Grotesk", monospace';
-      ctx.fillStyle = 'rgba(255,150,80,.5)';
-      ctx.fillText('· ' + ticket.phase_name, padX + w1 + 12 + w2 + 10, ty);
-    }
-  } else {
-    ctx.font = '700 20px Manrope, sans-serif';
-    ctx.fillStyle = '#ff8a4d';
-    const priceTxt = fmtMoney(ticket.price) + (ticket.phase_name ? '  ·  ' + ticket.phase_name : '');
-    ctx.fillText(priceTxt, padX, ty);
+  // 1) arriba: "a nombre de" + insignia del tipo
+  ctx.fillStyle = 'rgba(255,150,80,.6)';
+  ctx.font = '600 14px "Space Grotesk", monospace';
+  const etiqueta = 'A NOMBRE DE';
+  letterSpaced(ctx, etiqueta, padX, FLY + 44, 2.6);
+  ctx.font = '600 14px "Space Grotesk", monospace';
+  const anchoEtiqueta = [...etiqueta].reduce((a, ch) => a + ctx.measureText(ch).width, 0)
+                        + 2.6 * (etiqueta.length - 1);
+  drawTicketBadge(ctx, ticketBadgeSpec(ticket), padX + anchoEtiqueta + 18, FLY + 24);
+
+  // 2) abajo: el precio, anclado al pie de la banda
+  const precioY = FLY + BAND - 42;
+  dibujarPrecio(ctx, ticket, padX, precioY);
+
+  // 3) en medio: nombre (1 o 2 líneas) y facultad, centrados en el espacio que sobra
+  const nombreArriba = FLY + 62;                 // debajo de la etiqueta
+  const nombreAbajo = precioY - 30;              // encima del precio
+  const hayFacultad = !!ticket.faculty_name;
+  const lineas = medirNombre(ctx, ticket.buyer_name, colW, nameFontFor(ticket.buyer_name));
+  const altoBloque = lineas.lineas.length * lineas.alto + (hayFacultad ? 30 : 0);
+  let ty = nombreArriba + (nombreAbajo - nombreArriba - altoBloque) / 2 + lineas.tam * 0.78;
+
+  ctx.fillStyle = '#f6f1e7';
+  ctx.font = `800 ${lineas.tam}px ${lineas.fuente}`;
+  lineas.lineas.forEach(l => { ctx.fillText(l, padX, ty); ty += lineas.alto; });
+  if (hayFacultad) {                             // Externo/VIP no llevan facultad
+    ctx.fillStyle = 'rgba(246,241,231,.55)';
+    ctx.font = '600 20px Manrope, sans-serif';
+    ctx.fillText(ticket.faculty_name, padX, ty + 4);
   }
 
   return cv;
@@ -251,15 +306,6 @@ function letterSpaced(ctx, text, cx, y, spacing) {
   ctx.textAlign = align;
 }
 
-function fitText(ctx, text, x, y, maxW, baseSize, fontTpl) {
-  let size = baseSize;
-  ctx.font = fontTpl.replace('%', size);
-  while (ctx.measureText(text).width > maxW && size > 18) {
-    size -= 2;
-    ctx.font = fontTpl.replace('%', size);
-  }
-  ctx.fillText(text, x, y);
-}
 
 async function downloadTicket(ticket, ev) {
   const cv = await renderTicket(ticket, ev);
