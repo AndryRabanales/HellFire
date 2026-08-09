@@ -595,26 +595,40 @@ def init_db():
         db.commit()
         print(f"[OnFire] RESET de lanzamiento: solo admin '{init_user}', precios en 0.")
 
-    # RESET v3 — borrón y cuenta nueva antes del lanzamiento. Se pidió además porque
-    # un administrador dejó el equipo: se borran TODAS las sesiones y todos los demás
-    # admins, así que quien haya salido pierde el acceso al instante.
-    # SE CONSERVA: los flyers y demás ajustes (viven en settings), los precios y tipos
-    # de boleto, las facultades, y el vendedor de invitados (se recrea abajo desde
-    # GUEST_SELLER_CODE). Corre una sola vez y se marca con su bandera.
-    if setting(db, "event_reset_v3") != "1":
+    def limpiar_todo(motivo):
+        """Deja la base como recién estrenada. BORRA boletos, grupos, vendedores,
+        gastos, fases, movimientos, sesiones y los demás admins (quien tenga sesión
+        abierta pierde el acceso al instante). CONSERVA los flyers y ajustes (viven
+        en settings), los precios, las facultades y el vendedor de invitados (se
+        recrea más abajo desde GUEST_SELLER_CODE)."""
         for table in ("tickets", "groups", "sellers", "price_phases",
                       "expenses", "audit_log", "login_attempts", "sessions"):
             db.execute(f"DELETE FROM {table}")
         db.execute("DELETE FROM admins WHERE username != ?", (init_user,))
         db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
-                   ("sistema", "inicializacion",
-                    "Sistema reiniciado para el lanzamiento: boletos, vendedores, gastos "
-                    f"y movimientos borrados. Sesiones cerradas. Único admin: {init_user}",
-                    now_iso()))
+                   ("sistema", "inicializacion", motivo, now_iso()))
+        db.commit()
+
+    # RESET v3 — el borrón de una sola vez que se pidió antes del lanzamiento.
+    if setting(db, "event_reset_v3") != "1":
+        limpiar_todo("Sistema reiniciado para el lanzamiento: boletos, vendedores, "
+                     f"gastos y movimientos borrados. Sesiones cerradas. Admin: {init_user}")
         set_setting(db, "event_reset_v3", "1")
         db.commit()
-        print(f"[OnFire] RESET v3: base limpia, sesiones cerradas, único admin '{init_user}'. "
-              "Se conservaron flyers, precios y facultades.")
+        print(f"[OnFire] RESET v3: base limpia, unico admin '{init_user}'.")
+
+    # RESET A PETICIÓN — para volver a dejar el sistema en cero cuantas veces haga
+    # falta (por ejemplo después de enseñárselo al equipo), sin tocar código:
+    # en Railway → Variables, pon RESET_KEY con cualquier valor. Al arrancar borra
+    # todo y guarda ese valor; mientras NO lo cambies no vuelve a borrar, así que un
+    # reinicio normal del servicio jamás se lleva los datos por accidente. Para
+    # reiniciar otra vez, cambia el valor (ej. "demo1" -> "demo2").
+    reset_key = (os.environ.get("RESET_KEY") or "").strip()
+    if reset_key and setting(db, "reset_key_aplicada") != reset_key:
+        limpiar_todo(f"Sistema reiniciado a peticion (RESET_KEY). Admin: {init_user}")
+        set_setting(db, "reset_key_aplicada", reset_key)
+        db.commit()
+        print(f"[OnFire] RESET a peticion ({reset_key}): base limpia.")
 
     # VENDEDOR DE INVITADOS (oculto). Va AL FINAL, después de todos los resets, para
     # que ninguna limpieza lo borre. Su código vive en la variable de entorno
