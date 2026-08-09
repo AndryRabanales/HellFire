@@ -232,7 +232,8 @@ CREATE TABLE IF NOT EXISTS tickets (
   group_id INTEGER,             -- si el boleto es parte de un grupo (5 o 10), su id
   phase_name TEXT,               -- fase de precio vigente al generar (congelada), para el boleto
   group_size INTEGER,            -- 5 o 10 si es de grupo (congelado)
-  normal_price_cents INTEGER     -- precio individual antes del descuento de grupo (congelado, solo grupos)
+  normal_price_cents INTEGER,    -- precio individual antes del descuento de grupo (congelado, solo grupos)
+  client_ref TEXT                -- id que manda la boletera para no duplicar si reintenta
 );
 CREATE TABLE IF NOT EXISTS groups (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -434,6 +435,7 @@ def init_db():
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_size INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS normal_price_cents INTEGER")
         db.execute("ALTER TABLE price_phases ADD COLUMN IF NOT EXISTS group_pct INTEGER")
+        db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS client_ref TEXT")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
@@ -461,6 +463,8 @@ def init_db():
             db.execute("ALTER TABLE tickets ADD COLUMN group_size INTEGER")
         if "normal_price_cents" not in tkcols:
             db.execute("ALTER TABLE tickets ADD COLUMN normal_price_cents INTEGER")
+        if "client_ref" not in tkcols:
+            db.execute("ALTER TABLE tickets ADD COLUMN client_ref TEXT")
         pcols = [r["name"] for r in db.execute("PRAGMA table_info(price_phases)").fetchall()]
         if "group_pct" not in pcols:
             db.execute("ALTER TABLE price_phases ADD COLUMN group_pct INTEGER")
@@ -982,7 +986,7 @@ def ticket_public(t):
 def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
                         seller_id, seller_name, seller_code, group_id=None,
                         phase_name=None, group_size=None, normal_price_cents=None,
-                        guest=False):
+                        guest=False, client_ref=None):
     """Inserta un boleto con folio único (reintenta si choca) y devuelve la fila.
     Compartido por la generación individual y la generación de grupos.
 
@@ -1013,11 +1017,12 @@ def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
                     (folio, qr_token, qr_payload, buyer_name, faculty_id, faculty_name,
                      type_id, type_name, type_is_vip, price_cents,
                      seller_id, seller_name, seller_code, status, created_at, group_id,
-                     phase_name, group_size, normal_price_cents)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?, ?, ?, ?, ?)""",
+                     phase_name, group_size, normal_price_cents, client_ref)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?, ?, ?, ?, ?, ?)""",
                     (folio, token, qr_payload, buyer, fac_id, fac_name, tt["id"], tt["name"],
                      tt["is_vip"], price_cents, seller_id, seller_name,
-                     seller_code, now_iso(), group_id, phase_name, group_size, normal_price_cents))
+                     seller_code, now_iso(), group_id, phase_name, group_size,
+                     normal_price_cents, client_ref))
                 db.commit()
                 break
             except IntegrityError:
@@ -1034,6 +1039,16 @@ def create_ticket():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     body = request.json or {}
+    # Si al vendedor se le cayó el internet DESPUÉS de que el boleto se creó, no
+    # recibió respuesta y va a volver a darle a Generar. Sin esto quedaban dos
+    # boletos de la misma venta y su cuenta salía cobrando de más. La boletera manda
+    # la misma referencia en el reintento, así que aquí devolvemos el que ya existe.
+    ref = str(body.get("client_ref", "")).strip()[:64]
+    if ref:
+        ya = db.execute("SELECT * FROM tickets WHERE client_ref=? AND seller_id=?",
+                        (ref, s["seller"]["id"])).fetchone()
+        if ya:
+            return jsonify(ticket=ticket_public(ya), repetido=True)
     buyer = str(body.get("buyer_name", "")).strip()
     if len(buyer) < 3:
         return jsonify(error="Escribe el nombre completo del comprador"), 400
@@ -1058,7 +1073,7 @@ def create_ticket():
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
     t = _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_now,
                            seller_id, seller_name, seller_code, phase_name=phase_name,
-                           guest=is_guest_seller(s["seller"]))
+                           guest=is_guest_seller(s["seller"]), client_ref=ref or None)
     if not t:
         return jsonify(error="No se pudo generar el folio, intenta de nuevo"), 500
     if not is_guest_seller(s["seller"]):   # los invitados no dejan rastro en Movimientos

@@ -7,6 +7,13 @@ let SELECTED_TYPE = null;
 let LAST_TICKET = null;
 let PIN = '';
 const DOWNLOADED = new Set();   // ids de boletos ya descargados en esta sesión
+// Referencia de la venta en curso: si falla la red y el vendedor vuelve a darle a
+// Generar, se manda LA MISMA y el servidor devuelve el boleto que ya había creado
+// en vez de crear otro. Se renueva al cerrar cada venta.
+let VENTA_REF = null;
+function nuevaRef() {
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
 
 const views = ['login', 'form', 'done', 'history'];
 function show(view) {
@@ -349,16 +356,20 @@ async function generate() {
     $('#f-err').textContent = 'Elige la facultad'; return;
   }
   btn.disabled = true; btn.textContent = 'GENERANDO…';
+  if (!VENTA_REF) VENTA_REF = nuevaRef();   // la misma en los reintentos de ESTA venta
   try {
     const r = await API.post('/api/tickets', {
       buyer_name: buyer, type_id: SELECTED_TYPE,
       faculty_id: (selType && selType.needs_faculty) ? Number(faculty) : null,
+      client_ref: VENTA_REF,
     });
     LAST_TICKET = r.ticket;
+    VENTA_REF = null;                       // venta cerrada: la siguiente lleva otra
     showSoloResult(r.ticket);
+    if (r.repetido) toast('Ese boleto ya se hab\u00eda generado: es el mismo, no se duplic\u00f3');
   } catch (e) {
     if (e.data && e.data._unauthorized) return sessionLost();
-    $('#f-err').textContent = e.message;
+    $('#f-err').textContent = mensajeDeError(e);
   } finally {
     btn.disabled = false; btn.textContent = 'GENERAR BOLETO  🎟';
   }
@@ -491,6 +502,16 @@ async function loadHistory() {
     if (e.data && e.data._unauthorized) return sessionLost();
     toast(e.message);
   }
+}
+
+/* Sin internet, fetch lanza un error del navegador en ingl\u00e9s ("Failed to fetch").
+   En la calle eso pasa seguido y el vendedor necesita saber qu\u00e9 hacer. */
+function mensajeDeError(e) {
+  const red = !e.status && (navigator.onLine === false ||
+    /fetch|network|load failed|conexi/i.test(e.message || ''));
+  return red
+    ? 'Sin internet. Revisa tu se\u00f1al y vuelve a darle a Generar (no se duplica).'
+    : e.message;
 }
 
 function sessionLost() {

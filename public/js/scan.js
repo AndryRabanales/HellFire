@@ -77,21 +77,53 @@ function clearResult() {
 async function startCamera() {
   const video = document.getElementById('cam'), status = document.getElementById('cam-status');
   try {
+    if (stream) stream.getTracks().forEach(t => t.stop());   // no dejar cámaras colgadas
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false,
     });
     video.srcObject = stream;
     await video.play();
-    scanning = true;
-    requestAnimationFrame(tick);
+    // si el sistema corta la cámara (otra app la toma, se acaba la batería…), reabrir
+    stream.getVideoTracks().forEach(t => t.addEventListener('ended', () => startCamera()));
+    status.textContent = 'Apunta la cámara al código QR';
+    if (!scanning) { scanning = true; requestAnimationFrame(tick); }
   } catch (e) {
+    scanning = false;
     status.textContent = 'Sin acceso a la cámara. Da permiso y recarga. (' + e.name + ')';
   }
 }
+
+/* Si el celular se bloquea o el staff cambia de app, iOS PAUSA el video. El bucle
+   seguía corriendo sobre un cuadro CONGELADO: se veía la cámara y no marcaba ningún
+   error, pero ya no leía un solo QR. Esto la reanuda (o la reabre si se cortó). */
+let recuperando = false;
+async function ensureCamera() {
+  if (recuperando) return;
+  recuperando = true;
+  try {
+    const video = document.getElementById('cam');
+    const vivo = stream && stream.getVideoTracks().some(t => t.readyState === 'live');
+    if (!vivo) { await startCamera(); return; }
+    if (video.paused || video.ended) {
+      try { await video.play(); } catch (_) { await startCamera(); }
+    }
+  } finally { recuperando = false; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureCamera(); });
+window.addEventListener('pageshow', ensureCamera);
+window.addEventListener('focus', ensureCamera);
 const workCv = document.createElement('canvas');
 function tick() {
   if (!scanning) return;
   const video = document.getElementById('cam');
+  // red de seguridad: si el video quedó pausado o la cámara se cortó, reanudar aquí
+  // mismo. Así se cura aunque no llegue ningún evento de visibilidad (pasa en iOS).
+  if (video.paused || video.ended ||
+      !(stream && stream.getVideoTracks().some(t => t.readyState === 'live'))) {
+    ensureCamera();
+    requestAnimationFrame(tick);
+    return;
+  }
   if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth) {
     // Recortar SOLO la región del marco. El video se muestra con object-fit:cover,
     // así que mapeamos el recuadro en pantalla a los píxeles reales de la cámara.
