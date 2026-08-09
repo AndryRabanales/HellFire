@@ -4,6 +4,12 @@
 
 let stream = null, scanning = false, busy = false, lastCode = '', lastAt = 0;
 
+// Cuánto se queda el resultado en pantalla antes de limpiarse solo. Si se quedara
+// fijo (como antes), el staff podría estar viendo un "ENTRA" viejo mientras la
+// siguiente persona muestra un boleto que ni siquiera se alcanzó a leer.
+const RESULT_MS = 8000;
+let hideTimer = null;
+
 async function call(code) {
   const res = await fetch('/api/scan', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -53,9 +59,18 @@ function render(r) {
 
   box.className = 'show ' + cls;
   box.innerHTML = `<div class="r-title">${title}</div>${name}${type}` +
-    (meta ? `<div class="r-meta">${esc(meta)}</div>` : '');
-  // El mensaje se queda fijo en pantalla hasta que se escanee OTRO QR (o el mismo,
-  // que vuelve a mostrar el resultado). No se auto-oculta.
+    (meta ? `<div class="r-meta">${esc(meta)}</div>` : '') +
+    '<div class="r-bar"><i></i></div>';   // barra que drena: se ve cuánto le queda
+  // se limpia solo, para que nunca quede un resultado viejo confundiendo en la puerta
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(clearResult, RESULT_MS);
+}
+
+function clearResult() {
+  const box = document.getElementById('result');
+  box.className = '';
+  box.innerHTML = '';
+  lastCode = '';   // así el mismo QR se puede volver a escanear enseguida
 }
 
 /* ---------- cámara + lector QR ---------- */

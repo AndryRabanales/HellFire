@@ -37,6 +37,15 @@
   #result.bad .r-title{color:var(--danger)}
   #result .r-name{font:700 18px/1.2 Manrope;color:#fff}
   #result .r-meta{font:500 12px Manrope;color:rgba(255,255,255,.6)}
+  /* barra que drena mientras el resultado sigue en pantalla: el staff ve de un
+     vistazo que lo que está leyendo es reciente y cuánto le falta para limpiarse */
+  #result .r-bar{position:absolute;left:0;right:0;bottom:0;height:4px;
+    background:rgba(255,255,255,.10);border-radius:0 0 16px 16px;overflow:hidden}
+  #result .r-bar i{display:block;height:100%;width:100%;transform-origin:left;
+    animation:drenar 8s linear forwards}
+  #result.ok .r-bar i{background:var(--ok)}
+  #result.bad .r-bar i{background:var(--danger)}
+  @keyframes drenar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
   .r-type{padding:6px 18px;border-radius:10px;font:800 14px "Space Grotesk";letter-spacing:.06em}
   .r-type.vip{background:linear-gradient(150deg,#f3d27a,#d9a53a);color:#3a1e00;box-shadow:0 0 18px rgba(243,210,122,.5)}
   .r-type.gen{background:rgba(255,255,255,.1);color:rgba(255,255,255,.72)}
