@@ -68,6 +68,14 @@ async function enterApp() {
     CATALOG.faculties.map(f => `<option value="${f.id}">${esc(f.name)}</option>`).join('');
   renderTypes();
   startPhaseTimer();
+  // Arrancar SIEMPRE en limpio: si el vendedor anterior dejó un grupo o un boleto
+  // en pantalla y no tocó "Listo", al entrar otro (o el mismo) se quedaba viendo
+  // los nombres de los compradores de esa venta. Además el marcado de "ya
+  // descargado" es por sesión, así que tampoco debe heredarse.
+  exitGroupMode();
+  exitSoloResult();
+  DOWNLOADED.clear();
+  LAST_TICKET = null;
   show('form');
 }
 
