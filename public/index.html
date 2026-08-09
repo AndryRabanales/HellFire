@@ -58,6 +58,14 @@
     <div class="phase-timer hidden" id="f-phase-timer"></div>
   </div>
 
+  <!-- ---- resultado del boleto individual: se queda en pantalla con su botón de
+       descarga, igual que el de grupo (en el celular la descarga automática se
+       pierde y el vendedor no sabía si salió) ---- -->
+  <div id="solo-result" class="hidden">
+    <div id="solo-row"></div>
+    <div class="group-price-bar mt16 done" id="solo-bar"></div>
+  </div>
+
   <!-- ---- switch a plan de grupo ---- -->
   <div class="card mt16" id="group-switch">
     <div class="label">¿Vienen en grupo?</div>
@@ -80,6 +88,7 @@
   <button class="btn" id="btn-generate" style="margin-top:auto">GENERAR BOLETO&nbsp;&nbsp;🎟</button>
   <button class="btn hidden" id="btn-generate-group" style="margin-top:auto">GENERAR GRUPO&nbsp;&nbsp;🎟</button>
   <button class="btn hidden" id="btn-group-done" style="margin-top:auto">✓&nbsp;&nbsp;Listo</button>
+  <button class="btn hidden" id="btn-solo-done" style="margin-top:auto">✓&nbsp;&nbsp;Listo</button>
   <button class="btn quiet" id="btn-history"><span style="font-size:13px">🧾</span>&nbsp;Ver mi historial&nbsp;<span style="color:var(--ember-dim)">→</span></button>
 </div>
 

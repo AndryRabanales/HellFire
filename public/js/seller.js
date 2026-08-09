@@ -347,18 +347,63 @@ async function generate() {
       faculty_id: (selType && selType.needs_faculty) ? Number(faculty) : null,
     });
     LAST_TICKET = r.ticket;
-    // sin pantalla de confirmación: se descarga al instante, se limpia el
-    // formulario para el siguiente y el boleto queda guardado en el historial.
-    clearForm();
-    btn.textContent = 'DESCARGANDO…';
-    await downloadTicket(r.ticket, CATALOG);
-    toast('Boleto de ' + r.ticket.buyer_name + ' generado y descargado ✓');
+    showSoloResult(r.ticket);
   } catch (e) {
     if (e.data && e.data._unauthorized) return sessionLost();
     $('#f-err').textContent = e.message;
   } finally {
     btn.disabled = false; btn.textContent = 'GENERAR BOLETO  🎟';
   }
+}
+
+/* Tras generar un boleto individual NO se sale de la pantalla ni se descarga solo:
+   queda su tarjeta con el botón de descarga, igual que en grupos. La descarga
+   automática se perdía en el celular y el vendedor tenía que ir al historial a
+   buscarla; así es un toque real del usuario, que es lo que funciona en iPhone. */
+function showSoloResult(t) {
+  $('#solo-row').innerHTML = `
+    <div class="grouprow done">
+      <div class="gr-num">\u2713</div>
+      <div style="flex:1;min-width:0">
+        <div class="gr-label">${esc(ticketTypeLabel(t))} \u00b7 ${fmtMoney(t.price)}</div>
+        <div style="font:700 15px Manrope;color:var(--cream);
+          text-decoration:underline;text-decoration-color:#ff7a4d;text-underline-offset:4px">
+          ${esc(t.buyer_name)}
+        </div>
+      </div>
+      <button class="iconbtn" id="solo-dl" title="Descargar boleto">${DL_ICON}</button>
+    </div>`;
+  const b = $('#solo-dl');
+  b.addEventListener('click', async () => {
+    b.disabled = true;
+    try {
+      await downloadTicket(t, CATALOG);
+      b.innerHTML = CHECK_ICON;              // queda en check para saber que ya sali\u00f3
+      b.classList.add('grabbed');
+      b.title = 'Ya descargado \u00b7 toca para volver a descargarlo';
+      DOWNLOADED.add(t.id);
+    } finally { b.disabled = false; }
+  });
+  $('#solo-bar').innerHTML = `
+    <div class="gp-line">\u00a1Listo! Boleto generado \u2713</div>
+    <div class="gp-price">${fmtMoney(t.price)}</div>
+    <div class="gp-save">Desc\u00e1rgalo con el bot\u00f3n de arriba y p\u00e1saselo al comprador</div>`;
+  $('#mode-individual').classList.add('hidden');
+  $('#group-switch').classList.add('hidden');
+  $('#solo-result').classList.remove('hidden');
+  $('#btn-generate').classList.add('hidden');
+  $('#btn-solo-done').classList.remove('hidden');
+  $('#f-hint').textContent = 'Descarga el boleto abajo';
+}
+
+function exitSoloResult() {
+  clearForm();
+  $('#solo-result').classList.add('hidden');
+  $('#mode-individual').classList.remove('hidden');
+  $('#group-switch').classList.remove('hidden');
+  $('#btn-generate').classList.remove('hidden');
+  $('#btn-solo-done').classList.add('hidden');
+  $('#f-hint').textContent = 'Los datos del comprador';
 }
 
 /* ---------------- confirmación (RF-47) ---------------- */
@@ -456,6 +501,7 @@ $('#btn-group-5').addEventListener('click', () => enterGroupMode(5));
 $('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
 $('#btn-group-back').addEventListener('click', exitGroupMode);
 $('#btn-group-done').addEventListener('click', exitGroupMode);
+$('#btn-solo-done').addEventListener('click', exitSoloResult);
 $('#btn-history').addEventListener('click', () => { show('history'); loadHistory(); });
 $('#btn-back').addEventListener('click', () => show('form'));
 $('#btn-another').addEventListener('click', () => { clearForm(); show('form'); });  // RF-48
