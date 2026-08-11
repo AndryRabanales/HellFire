@@ -55,7 +55,12 @@ function esc(s) {
 }
 
 function fmtMoney(n) {
-  return '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  // Los pesos redondos van sin decimales ($1,200); si hay centavos se muestran los
+  // DOS, nunca uno solo: "$17,095.1" se lee como cantidad mal capturada.
+  const v = Number(n);
+  const cents = Math.abs(v * 100 - Math.round(v) * 100) > 0.5;
+  return '$' + v.toLocaleString('es-MX', {
+    minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 });
 }
 
 function fmtDate(iso) {

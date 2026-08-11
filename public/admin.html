@@ -61,10 +61,8 @@
     <button class="tab" data-tab="boletos">Boletos</button>
     <button class="tab" data-tab="vendedores">Vendedores</button>
     <button class="tab" data-tab="grupos">Grupos</button>
-    <button class="tab" data-tab="ranking">Ranking</button>
     <button class="tab" data-tab="gastos">Gastos</button>
     <button class="tab" data-tab="catalogos">Catálogos</button>
-    <button class="tab" data-tab="admins">Admins</button>
     <button class="tab" data-tab="ajustes">Ajustes</button>
     <button class="tab" data-tab="movimientos">Movimientos</button>
   </div>
@@ -106,16 +104,6 @@
   <section id="tab-movimientos" class="mt16 hidden" style="max-width:720px">
     <div class="muted" style="margin-bottom:10px">Todo lo que pasa en el sistema: boletos generados y anulados, vendedores creados/eliminados, cambios de fases y precios. Visible para todos los administradores.</div>
     <div id="mv-list" style="display:flex;flex-direction:column;gap:8px"></div>
-  </section>
-
-  <!-- ===== Ranking: solo el orden por ventas ===== -->
-  <section id="tab-ranking" class="mt16 hidden" style="max-width:480px">
-    <div class="muted" style="margin-bottom:10px">Orden por ventas, del primero al último. Los anulados no cuentan; en empate va primero quien llegó antes.</div>
-    <div class="tablewrap">
-      <table class="data" style="min-width:0"><thead><tr>
-        <th style="width:60px">#</th><th>Vendedor</th>
-      </tr></thead><tbody id="rk-body"></tbody></table>
-    </div>
   </section>
 
   <!-- ===== Vendedores (RF-82..88) ===== -->
@@ -202,20 +190,6 @@
     </div>
   </section>
 
-  <!-- ===== Admins (RF-89) ===== -->
-  <section id="tab-admins" class="mt16 hidden" style="max-width:560px">
-    <div class="card">
-      <div class="label">Nuevo administrador</div>
-      <div class="row" style="flex-wrap:wrap;gap:8px">
-        <input class="input grow" id="ad-user" placeholder="Usuario" style="min-width:140px;padding:12px">
-        <input class="input grow" id="ad-pass" type="password" placeholder="Contraseña (mín. 8)" style="min-width:160px;padding:12px">
-        <button class="btn sm" id="btn-ad-create" style="padding:13px 16px">Crear</button>
-      </div>
-      <div class="err mt8" id="ad-err"></div>
-    </div>
-    <div id="ad-list" class="mt12" style="display:flex;flex-direction:column;gap:8px"></div>
-  </section>
-
   <!-- ===== Ajustes ===== -->
   <section id="tab-ajustes" class="mt16 hidden" style="max-width:760px">
     <div class="card">
@@ -237,6 +211,19 @@
       <div class="label">Respaldo y Excel</div>
       <div class="muted">Cada venta se sincroniza sola a <b>data/boletos.xlsx</b> y se respalda cada 10 minutos en <b>data/backups/</b>. La exportación con filtros está en la pestaña Boletos.</div>
     </div>
+    <!-- Administradores: plegado, porque hoy solo hay uno. Se abre si algún día
+         se vuelve a repartir el panel. -->
+    <details class="card mt12" id="ad-box">
+      <summary class="label" style="margin:0">Administradores del panel</summary>
+      <div class="muted mt8" style="margin-bottom:10px">Quién más puede entrar aquí. Cada admin ve solo a los vendedores que él creó.</div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        <input class="input grow" id="ad-user" placeholder="Usuario" style="min-width:140px;padding:12px">
+        <input class="input grow" id="ad-pass" type="password" placeholder="Contraseña (mín. 8)" style="min-width:160px;padding:12px">
+        <button class="btn sm" id="btn-ad-create" style="padding:13px 16px">Crear</button>
+      </div>
+      <div class="err mt8" id="ad-err"></div>
+      <div id="ad-list" class="mt12" style="display:flex;flex-direction:column;gap:8px"></div>
+    </details>
   </section>
 </div>
 

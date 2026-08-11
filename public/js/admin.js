@@ -43,8 +43,8 @@ async function enter(name) {
 /* ---------------- tabs ---------------- */
 const loaders = {
   resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
-  ranking: loadRanking, vendedores: loadSellers, grupos: loadGroups, gastos: loadExpenses,
-  catalogos: loadCatalogs, admins: loadAdmins, ajustes: loadSettings,
+  vendedores: loadSellers, grupos: loadGroups, gastos: loadExpenses,
+  catalogos: loadCatalogs, ajustes: loadAjustes,
 };
 
 let currentTab = 'resumen';
@@ -65,7 +65,7 @@ $('#tabs').addEventListener('click', e => {
    (nuevos boletos, ingresos, anulaciones). Se pausa si la pestaña del navegador no
    está activa, para no gastar de más. */
 let liveTimer = null;
-const LIVE = { resumen: loadSummary, boletos: loadTicketsTable, ranking: loadRanking,
+const LIVE = { resumen: loadSummary, boletos: loadTicketsTable,
                movimientos: loadMovements, vendedores: loadSellers };
 function startLive() {
   stopLive();
@@ -239,7 +239,7 @@ async function voidTicket(t) {
     title: 'Anular boleto ' + t.folio,
     body: `<b style="color:var(--cream)">${esc(t.buyer_name)}</b> · ${esc(t.type_name)} · ${fmtMoney(t.price)}<br>
            Vendió: ${esc(t.seller_name)}.<br><br>El boleto quedará marcado como ANULADO y dejará de contar
-           para el ranking.`,
+           en su cuenta.`,
     okLabel: 'Anular', danger: true, withReason: true,
   });
   if (!r) return;
@@ -352,20 +352,6 @@ $$('#gr-filter button').forEach(b => {
     loadGroups();
   });
 });
-
-/* ---------------- ranking ---------------- */
-let _sigRanking = '';
-async function loadRanking(silent) {
-  const r = await API.get('/api/admin/ranking');
-  const sig = r.ranking.map(s => s.position + s.name).join(',');
-  if (silent && sig === _sigRanking) return;
-  _sigRanking = sig;
-  $('#rk-body').innerHTML = r.ranking.map((s, i) => `
-    <tr class="rank${i + 1}">
-      <td data-label="Puesto"><span class="pos">${s.position}</span></td>
-      <td data-label="Vendedor" class="cell-name" style="font-weight:700"><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${s.deleted ? ' <span class="muted">(eliminado)</span>' : ''}</td>
-    </tr>`).join('');
-}
 
 /* ---------------- gastos de la fiesta ---------------- */
 let _sigGastos = '';
@@ -608,7 +594,9 @@ function pintaCuenta(s, c) {
   const filas = c.payments.length ? visibles.map(p => `
     <div style="padding:10px 0;border-bottom:1px solid rgba(255,120,40,.12)">
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px">
-        <div><b style="font:800 16px 'Space Grotesk';color:var(--cream)">${fmtMoney(p.cash)}</b>
+        <div><span style="font:700 10px 'Space Grotesk';letter-spacing:.08em;color:var(--ember-dim);
+          border:1px solid rgba(255,120,40,.3);border-radius:5px;padding:2px 5px">PAGO ${p.n}</span>
+          <b style="font:800 16px 'Space Grotesk';color:var(--cream);margin-left:6px">${fmtMoney(p.cash)}</b>
           <span class="muted" style="font-size:11px"> entregados</span></div>
         <div class="muted" style="font-size:10px">${fmtDate(p.created_at)}</div>
       </div>
@@ -676,7 +664,12 @@ function pintaCuenta(s, c) {
       <div class="row mt8" style="gap:6px;flex-wrap:wrap">
         <button class="btn sm ghost" id="pg-todo" style="width:auto">Liquida todo (${fmtMoney(c.balance)})</button>
       </div>
-      <input class="input mt8" id="pg-note" placeholder="Nota (ej. corte semana 1)" maxlength="120">
+      <div class="muted mt12" style="font-size:11px;margin-bottom:6px">¿Qué corte es? Queda escrito en su estado de cuenta.</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap">
+        <button class="btn sm ghost pg-tipo" data-nota="Corte semanal" style="width:auto">Semanal</button>
+        <button class="btn sm ghost pg-tipo" data-nota="Corte del día" style="width:auto">Del día</button>
+      </div>
+      <input class="input mt8" id="pg-note" placeholder="o escríbelo tú…" maxlength="120">
       <div class="mt8" id="pg-calc" style="font:600 12px Manrope;color:var(--cream-60);line-height:1.7"></div>
       <div class="err mt8" id="pg-err"></div>
       <button class="btn mt12" id="pg-save">Registrar entrega</button>
@@ -703,6 +696,11 @@ function pintaCuenta(s, c) {
     };
     amt.addEventListener('input', recalcular);
     $('#pg-todo').onclick = () => { amt.value = c.balance; recalcular(); };
+    // Marcar el tipo de corte sin teclear: es lo que se hace 30 veces al día.
+    $$('.pg-tipo').forEach(b => b.onclick = () => {
+      $('#pg-note').value = b.dataset.nota;
+      $$('.pg-tipo').forEach(o => o.classList.toggle('sel', o === b));
+    });
     $('#pg-save').onclick = async () => {
       const v = parseFloat(amt.value || '0');
       if (isNaN(v) || v <= 0) { $('#pg-err').textContent = 'Escribe cu\u00e1nto cubre'; return; }
@@ -811,18 +809,24 @@ async function descargarEstadoCuenta(s, c) {
   [...c.payments].reverse().forEach((p, i) => {
     x.fillStyle = i % 2 ? 'rgba(255,255,255,.028)' : 'rgba(255,255,255,.05)';
     roundRect(x, pad, y - 4, W - pad * 2, 84, 14); x.fill();
+    // El número de pago va primero: es la referencia con la que el vendedor
+    // reclama ("el pago 3 no me lo contaste").
+    x.fillStyle = 'rgba(255,150,80,.8)'; x.font = '700 12px "Space Grotesk", monospace';
+    x.fillText(`PAGO ${p.n}`, pad + 18, y + 30);
+    const wn = x.measureText(`PAGO ${p.n}`).width;
     x.fillStyle = '#f6f1e7'; x.font = '800 22px "Space Grotesk", monospace';
-    x.fillText(fmtMoney(p.cash), pad + 18, y + 30);
-    const w = x.measureText(fmtMoney(p.cash)).width;
+    x.fillText(fmtMoney(p.cash), pad + 28 + wn, y + 30);
+    const w = pad + 28 + wn + x.measureText(fmtMoney(p.cash)).width;
     x.fillStyle = 'rgba(246,241,231,.5)'; x.font = '600 13px Manrope, sans-serif';
-    x.fillText('en efectivo', pad + 26 + w, y + 30);
+    x.fillText('en efectivo', w + 8, y + 30);
     x.textAlign = 'right';
     x.fillStyle = 'rgba(246,241,231,.55)'; x.font = '600 13px Manrope, sans-serif';
     x.fillText(p.created_at.slice(0, 16).replace('T', ' '), W - pad - 18, y + 28);
     x.textAlign = 'left';
     x.fillStyle = 'rgba(246,241,231,.6)'; x.font = '500 13.5px Manrope, sans-serif';
     x.fillText(`Cubrió ${fmtMoney(p.amount)} de su cuenta · comisión ${fmtMoney(p.commission)}` +
-               `  ·  quedó debiendo ${fmtMoney(p.balance_after)}`, pad + 18, y + 58);
+               `  ·  quedó debiendo ${fmtMoney(p.balance_after)}` +
+               (p.note ? `  ·  ${p.note}` : ''), pad + 18, y + 58);
     y += 96;
   });
 
@@ -852,7 +856,24 @@ $('#btn-sl-create').addEventListener('click', async () => {
   if (!name) { $('#sl-err').textContent = 'Escribe el nombre'; return; }
   btn.disabled = true;
   try {
-    const r = await API.post('/api/admin/sellers', { name });   // código siempre automático
+    let r;
+    try {
+      r = await API.post('/api/admin/sellers', { name });   // código siempre automático
+    } catch (e) {
+      // Nombre repetido: se avisa y se deja decidir, no se crea a ciegas. Con 30
+      // vendedores, dos "Luis" hacen que al cobrar se abra la cuenta equivocada.
+      if (!e.data || !e.data.duplicate) throw e;
+      btn.disabled = false;
+      const ok = await confirmModal({
+        title: 'Ese nombre ya existe',
+        body: `${esc(e.message)}<br><br>Si son dos personas distintas, ponles algo que
+               las distinga (apellido, apodo). Si no, al cobrar vas a abrir la cuenta equivocada.`,
+        okLabel: 'Crearlo de todos modos',
+      });
+      if (!ok) { $('#sl-err').textContent = ''; return; }
+      btn.disabled = true;
+      r = await API.post('/api/admin/sellers', { name, force: true });
+    }
     $('#sl-name').value = '';
     modal(`<div class="h1" style="font-size:18px">Vendedor creado</div>
       <div class="muted mt8">Comparte su código de acceso. Es su identidad en el sistema:</div>
@@ -1300,6 +1321,12 @@ async function renderFlyerPreview(variant) {
   st.ui.cv.width = cv.width; st.ui.cv.height = cv.height;
   st.ui.cv.getContext('2d').drawImage(cv, 0, 0);
   _fpBusy[variant] = false;
+}
+
+/* Ajustes ya no tiene pestaña de Admins al lado: la lista de administradores vive
+   plegada al final de esta misma pestaña, así que se carga junto con lo demás. */
+async function loadAjustes() {
+  await Promise.all([loadSettings(), loadAdmins().catch(() => {})]);
 }
 
 async function loadSettings() {

@@ -299,8 +299,6 @@ DEFAULT_SETTINGS = {
     "folio_start": "1",              # número del primer folio (no revela lo vendido)
     "session_minutes": "480",
     "admin_session_minutes": "480",
-    "ranking_winners": "3",
-    "ranking_prizes": json.dumps([1000, 500, 250]),
     # Flyers por tipo de boleto: UADY, Externo, VIP, Grupo de 5 y Grupo de 10. Cada uno
     # con su imagen (base64 en la BD), posición y zoom. "gen" es el flyer "General" de
     # antes del cambio y sigue de respaldo (UADY/Externo caían ahí); las claves sin
@@ -783,7 +781,7 @@ def audit(db, actor, action, detail):
                (actor, action, detail, now_iso()))
 
 # Los boletos de INVITADOS (vendedor oculto) no son una venta: se excluyen del
-# resumen, la cobranza, el ranking, el listado de boletos y los movimientos. Siguen
+# resumen, la cobranza, el listado de boletos y los movimientos. Siguen
 # existiendo como fila normal en tickets, que es lo que el escáner necesita para
 # validarlos en la puerta.
 NOT_GUEST = "seller_id NOT IN (SELECT id FROM sellers WHERE hidden=1)"
@@ -1396,26 +1394,6 @@ def void_ticket(tid):
     sync_excel_async()
     return jsonify(ok=True)
 
-@app.get("/api/admin/ranking")
-def ranking():
-    s = require_admin()
-    if not s:
-        return jsonify(error="sin sesión"), 401
-    db = get_db()
-    # Solo el orden: ordenado por ventas (sin anulados), desempate para quien llegó
-    # primero. No se muestran montos ni premios.
-    rows = db.execute("""
-        SELECT s.name, s.deleted,
-          COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS cents,
-          MAX(CASE WHEN t.status!='void' THEN t.created_at END) AS reached_at
-        FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id
-        WHERE s.hidden=0
-        GROUP BY s.id
-        ORDER BY cents DESC, reached_at ASC""").fetchall()
-    out = [{"position": i + 1, "name": r["name"], "deleted": bool(r["deleted"])}
-           for i, r in enumerate(rows)]
-    return jsonify(ranking=out)
-
 # ---- catálogos: tipos de boleto y facultades (RF-80/81)
 
 @app.get("/api/admin/ticket-types")
@@ -1656,8 +1634,8 @@ def pagos_de(db, sid):
     return db.execute("SELECT * FROM seller_payments WHERE seller_id=? ORDER BY id",
                       (sid,)).fetchall()
 
-def _pago_publico(p, saldo_despues):
-    return {"id": p["id"], "amount": money(p["amount_cents"]),
+def _pago_publico(p, saldo_despues, n):
+    return {"id": p["id"], "n": n, "amount": money(p["amount_cents"]),
             "commission": money(p["commission_cents"]), "cash": money(p["cash_cents"]),
             "commission_pct": p["commission_pct"], "note": p["note"] or "",
             "created_by": p["created_by"], "created_at": p["created_at"],
@@ -1670,11 +1648,13 @@ def estado_cuenta(db, sid):
     filas = pagos_de(db, sid)
     abonado = com = efectivo = 0
     historial = []
-    for p in filas:
+    for i, p in enumerate(filas, 1):
         abonado += p["amount_cents"]
         com += p["commission_cents"]
         efectivo += p["cash_cents"]
-        historial.append(_pago_publico(p, vendido - abonado))
+        # el número es el orden real del corte (1 = el primero que pagó), por eso se
+        # calcula sobre la lista vieja→nueva y no cambia aunque después se invierta
+        historial.append(_pago_publico(p, vendido - abonado, i))
     historial.reverse()          # el más reciente arriba
     return {"sold": money(vendido), "settled_amount": money(abonado),
             "commission_total": money(com), "cash_total": money(efectivo),
@@ -1792,7 +1772,7 @@ def export_seller_payments(sid):
         fila += 1
 
     fila += 1
-    encabezados = ["Fecha", "Efectivo entregado", "Cubrió de su cuenta",
+    encabezados = ["Corte", "Fecha", "Efectivo entregado", "Cubrió de su cuenta",
                    "Su comisión", "Quedó debiendo", "Nota", "Registró"]
     for col, h in enumerate(encabezados, 1):
         cel = ws.cell(row=fila, column=col, value=h)
@@ -1801,14 +1781,15 @@ def export_seller_payments(sid):
     # del más viejo al más nuevo: se lee como fue pagando
     for p in reversed(c["payments"]):
         fila += 1
-        ws.cell(row=fila, column=1, value=p["created_at"])
+        ws.cell(row=fila, column=1, value=f"Pago {p['n']}").font = etiqueta
+        ws.cell(row=fila, column=2, value=p["created_at"])
         for col, val in enumerate([p["cash"], p["amount"], p["commission"],
-                                   p["balance_after"]], 2):
+                                   p["balance_after"]], 3):
             cel = ws.cell(row=fila, column=col, value=val)
             cel.number_format = dinero
-        ws.cell(row=fila, column=6, value=p["note"])
-        ws.cell(row=fila, column=7, value=p["created_by"])
-    for col, ancho in enumerate([19, 19, 20, 14, 17, 26, 14], 1):
+        ws.cell(row=fila, column=7, value=p["note"])
+        ws.cell(row=fila, column=8, value=p["created_by"])
+    for col, ancho in enumerate([10, 19, 19, 20, 14, 17, 26, 14], 1):
         ws.column_dimensions[get_column_letter(col)].width = ancho
 
     buf = BytesIO()
@@ -1848,7 +1829,9 @@ def create_seller():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     b = request.json or {}
-    name = str(b.get("name", "")).strip()
+    # se normalizan los espacios: "Luis  Pérez " y "Luis Pérez" son la misma persona,
+    # y de paso el nombre no sale con huecos raros en el boleto
+    name = re.sub(r"\s+", " ", str(b.get("name", ""))).strip()
     if not name:
         return jsonify(error="Nombre requerido"), 400
     code = str(b.get("code", "")).strip()
@@ -1859,6 +1842,15 @@ def create_seller():
             return jsonify(error="Ese código ya está en uso"), 400   # RF-84
     else:
         code = gen_seller_code(db)
+    # Dos vendedores con el mismo nombre son una trampa al cobrar: se abre la cuenta
+    # equivocada y parece que no ha vendido nada. No se prohíbe (puede haber dos
+    # Luis de verdad), pero hay que confirmarlo a propósito.
+    if not b.get("force"):
+        igual = db.execute("SELECT code FROM sellers WHERE deleted=0 AND hidden=0 "
+                           "AND LOWER(TRIM(name))=LOWER(TRIM(?))", (name,)).fetchone()
+        if igual:
+            return jsonify(error=f"Ya tienes un vendedor llamado «{name}» "
+                                 f"(código {igual['code']}).", duplicate=True), 409
     # el vendedor queda ligado al admin que lo crea (su dueño)
     db.execute("INSERT INTO sellers(name, code, owner_admin_id, owner_admin_name, created_at) "
                "VALUES(?,?,?,?,?)",

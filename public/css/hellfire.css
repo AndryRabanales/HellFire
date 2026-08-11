@@ -325,3 +325,12 @@ table.data tr.void td.strike{text-decoration:line-through}
 .phase-timer .pt-item b{color:var(--ember-soft);font-weight:800}
 .phase-timer .pt-date{font:600 8.5px "Space Grotesk",monospace;letter-spacing:.1em;
   text-transform:uppercase;color:var(--ember-dim);margin-top:4px}
+
+/* Bloques plegables (ej. Administradores dentro de Ajustes). El triángulo propio de
+   Safari sale como emoji de color, así que se dibuja uno con CSS. */
+details.card > summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px}
+details.card > summary::-webkit-details-marker{display:none}
+details.card > summary::before{content:"";width:0;height:0;flex:none;
+  border-left:6px solid var(--ember);border-top:4.5px solid transparent;
+  border-bottom:4.5px solid transparent;transition:transform .18s}
+details.card[open] > summary::before{transform:rotate(90deg)}
