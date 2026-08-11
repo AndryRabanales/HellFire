@@ -589,7 +589,14 @@ function pintaCuenta(s, c) {
   const faltaEntregar = debeEntregar - c.cash_total;
   const avance = c.sold > 0 ? Math.round(c.settled_amount / c.sold * 100) : 0;
 
-  const filas = c.payments.length ? c.payments.map(p => `
+  // Con cortes semanales durante ~2 meses son muchos pagos. En pantalla solo se
+  // muestran los últimos: lo que se necesita al momento de cobrar es el saldo y
+  // los movimientos recientes. El historial COMPLETO está en la descarga.
+  const TOPE = 4;
+  const verTodos = c._verTodos === true;
+  const visibles = verTodos ? c.payments : c.payments.slice(0, TOPE);
+  const ocultos = c.payments.length - visibles.length;
+  const filas = c.payments.length ? visibles.map(p => `
     <div style="padding:11px 0;border-bottom:1px solid rgba(255,120,40,.12)">
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px">
         <div style="font:800 16px 'Space Grotesk';color:var(--cream)">${fmtMoney(p.cash)}
@@ -606,7 +613,9 @@ function pintaCuenta(s, c) {
         <div class="muted" style="font-size:10px">${p.note ? esc(p.note) + ' \u00b7 ' : ''}registr\u00f3 ${esc(p.created_by || '')}</div>
         ${c.can_edit ? `<button class="linkout" style="font-size:10px;padding:2px 0" data-del="${p.id}">borrar</button>` : ''}
       </div>
-    </div>`).join('') : '<div class="muted" style="font-size:12px;padding:12px 0">Todav\u00eda no ha entregado nada.</div>';
+    </div>`).join('') +
+    (ocultos > 0 ? `<button class="btn sm ghost mt12" id="pg-mas" style="width:100%">Ver los ${ocultos} pagos anteriores</button>` : '')
+    : '<div class="muted" style="font-size:12px;padding:12px 0">Todav\u00eda no ha entregado nada.</div>';
 
   modal(`<div class="h1" style="font-size:18px">Cuenta de ${esc(s.name)}</div>
 
@@ -659,7 +668,7 @@ function pintaCuenta(s, c) {
       `<div class="muted mt12" style="font-size:11px">Solo ${esc(s.owner_admin_name || 'su admin')} puede registrar pagos de este vendedor.</div>`)}
 
     <div class="row mt16" style="justify-content:space-between;align-items:center">
-      <div class="label" style="margin:0">Historial de pagos</div>
+      <div class="label" style="margin:0">Historial de pagos${c.payments.length ? ` (${c.payments.length})` : ''}</div>
       ${c.payments.length ? `<div class="row" style="gap:6px">
         <button class="btn sm ghost" id="pg-dl" style="width:auto">Imagen</button>
         <button class="btn sm ghost" id="pg-xls" style="width:auto">Excel</button>
@@ -694,6 +703,8 @@ function pintaCuenta(s, c) {
       } catch (e) { if (!guard(e)) $('#pg-err').textContent = e.message; }
     };
   }
+  const mas = $('#pg-mas');
+  if (mas) mas.onclick = () => pintaCuenta(s, { ...c, _verTodos: true });
   const dl = $('#pg-dl');
   if (dl) dl.onclick = () => descargarEstadoCuenta(s, c);
   const xls = $('#pg-xls');
