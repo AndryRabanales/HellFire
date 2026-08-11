@@ -116,6 +116,9 @@ if IS_PG:
         def fetchall(self):
             return [_plain(r) for r in self._cur.fetchall()]
         @property
+        def rowcount(self):
+            return self._cur.rowcount
+        @property
         def lastrowid(self):
             with self._conn.cursor() as c:
                 c.execute("SELECT lastval()")
@@ -721,7 +724,7 @@ def seller_summary(db):
         GROUP BY s.id ORDER BY total_cents DESC""").fetchall()]
 
 def sync_excel():
-    """Regenera boletos.xlsx con todas las ventas. Se llama tras cada cambio.
+    """Regenera boletos.xlsx con todas las ventas.
     (Es un archivo derivado; la fuente de verdad es la base de datos.)"""
     try:
         db = db_connect()
@@ -730,14 +733,31 @@ def sync_excel():
         summary = seller_summary(db)
         db.close()
         wb = build_workbook(rows, summary)
-        tmp = XLSX + ".tmp"
+        # el temporal lleva el id del hilo: si dos sincronizaciones se cruzan, cada
+        # una escribe el suyo y ninguna se queda sin archivo al renombrar
+        tmp = f"{XLSX}.{threading.get_ident()}.tmp"
         wb.save(tmp)
         os.replace(tmp, XLSX)
     except Exception as e:
         print(f"[OnFire] error al sincronizar Excel: {e}")
 
+# El Excel se regenera ENTERO cada vez, así que hacerlo en cada venta es trabajo al
+# cuadrado: con 1500 boletos serían 1500 reconstrucciones de un archivo que no para
+# de crecer, y en plena noche de venta eso ahoga al servidor. En vez de eso se marca
+# "hay cambios" y UN SOLO hilo lo regenera cada pocos segundos. Al ser uno solo,
+# tampoco pueden chocar dos escrituras sobre el mismo archivo.
+_excel_pendiente = threading.Event()
+SYNC_CADA = 8   # segundos entre regeneraciones, como mucho
+
+def _excel_worker():
+    while True:
+        _excel_pendiente.wait()      # dormido hasta que haya algo que guardar
+        _excel_pendiente.clear()
+        sync_excel()
+        time.sleep(SYNC_CADA)        # agrupa las ventas de estos segundos en una sola
+
 def sync_excel_async():
-    threading.Thread(target=sync_excel, daemon=True).start()
+    _excel_pendiente.set()
 
 # ---------------------------------------------------------------- respaldos (RG-04)
 
@@ -1232,13 +1252,18 @@ def scan():
         return jsonify(result="anulado", ticket=ticket_public(t))
     if t["status"] == "used":
         return jsonify(result="usado", used_at=t["used_at"], ticket=ticket_public(t))
-    # primer escaneo → marcar ingreso (condición de carrera cubierta por WHERE status='active')
+    # Primer escaneo → marcar ingreso. El WHERE status='active' hace que solo UNA de
+    # dos peticiones simultáneas cambie la fila; el desempate es cuántas filas tocó
+    # ESTA petición. Antes se comparaba used_at, pero esa marca tiene precisión de
+    # SEGUNDOS: dos copias escaneadas en el mismo segundo daban la misma hora, las
+    # dos creían haber ganado y ENTRABAN LAS DOS.
     when = now_iso()
-    db.execute("UPDATE tickets SET status='used', used_at=? WHERE id=? AND status='active'",
-               (when, t["id"]))
+    cur = db.execute("UPDATE tickets SET status='used', used_at=? WHERE id=? AND status='active'",
+                     (when, t["id"]))
+    gane = cur.rowcount == 1
     db.commit()
     t2 = db.execute("SELECT * FROM tickets WHERE id=?", (t["id"],)).fetchone()
-    if t2["used_at"] != when:   # otro escáner ganó la carrera por milésimas
+    if not gane:   # otro escáner llegó primero por milésimas
         return jsonify(result="usado", used_at=t2["used_at"], ticket=ticket_public(t2))
     sync_excel_async()
     return jsonify(result="valido", ticket=ticket_public(t2))
@@ -2238,6 +2263,7 @@ def static_files(path):
 init_db()
 sync_excel()
 threading.Thread(target=backup_loop, daemon=True).start()
+threading.Thread(target=_excel_worker, daemon=True).start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8756"))
