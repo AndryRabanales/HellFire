@@ -225,12 +225,11 @@ function exitGroupMode() {
 
 function renderGroupPriceBar() {
   const g = CATALOG.group;
-  const total = g.savings_cents * GROUP_SIZE / 100;
+  // el grupo ya no lleva descuento: van a precio normal y el beneficio es la botella
   $('#group-price-bar').innerHTML = `
     <div class="gp-line">Precio por boleto · grupo de ${GROUP_SIZE}</div>
-    <div class="gp-price">${fmtMoney(g.group_price_cents / 100)}
-      <span style="font-size:13px;color:var(--cream-45);text-decoration:line-through;margin-left:6px">${fmtMoney(g.normal_price_cents / 100)}</span></div>
-    <div class="gp-save">Ahorran ${fmtMoney(total)} en total (${fmtMoney(g.savings_cents / 100)} c/u)</div>`;
+    <div class="gp-price">${fmtMoney(g.group_price_cents / 100)}</div>
+    <div class="gp-save">Total ${fmtMoney(g.group_price_cents * GROUP_SIZE / 100)} · el representante se lleva la botella</div>`;
 }
 
 // cada integrante va en su propia tarjeta (borde + ficha numerada), para que
@@ -300,13 +299,12 @@ function showGroupResult(r) {
     });
   });
   const totalFinal = r.tickets.reduce((s, t) => s + t.price, 0);
-  const totalSavings = r.savings * r.size;
   $('#group-result-bar').classList.remove('hidden');
   $('#group-result-bar').classList.add('done');
   $('#group-result-bar').innerHTML = `
     <div class="gp-line">¡Listo! Grupo de ${r.size} generado ✓</div>
     <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
-    <div class="gp-save">Ahorraron ${fmtMoney(totalSavings)} en total (${fmtMoney(r.savings)} c/u)</div>`;
+    <div class="gp-save">No olvides la botella para ${esc(r.representative || 'el representante')}</div>`;
   $('#f-hint').textContent = 'Descarga cada boleto abajo';
   $('#btn-generate-group').classList.add('hidden');
   $('#btn-group-back').classList.add('hidden');
@@ -526,7 +524,6 @@ $('#btn-logout-1').addEventListener('click', logout);
 $('#btn-logout-2').addEventListener('click', logout);
 $('#btn-generate').addEventListener('click', generate);
 $('#btn-generate-group').addEventListener('click', generateGroup);
-$('#btn-group-5').addEventListener('click', () => enterGroupMode(5));
 $('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
 $('#btn-group-back').addEventListener('click', exitGroupMode);
 $('#btn-group-done').addEventListener('click', exitGroupMode);

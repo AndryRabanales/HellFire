@@ -147,7 +147,9 @@ function dibujarPrecio(ctx, ticket, x, y) {
     ctx.fillStyle = 'rgba(255,150,80,.5)';
     ctx.fillText(fase, px, y);
   };
-  if (ticket.group_size && ticket.normal_price) {
+  // el tachado solo tiene sentido si de verdad hubo descuento (hoy los grupos van a
+  // precio normal, así que caen en el caso simple de abajo)
+  if (ticket.group_size && ticket.normal_price > ticket.price) {
     const normal = fmtMoney(ticket.normal_price), pagado = fmtMoney(ticket.price);
     ctx.font = '600 17px "Space Grotesk", monospace';
     ctx.fillStyle = 'rgba(246,241,231,.38)';

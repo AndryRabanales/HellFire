@@ -263,6 +263,20 @@ CREATE TABLE IF NOT EXISTS audit_log (
   detail TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS seller_payments (
+  -- cada entrega de dinero del vendedor a su admin. Se guarda el detalle completo
+  -- para poder demostrarle después cómo fue pagando y cuánto se llevó de comisión.
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  seller_id INTEGER NOT NULL,
+  seller_name TEXT NOT NULL,          -- congelado, se conserva si borran al vendedor
+  amount_cents INTEGER NOT NULL,      -- abono: cuánto de su deuda se salda
+  commission_cents INTEGER NOT NULL,  -- lo que el vendedor se queda de comisión
+  cash_cents INTEGER NOT NULL,        -- efectivo que entregó = abono - comisión
+  commission_pct REAL NOT NULL,       -- % con el que se calculó (congelado)
+  note TEXT,
+  created_by TEXT,                    -- admin que lo registró
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS expenses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,             -- ej. Local, Alcohol, DJ, Seguridad
@@ -284,7 +298,6 @@ DEFAULT_SETTINGS = {
     "admin_session_minutes": "480",
     "ranking_winners": "3",
     "ranking_prizes": json.dumps([1000, 500, 250]),
-    "group_discount_pct": "10",   # % de descuento para grupos de 5 y 10 (solo Externo)
     # Flyers por tipo de boleto: UADY, Externo, VIP, Grupo de 5 y Grupo de 10. Cada uno
     # con su imagen (base64 en la BD), posición y zoom. "gen" es el flyer "General" de
     # antes del cambio y sigue de respaldo (UADY/Externo caían ahí); las claves sin
@@ -299,6 +312,7 @@ DEFAULT_SETTINGS = {
     "flyer_data_grupo10": "", "flyer_mime_grupo10": "", "flyer_focus_grupo10": "", "flyer_scale_grupo10": "",
     # Ultra VIP: en pruebas de diseño, aún no es un tipo de boleto vendible (oculto en las boleteras)
     "flyer_data_ultravip": "", "flyer_mime_ultravip": "", "flyer_focus_ultravip": "", "flyer_scale_ultravip": "",
+    "seller_commission_pct": "10",   # % de comisión del vendedor sobre lo que entrega
     "max_login_attempts": "8",
     "lockout_minutes": "10",
 }
@@ -357,27 +371,6 @@ def effective_price(db, type_row):
     if ph:
         return ph["price_cents"], ph["name"]
     return type_row["price_cents"], None
-
-def group_pct_now(db, externo_row):
-    """% de descuento de grupo vigente HOY.
-
-    Sale de la fase de precio activa del Externo, para que el descuento viaje junto
-    con el precio: la brecha UADY-Externo es fija ($25) pero un % crece en pesos al
-    subir los precios, así que si no bajara por fase, el boleto de grupo terminaría
-    más barato que el de UADY. Si no hay fase vigente (o esa fase no trae %), se usa
-    el valor de Ajustes, que es el que aplica a la fase inicial."""
-    def limpio(v, por_defecto=10):
-        try:
-            return max(1, min(90, int(v)))
-        except (TypeError, ValueError):
-            return por_defecto
-    hoy = now_dt().strftime("%Y-%m-%d")
-    ph = db.execute("""SELECT group_pct FROM price_phases WHERE type_id=? AND starts_on<=?
-                       ORDER BY starts_on DESC, id DESC LIMIT 1""",
-                    (externo_row["id"], hoy)).fetchone()
-    if ph and ph["group_pct"] is not None:
-        return limpio(ph["group_pct"])
-    return limpio(setting(db, "group_discount_pct"))
 
 def next_phase(db, type_row):
     """La próxima fase cuya fecha aún NO llegó (el siguiente cambio de precio).
@@ -969,13 +962,14 @@ def catalog():
                       "next_phase": next_phase(db, r)})
     facs = [dict(r) for r in db.execute(
         "SELECT id, name FROM faculties WHERE active=1 ORDER BY name").fetchall()]
-    # info del plan de grupos (5/10): solo aplica al tipo Externo. El % lo manda la
-    # fase vigente (ver group_pct_now), no un valor fijo.
+    # Plan de grupo (solo de 10, solo boletos Externo). YA NO LLEVA DESCUENTO: el
+    # beneficio del grupo es la botella del representante, no el precio. Lo que antes
+    # era el descuento ahora se le paga al vendedor como comisión.
     externo = next((t for t in types if t["name"] == "Externo"), None)
     group_info = None
     if externo and externo["price_cents"] > 0:
-        group_pct = group_pct_now(db, externo)
-        group_price = round(externo["price_cents"] * (100 - group_pct) / 100)
+        group_pct = 0
+        group_price = externo["price_cents"]
         group_info = {"type_id": externo["id"], "pct": group_pct,
                       "normal_price_cents": externo["price_cents"],
                       "group_price_cents": group_price,
@@ -1114,8 +1108,8 @@ def create_group():
     db = get_db()
     b = request.json or {}
     size = b.get("size")
-    if size not in (5, 10):
-        return jsonify(error="El grupo debe ser de exactamente 5 o 10 integrantes"), 400
+    if size != 10:
+        return jsonify(error="El grupo debe ser de exactamente 10 integrantes"), 400
     names = b.get("names") or []
     if not isinstance(names, list) or len(names) != size:
         return jsonify(error=f"Escribe los {size} nombres del grupo"), 400
@@ -1135,7 +1129,7 @@ def create_group():
     price_now, phase_name = effective_price(db, tt)
     if price_now <= 0:
         return jsonify(error="El precio de Externo aún no está configurado"), 400
-    pct = group_pct_now(db, tt)   # el % de la fase vigente
+    pct = 0   # el grupo ya no tiene descuento: su beneficio es la botella
     group_price = round(price_now * (100 - pct) / 100)
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
     gcur = db.execute("INSERT INTO groups(size, names, representative, seller_id, seller_name, created_at) "
@@ -1468,12 +1462,6 @@ def create_phase_all():
     name = str(b.get("name", "")).strip()
     date = str(b.get("starts_on", "")).strip()
     prices = b.get("prices") or {}
-    # % de descuento de grupo de esta fase (opcional: si no viene, hereda el de Ajustes)
-    gp = b.get("group_pct")
-    try:
-        gp = max(1, min(90, int(gp))) if gp not in (None, "") else None
-    except (TypeError, ValueError):
-        gp = None
     if not name or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         return jsonify(error="Falta el nombre o la fecha (AAAA-MM-DD) de la fase"), 400
     db = get_db()
@@ -1491,8 +1479,8 @@ def create_phase_all():
             return jsonify(error=f"Pon un precio válido para {t['name']}"), 400
         parsed.append((t["id"], cents))
     for tid, cents in parsed:
-        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, group_pct) "
-                   "VALUES(?,?,?,?,?)", (tid, name, cents, date, gp))
+        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on) "
+                   "VALUES(?,?,?,?)", (tid, name, cents, date))
     audit(db, s["admin"]["username"], "precio",
           f"Creó la fase '{name}' desde {date} (todos los tipos)")
     db.commit()
@@ -1629,42 +1617,139 @@ def list_sellers():
         out.append(d)
     return jsonify(sellers=out)
 
-@app.post("/api/admin/sellers/<int:sid>/paid")
-def set_seller_paid(sid):
-    """El admin dueño registra cuánto dinero le ha entregado su vendedor."""
+def comision_pct(db):
+    try:
+        return max(0.0, min(100.0, float(setting(db, "seller_commission_pct") or 10)))
+    except (TypeError, ValueError):
+        return 10.0
+
+def vendido_cents(db, sid):
+    return db.execute("""SELECT COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS c
+                         FROM tickets WHERE seller_id=?""", (sid,)).fetchone()["c"]
+
+def pagos_de(db, sid):
+    return db.execute("SELECT * FROM seller_payments WHERE seller_id=? ORDER BY id",
+                      (sid,)).fetchall()
+
+def _pago_publico(p, saldo_despues):
+    return {"id": p["id"], "amount": money(p["amount_cents"]),
+            "commission": money(p["commission_cents"]), "cash": money(p["cash_cents"]),
+            "commission_pct": p["commission_pct"], "note": p["note"] or "",
+            "created_by": p["created_by"], "created_at": p["created_at"],
+            "balance_after": money(saldo_despues)}
+
+def estado_cuenta(db, sid):
+    """Cuenta completa del vendedor: cuánto vendió, cuánto ha abonado, cuánto se ha
+    llevado de comisión y el saldo tras CADA pago (para poder mostrarle el recorrido)."""
+    vendido = vendido_cents(db, sid)
+    filas = pagos_de(db, sid)
+    abonado = com = efectivo = 0
+    historial = []
+    for p in filas:
+        abonado += p["amount_cents"]
+        com += p["commission_cents"]
+        efectivo += p["cash_cents"]
+        historial.append(_pago_publico(p, vendido - abonado))
+    historial.reverse()          # el más reciente arriba
+    return {"sold": money(vendido), "settled_amount": money(abonado),
+            "commission_total": money(com), "cash_total": money(efectivo),
+            "balance": money(vendido - abonado),
+            "settled": vendido > 0 and abonado >= vendido,
+            "commission_pct": comision_pct(db), "payments": historial}
+
+@app.get("/api/admin/sellers/<int:sid>/payments")
+def list_seller_payments(sid):
+    """Historial de pagos de un vendedor. Lo ven TODOS los admins (transparencia),
+    igual que sus ventas; solo su admin dueño puede registrar o borrar."""
     s = require_admin()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    # hidden=0: el vendedor de invitados no se puede tocar desde el panel (si se
-    # borrara, sus boletos viejos reaparecerían como venta en el resumen)
+    sel = db.execute("SELECT * FROM sellers WHERE id=? AND hidden=0", (sid,)).fetchone()
+    if not sel:
+        return jsonify(error="no existe"), 404
+    out = estado_cuenta(db, sid)
+    out["seller_name"] = sel["name"]
+    out["can_edit"] = owns_seller(s["admin"], sel)
+    return jsonify(**out)
+
+@app.post("/api/admin/sellers/<int:sid>/payments")
+def add_seller_payment(sid):
+    """Registra UNA entrega de dinero del vendedor.
+
+    El admin captura el ABONO (cuánto de la deuda se salda). De ahí sale sola la
+    comisión que el vendedor se queda y el efectivo que debe entregar:
+        abono $20,000 · comisión 10% = $2,000 · efectivo a recibir $18,000
+    Cada pago queda con su fecha, para poder demostrarle después cómo fue pagando."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    # hidden=0: el vendedor de invitados no se toca desde el panel
     sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0 AND hidden=0",
                      (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
     if not owns_seller(s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede registrar pagos de este vendedor"), 403
+    b = request.json or {}
     try:
-        paid_cents = int(round(float((request.json or {}).get("paid", 0)) * 100))
+        abono = int(round(float(b.get("amount", 0)) * 100))
     except (TypeError, ValueError):
         return jsonify(error="Monto inválido"), 400
-    if paid_cents < 0:
-        return jsonify(error="El monto no puede ser negativo"), 400
-    total = db.execute("""SELECT COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS c
-                          FROM tickets WHERE seller_id=?""", (sid,)).fetchone()["c"]
-    # nunca se puede registrar un pago mayor a lo vendido (ni pagos si no ha vendido nada)
-    if total <= 0 and paid_cents > 0:
+    if abono <= 0:
+        return jsonify(error="El abono debe ser mayor a cero"), 400
+    vendido = vendido_cents(db, sid)
+    ya = sum(p["amount_cents"] for p in pagos_de(db, sid))
+    if vendido <= 0:
         return jsonify(error="Este vendedor aún no ha vendido nada; no hay pago que registrar"), 400
-    if paid_cents > total:
-        return jsonify(error=f"El pago no puede superar lo vendido (${total/100:,.2f})"), 400
-    db.execute("UPDATE sellers SET paid_cents=? WHERE id=?", (paid_cents, sid))
-    estado = "COMPLETADO" if total > 0 and paid_cents >= total else "pendiente"
+    if ya + abono > vendido:
+        falta = (vendido - ya) / 100
+        return jsonify(error=f"Se pasa de lo que debe. Su saldo pendiente es ${falta:,.2f}"), 400
+    pct = comision_pct(db)
+    comision = int(round(abono * pct / 100))
+    efectivo = abono - comision
+    db.execute("""INSERT INTO seller_payments
+        (seller_id, seller_name, amount_cents, commission_cents, cash_cents,
+         commission_pct, note, created_by, created_at)
+        VALUES(?,?,?,?,?,?,?,?,?)""",
+        (sid, sel["name"], abono, comision, efectivo, pct,
+         str(b.get("note", "")).strip()[:120] or None, s["admin"]["username"], now_iso()))
+    # paid_cents queda como espejo del total abonado, para que el resumen y la
+    # lista de vendedores (que ya lo usaban) sigan cuadrando sin cambios
+    db.execute("UPDATE sellers SET paid_cents=? WHERE id=?", (ya + abono, sid))
+    saldo = vendido - (ya + abono)
     audit(db, s["admin"]["username"], "pago",
-          f"Registró ${paid_cents/100:,.2f} recibidos de '{sel['name']}' "
-          f"(vendido ${total/100:,.2f} → {estado})")
+          f"Recibió ${efectivo/100:,.2f} de '{sel['name']}' (abono ${abono/100:,.2f}, "
+          f"comisión ${comision/100:,.2f}) · saldo ${saldo/100:,.2f}")
     db.commit()
-    return jsonify(ok=True, paid=money(paid_cents), total=money(total),
-                   settled=total > 0 and paid_cents >= total)
+    out = estado_cuenta(db, sid)
+    out["seller_name"] = sel["name"]
+    out["can_edit"] = True
+    return jsonify(**out)
+
+@app.delete("/api/admin/payments/<int:pid>")
+def delete_seller_payment(pid):
+    """Borra un pago mal capturado. Queda registrado en Movimientos: el historial
+    debe poder corregirse, pero nunca en silencio."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    p = db.execute("SELECT * FROM seller_payments WHERE id=?", (pid,)).fetchone()
+    if not p:
+        return jsonify(error="no existe"), 404
+    sel = db.execute("SELECT * FROM sellers WHERE id=?", (p["seller_id"],)).fetchone()
+    if sel is not None and not owns_seller(s["admin"], sel):
+        return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede borrar pagos de este vendedor"), 403
+    db.execute("DELETE FROM seller_payments WHERE id=?", (pid,))
+    total = sum(x["amount_cents"] for x in pagos_de(db, p["seller_id"]))
+    db.execute("UPDATE sellers SET paid_cents=? WHERE id=?", (total, p["seller_id"]))
+    audit(db, s["admin"]["username"], "pago",
+          f"Borró un pago de '{p['seller_name']}': abono ${p['amount_cents']/100:,.2f} "
+          f"del {p['created_at'][:10]}")
+    db.commit()
+    return jsonify(ok=True)
 
 @app.post("/api/admin/sellers")
 def create_seller():
@@ -1966,7 +2051,7 @@ def get_settings():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     out = {k: setting(db, k) for k in ["event_name", "event_subtitle", "event_date_text",
-                                       "folio_start", "group_discount_pct"]}
+                                       "folio_start"]}
     out.update(flyer_info(db))
     return jsonify(out)
 
@@ -1997,13 +2082,6 @@ def save_settings():
             fs = 1
         set_setting(db, "folio_start", str(fs))
         changed.append(f"folio inicial {fs:04d}")
-    if "group_discount_pct" in b:
-        try:
-            pct = max(1, min(90, int(float(b["group_discount_pct"]))))
-        except (TypeError, ValueError):
-            pct = 10
-        set_setting(db, "group_discount_pct", str(pct))
-        changed.append(f"descuento de grupo {pct}%")
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
     for v in FLYER_VARIANTS:
         if f"flyer_focus_{v}" in b:
