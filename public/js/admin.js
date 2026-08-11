@@ -581,49 +581,88 @@ async function paySeller(s) {
 }
 
 function pintaCuenta(s, c) {
+  // Lo que de verdad importa: de lo que vendió, una parte se la queda de comisión y
+  // el RESTO es el efectivo que debe entregar. Se dice con palabras, no con cuatro
+  // números sueltos que hay que interpretar.
+  const comisionTotal = c.sold * c.commission_pct / 100;
+  const debeEntregar = c.sold - comisionTotal;
+  const faltaEntregar = debeEntregar - c.cash_total;
+  const avance = c.sold > 0 ? Math.round(c.settled_amount / c.sold * 100) : 0;
+
   const filas = c.payments.length ? c.payments.map(p => `
-    <div style="padding:9px 0;border-bottom:1px solid rgba(255,120,40,.1)">
+    <div style="padding:11px 0;border-bottom:1px solid rgba(255,120,40,.12)">
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px">
-        <div style="font:800 15px 'Space Grotesk';color:var(--ember-soft)">${fmtMoney(p.amount)}</div>
+        <div style="font:800 16px 'Space Grotesk';color:var(--cream)">${fmtMoney(p.cash)}
+          <span style="font:600 10px Manrope;color:var(--cream-45)"> en efectivo</span></div>
         <div class="muted" style="font-size:10px">${fmtDate(p.created_at)}</div>
       </div>
-      <div class="muted" style="font-size:11.5px;margin-top:3px;line-height:1.6">
-        se quedó <b style="color:#ff8a4d">${fmtMoney(p.commission)}</b> de comisión ·
-        entregó <b style="color:var(--cream)">${fmtMoney(p.cash)}</b> ·
-        quedó debiendo <b style="color:${p.balance_after > 0 ? 'var(--danger)' : 'var(--ok)'}">${fmtMoney(p.balance_after)}</b>
+      <div class="muted" style="font-size:11.5px;margin-top:4px;line-height:1.6">
+        Cubrió <b style="color:var(--ember-soft)">${fmtMoney(p.amount)}</b> de su cuenta
+        (se qued\u00f3 <b style="color:#f3d27a">${fmtMoney(p.commission)}</b> de comisi\u00f3n)<br>
+        Despu\u00e9s de este pago le quedaban debiendo
+        <b style="color:${p.balance_after > 0 ? 'var(--danger)' : 'var(--ok)'}">${fmtMoney(p.balance_after)}</b>
       </div>
-      <div class="row" style="justify-content:space-between;margin-top:3px">
-        <div class="muted" style="font-size:10px">${p.note ? esc(p.note) + ' · ' : ''}registró ${esc(p.created_by || '')}</div>
+      <div class="row" style="justify-content:space-between;margin-top:4px">
+        <div class="muted" style="font-size:10px">${p.note ? esc(p.note) + ' \u00b7 ' : ''}registr\u00f3 ${esc(p.created_by || '')}</div>
         ${c.can_edit ? `<button class="linkout" style="font-size:10px;padding:2px 0" data-del="${p.id}">borrar</button>` : ''}
       </div>
-    </div>`).join('') : '<div class="muted" style="font-size:12px;padding:10px 0">Todavía no ha entregado nada.</div>';
+    </div>`).join('') : '<div class="muted" style="font-size:12px;padding:12px 0">Todav\u00eda no ha entregado nada.</div>';
 
   modal(`<div class="h1" style="font-size:18px">Cuenta de ${esc(s.name)}</div>
-    <div class="stats mt12" style="grid-template-columns:1fr 1fr">
-      <div class="stat"><div class="sk">Vendió</div><div class="sv">${fmtMoney(c.sold)}</div></div>
-      <div class="stat" style="border-color:${c.balance > 0 ? 'rgba(232,112,106,.4)' : 'rgba(126,226,168,.4)'}">
-        <div class="sk">Saldo pendiente</div>
-        <div class="sv" style="color:${c.balance > 0 ? 'var(--danger)' : 'var(--ok)'}">${fmtMoney(c.balance)}</div></div>
-      <div class="stat"><div class="sk">Efectivo recibido</div><div class="sv">${fmtMoney(c.cash_total)}</div></div>
-      <div class="stat"><div class="sk">Su comisión (${c.commission_pct}%)</div>
-        <div class="sv" style="color:#ff8a4d">${fmtMoney(c.commission_total)}</div></div>
+
+    <div class="card mt12" style="background:rgba(255,110,30,.07)">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div class="muted" style="font-size:12px">Vendi\u00f3 en boletos</div>
+        <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${fmtMoney(c.sold)}</div>
+      </div>
+      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
+        <div class="muted" style="font-size:12px">Se queda de comisi\u00f3n (${c.commission_pct}%)</div>
+        <div style="font:700 15px 'Space Grotesk';color:#f3d27a">\u2212 ${fmtMoney(comisionTotal)}</div>
+      </div>
+      <div style="border-top:1px solid rgba(255,120,40,.25);margin:10px 0 8px"></div>
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div style="font:700 12.5px Manrope;color:var(--cream)">Debe entregarte en total</div>
+        <div style="font:800 22px 'Space Grotesk';color:var(--ember)">${fmtMoney(debeEntregar)}</div>
+      </div>
     </div>
 
-    ${c.can_edit && c.balance > 0 ? `
-    <div class="card mt16">
+    <div class="card mt8" style="border-color:${faltaEntregar > 0.005 ? 'rgba(232,112,106,.4)' : 'rgba(126,226,168,.45)'}">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div class="muted" style="font-size:12px">Ya te entreg\u00f3</div>
+        <div style="font:800 18px 'Space Grotesk';color:var(--cream)">${fmtMoney(c.cash_total)}</div>
+      </div>
+      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
+        <div style="font:700 12.5px Manrope;color:${faltaEntregar > 0.005 ? 'var(--danger)' : 'var(--ok)'}">
+          ${faltaEntregar > 0.005 ? 'Le falta entregarte' : 'Cuenta saldada \u2713'}</div>
+        <div style="font:800 20px 'Space Grotesk';color:${faltaEntregar > 0.005 ? 'var(--danger)' : 'var(--ok)'}">
+          ${fmtMoney(Math.max(0, faltaEntregar))}</div>
+      </div>
+      <div style="height:7px;border-radius:99px;background:rgba(255,255,255,.07);margin-top:11px;overflow:hidden">
+        <div style="height:100%;width:${avance}%;border-radius:99px;background:linear-gradient(90deg,#ff8a3d,#e8480d)"></div>
+      </div>
+      <div class="muted" style="font-size:10.5px;margin-top:6px">${avance}% de su cuenta cubierto</div>
+    </div>
+
+    ${c.can_edit && c.balance > 0.005 ? `
+    <div class="card mt12">
       <div class="label">Registrar una entrega</div>
-      <div class="muted" style="margin-bottom:8px;font-size:11px">Escribe cuánto se le baja de la deuda. La comisión y el efectivo salen solos.</div>
-      <input class="input" id="pg-amount" type="number" min="0" max="${c.balance}" step="0.01" placeholder="Abono a su cuenta ($)">
+      <div class="muted" style="margin-bottom:8px;font-size:11px">\u00bfCu\u00e1nto de su cuenta est\u00e1 cubriendo con este pago? La comisi\u00f3n y el efectivo salen solos.</div>
+      <input class="input" id="pg-amount" type="number" min="0" max="${c.balance}" step="0.01" placeholder="Cubre de su cuenta ($)">
+      <div class="row mt8" style="gap:6px;flex-wrap:wrap">
+        <button class="btn sm ghost" id="pg-todo" style="width:auto">Liquida todo (${fmtMoney(c.balance)})</button>
+      </div>
       <input class="input mt8" id="pg-note" placeholder="Nota (ej. corte semana 1)" maxlength="120">
       <div class="mt8" id="pg-calc" style="font:600 12px Manrope;color:var(--cream-60);line-height:1.7"></div>
       <div class="err mt8" id="pg-err"></div>
       <button class="btn mt12" id="pg-save">Registrar entrega</button>
-    </div>` : (c.balance <= 0
-      ? '<div class="okmsg mt16">Cuenta saldada ✓ — ya no debe nada</div>'
-      : `<div class="muted mt16" style="font-size:11px">Solo ${esc(s.owner_admin_name || 'su admin')} puede registrar pagos de este vendedor.</div>`)}
+    </div>` : (c.balance <= 0.005 ? '' :
+      `<div class="muted mt12" style="font-size:11px">Solo ${esc(s.owner_admin_name || 'su admin')} puede registrar pagos de este vendedor.</div>`)}
 
-    <div class="label mt16">Historial de pagos</div>
-    <div style="max-height:38dvh;overflow:auto">${filas}</div>
+    <div class="row mt16" style="justify-content:space-between;align-items:center">
+      <div class="label" style="margin:0">Historial de pagos</div>
+      ${c.payments.length ? '<button class="btn sm ghost" id="pg-dl" style="width:auto">Descargar</button>' : ''}
+    </div>
+    <div style="max-height:34dvh;overflow:auto">${filas}</div>
     <button class="btn ghost mt16" onclick="closeModal()">Cerrar</button>`);
 
   const amt = $('#pg-amount');
@@ -633,24 +672,27 @@ function pintaCuenta(s, c) {
       if (!v || v <= 0) { $('#pg-calc').innerHTML = ''; return; }
       const com = Math.round(v * c.commission_pct) / 100;
       $('#pg-calc').innerHTML =
-        `Se queda <b style="color:#ff8a4d">${fmtMoney(com)}</b> de comisión<br>` +
-        `Debe entregarte <b style="color:var(--cream)">${fmtMoney(v - com)}</b> en efectivo<br>` +
-        `Le quedarían debiendo <b style="color:var(--cream)">${fmtMoney(c.balance - v)}</b>`;
+        `Se queda <b style="color:#f3d27a">${fmtMoney(com)}</b> de comisi\u00f3n<br>` +
+        `<b style="color:var(--ember)">Debe darte ${fmtMoney(v - com)}</b> en efectivo<br>` +
+        `Le quedar\u00eda debiendo <b style="color:var(--cream)">${fmtMoney(c.balance - v)}</b> de su cuenta`;
     };
     amt.addEventListener('input', recalcular);
+    $('#pg-todo').onclick = () => { amt.value = c.balance; recalcular(); };
     $('#pg-save').onclick = async () => {
       const v = parseFloat(amt.value || '0');
-      if (isNaN(v) || v <= 0) { $('#pg-err').textContent = 'Escribe cuánto abona'; return; }
+      if (isNaN(v) || v <= 0) { $('#pg-err').textContent = 'Escribe cu\u00e1nto cubre'; return; }
       if (v > c.balance) { $('#pg-err').textContent = `Se pasa: solo debe ${fmtMoney(c.balance)}`; return; }
       try {
         const r = await API.post(`/api/admin/sellers/${s.id}/payments`,
           { amount: v, note: $('#pg-note').value.trim() });
-        toast(r.balance <= 0 ? `${s.name}: cuenta SALDADA ✓` : `Registrado · le faltan ${fmtMoney(r.balance)}`);
-        pintaCuenta(s, r);       // se queda abierto con el historial ya actualizado
+        toast(r.balance <= 0.005 ? `${s.name}: cuenta SALDADA \u2713` : `Registrado \u00b7 le faltan ${fmtMoney(r.balance)}`);
+        pintaCuenta(s, r);
         loadSellers();
       } catch (e) { if (!guard(e)) $('#pg-err').textContent = e.message; }
     };
   }
+  const dl = $('#pg-dl');
+  if (dl) dl.onclick = () => descargarEstadoCuenta(s, c);
   $$('#modal [data-del]').forEach(b => {
     b.onclick = async () => {
       const ok = await confirmModal({ title: 'Borrar este pago',
@@ -659,12 +701,101 @@ function pintaCuenta(s, c) {
       if (!ok) { paySeller(s); return; }
       try {
         await API.del(`/api/admin/payments/${b.dataset.del}`);
-        const c2 = await API.get(`/api/admin/sellers/${s.id}/payments`);
-        pintaCuenta(s, c2);
+        pintaCuenta(s, await API.get(`/api/admin/sellers/${s.id}/payments`));
         loadSellers();
       } catch (e) { if (!guard(e)) toast(e.message); }
     };
   });
+}
+
+/* Estado de cuenta como IMAGEN, para mandárselo al vendedor por WhatsApp cuando
+   pregunte cómo fue pagando. Una imagen se ve igual en cualquier teléfono y no
+   depende de que sepan abrir un Excel. */
+async function descargarEstadoCuenta(s, c) {
+  await document.fonts.ready;
+  const W = 900, pad = 46;
+  const filas = c.payments.length || 1;
+  const H = 470 + filas * 96;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const x = cv.getContext('2d');
+
+  x.fillStyle = '#0b0503'; x.fillRect(0, 0, W, H);
+  const g = x.createRadialGradient(W / 2, -60, 30, W / 2, 260, W);
+  g.addColorStop(0, 'rgba(255,110,30,.20)'); g.addColorStop(1, 'rgba(255,110,30,0)');
+  x.fillStyle = g; x.fillRect(0, 0, W, 360);
+
+  x.textAlign = 'left';
+  x.fillStyle = '#ff7a2e'; x.font = '800 30px Cinzel, serif';
+  x.fillText(EV && EV.event_name ? EV.event_name : 'HELLFIRE', pad, 62);
+  x.fillStyle = 'rgba(255,150,80,.65)'; x.font = '600 13px "Space Grotesk", monospace';
+  x.fillText('ESTADO DE CUENTA DEL VENDEDOR', pad, 86);
+  x.fillStyle = '#f6f1e7'; x.font = '800 34px Manrope, sans-serif';
+  x.fillText(s.name, pad, 134);
+
+  const comisionTotal = c.sold * c.commission_pct / 100;
+  const debeEntregar = c.sold - comisionTotal;
+  const falta = debeEntregar - c.cash_total;
+
+  let y = 186;
+  const linea = (etq, val, color, grande) => {
+    x.fillStyle = 'rgba(246,241,231,.6)'; x.font = '600 15px Manrope, sans-serif';
+    x.fillText(etq, pad, y);
+    x.textAlign = 'right';
+    x.fillStyle = color; x.font = `800 ${grande ? 26 : 20}px "Space Grotesk", monospace`;
+    x.fillText(val, W - pad, y + (grande ? 3 : 0));
+    x.textAlign = 'left';
+    y += grande ? 46 : 36;
+  };
+  linea('Vendió en boletos', fmtMoney(c.sold), '#f6f1e7');
+  linea(`Su comisión (${c.commission_pct}%)`, '− ' + fmtMoney(comisionTotal), '#f3d27a');
+  x.strokeStyle = 'rgba(255,120,40,.3)'; x.lineWidth = 1;
+  x.beginPath(); x.moveTo(pad, y - 22); x.lineTo(W - pad, y - 22); x.stroke();
+  linea('Debe entregar en total', fmtMoney(debeEntregar), '#ff7a2e', true);
+  linea('Ya entregó', fmtMoney(c.cash_total), '#f6f1e7');
+  linea(falta > 0.005 ? 'Le falta entregar' : 'Cuenta saldada',
+        fmtMoney(Math.max(0, falta)), falta > 0.005 ? '#e8706a' : '#7ee2a8', true);
+
+  y += 12;
+  x.fillStyle = 'rgba(255,150,80,.65)'; x.font = '600 13px "Space Grotesk", monospace';
+  x.fillText('CÓMO FUE PAGANDO', pad, y); y += 30;
+
+  if (!c.payments.length) {
+    x.fillStyle = 'rgba(246,241,231,.45)'; x.font = '500 16px Manrope, sans-serif';
+    x.fillText('Todavía no ha entregado nada.', pad, y);
+  }
+  // del más viejo al más nuevo: se lee como una historia
+  [...c.payments].reverse().forEach((p, i) => {
+    x.fillStyle = i % 2 ? 'rgba(255,255,255,.028)' : 'rgba(255,255,255,.05)';
+    roundRect(x, pad, y - 4, W - pad * 2, 84, 14); x.fill();
+    x.fillStyle = '#f6f1e7'; x.font = '800 22px "Space Grotesk", monospace';
+    x.fillText(fmtMoney(p.cash), pad + 18, y + 30);
+    const w = x.measureText(fmtMoney(p.cash)).width;
+    x.fillStyle = 'rgba(246,241,231,.5)'; x.font = '600 13px Manrope, sans-serif';
+    x.fillText('en efectivo', pad + 26 + w, y + 30);
+    x.textAlign = 'right';
+    x.fillStyle = 'rgba(246,241,231,.55)'; x.font = '600 13px Manrope, sans-serif';
+    x.fillText(p.created_at.slice(0, 16).replace('T', ' '), W - pad - 18, y + 28);
+    x.textAlign = 'left';
+    x.fillStyle = 'rgba(246,241,231,.6)'; x.font = '500 13.5px Manrope, sans-serif';
+    x.fillText(`Cubrió ${fmtMoney(p.amount)} de su cuenta · comisión ${fmtMoney(p.commission)}` +
+               `  ·  quedó debiendo ${fmtMoney(p.balance_after)}`, pad + 18, y + 58);
+    y += 96;
+  });
+
+  x.fillStyle = 'rgba(246,241,231,.32)'; x.font = '500 12px Manrope, sans-serif';
+  x.fillText('Generado el ' + new Date().toLocaleString('es-MX'), pad, H - 20);
+
+  cv.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const slug = s.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'vendedor';
+    a.download = 'cuenta_' + slug + '.png';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 400);
+  }, 'image/png');
+  toast('Estado de cuenta descargado');
 }
 
 $('#sl-filter-admin').addEventListener('change', () => { _sigSellers = ''; loadSellers(); });
