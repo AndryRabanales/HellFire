@@ -401,10 +401,15 @@ function showSoloResult(t) {
       DOWNLOADED.add(t.id);
     } finally { b.disabled = false; }
   });
-  $('#solo-bar').innerHTML = `
-    <div class="gp-line">\u00a1Listo! Boleto generado \u2713</div>
-    <div class="gp-price">${fmtMoney(t.price)}</div>
-    <div class="gp-save">Desc\u00e1rgalo con el bot\u00f3n de arriba y p\u00e1saselo al comprador</div>`;
+  $('#solo-bar').outerHTML = `
+    <div class="doneblock" id="solo-bar">
+      <div class="db-ball">\u2713</div>
+      <div class="db-t">\u00a1Boleto generado!</div>
+      <div class="db-name">${esc(t.buyer_name)}</div>
+      <div class="db-meta">${esc(ticketTypeLabel(t))}${t.faculty_name ? ' \u00b7 ' + esc(t.faculty_name) : ''} \u00b7 ${fmtMoney(t.price)}</div>
+      <div class="db-hint">Toca el bot\u00f3n de descarga de arriba y p\u00e1sale la imagen al comprador.<br>
+        Queda guardado en tu historial por si lo necesitas despu\u00e9s.</div>
+    </div>`;
   $('#mode-individual').classList.add('hidden');
   $('#group-switch').classList.add('hidden');
   $('#solo-result').classList.remove('hidden');

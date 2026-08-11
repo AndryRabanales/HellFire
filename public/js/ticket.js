@@ -59,14 +59,19 @@ const _flyerCache = { uady: undefined, externo: undefined, vip: undefined, grupo
 function flyerVariantFor(ticket) {
   if (ticket.group_size === 5) return 'grupo5';
   if (ticket.group_size === 10) return 'grupo10';
+  // se compara contra el NOMBRE del tipo, para que un tipo nuevo que cree el admin
+  // (ej. "Ultra VIP") use su propio flyer en vez de caer en el de VIP o Externo
+  const n = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
+  if (n === 'ultravip') return 'ultravip';
+  if (n === 'uady') return 'uady';
   if (ticket.type_is_vip) return 'vip';
-  return ticket.type_name === 'UADY' ? 'uady' : 'externo';
+  return 'externo';
 }
-// etiqueta visible del tipo: la gente debe saber si es UADY, Externo, VIP o Grupo
+// Etiqueta visible: el NOMBRE REAL del tipo, tal cual lo escribió el admin. Antes
+// estaba fijo a UADY/Externo/VIP, así que un tipo nuevo salía mal etiquetado.
 function ticketTypeLabel(ticket) {
   if (ticket.group_size) return 'Grupo';
-  if (ticket.type_is_vip) return 'VIP';
-  return ticket.type_name === 'UADY' ? 'UADY' : 'Externo';
+  return ticket.type_name || 'General';
 }
 
 /* insignia del tipo de boleto: grupo y VIP llevan degradado (categorías especiales),
@@ -74,8 +79,9 @@ function ticketTypeLabel(ticket) {
 function ticketBadgeSpec(ticket) {
   if (ticket.group_size)
     return { text: 'GRUPO ' + ticket.group_size, grad: ['#ff7a4d', '#c81e3a'], textColor: '#fff3ee' };
-  if (ticket.type_is_vip)
-    return { text: '★ VIP', grad: ['#f3d27a', '#d9a53a'], textColor: '#3a1e00' };
+  if (ticket.type_is_vip)   // el nombre real, para que "Ultra VIP" no salga como "VIP"
+    return { text: '★ ' + (ticket.type_name || 'VIP').toUpperCase(),
+             grad: ['#f3d27a', '#d9a53a'], textColor: '#3a1e00' };
   return { text: ticketTypeLabel(ticket).toUpperCase(), ghost: true };
 }
 
