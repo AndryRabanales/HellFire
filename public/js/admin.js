@@ -199,7 +199,7 @@ async function loadTicketsTable(silent) {
     const estado = t.status === 'void'
       ? '<span class="badge void">ANULADO</span>'
       : t.status === 'used'
-        ? `<span class="badge used">INGRESÓ</span>${t.used_at ? `<div class="muted" style="font-size:9px;margin-top:3px">${esc(t.used_at.slice(11, 16))} h</div>` : ''}`
+        ? `<div><span class="badge used">INGRESÓ</span>${t.used_at ? `<div class="muted" style="font-size:9px;margin-top:3px">${esc(t.used_at.slice(11, 16))} h</div>` : ''}</div>`
         : '<span class="badge active">ACTIVO</span>';
     tr.innerHTML = `
       <td data-label="Folio" style="font-family:'Space Grotesk';color:var(--ember-soft)">${esc(t.folio)}</td>
@@ -207,7 +207,7 @@ async function loadTicketsTable(silent) {
       <td data-label="Facultad">${esc(t.faculty_name)}</td>
       <td data-label="Tipo">${esc(t.type_name)}</td>
       <td data-label="Precio" class="strike" style="font-family:'Space Grotesk'">${fmtMoney(t.price)}</td>
-      <td data-label="Vendedor">${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
+      <td data-label="Vendedor"><div>${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</div></td>
       <td data-label="Fecha" class="muted">${esc(t.created_at)}</td>
       <td data-label="Estado">${estado}</td>`;
     const td = document.createElement('td');
@@ -529,11 +529,11 @@ async function loadSellers(silent) {
           ? '<span class="badge active">COMPLETADO</span>'
           : `<b style="font-family:'Space Grotesk';color:var(--danger)">${fmtMoney(falta)}</b>`);
     tr.innerHTML = `
-      <td data-label="Vendedor" class="cell-name" style="font-weight:700"><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${adminLine}</td>
+      <td data-label="Vendedor" class="cell-name" style="font-weight:700"><div><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${adminLine}</div></td>
       <td data-label="Código">${s.deleted ? '<span class="muted">—</span>'
           : s.code ? `<span class="codechip">${esc(s.code)}</span>`
           : '<span class="muted" style="font-size:10px" title="Solo su admin puede verlo">🔒 privado</span>'}</td>
-      <td data-label="Vendido"><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></td>
+      <td data-label="Vendido"><div><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></div></td>
       <td data-label="Pagado" style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(s.paid)}</td>
       <td data-label="Faltante">${faltante}</td>
       <td data-label="Estado">${s.deleted ? '<span class="badge void">Eliminado</span>'
@@ -550,7 +550,7 @@ async function loadSellers(silent) {
         b.textContent = label; b.onclick = fn;
         td.appendChild(b);
       };
-      mk('$ Pago', () => paySeller(s));
+      mk('Cuenta', () => paySeller(s));
       mk('Editar', () => editSeller(s));
       mk(s.active ? 'Desactivar' : 'Reactivar', () => toggleSeller(s));
       mk('Eliminar', () => deleteSeller(s), 'danger');
@@ -652,6 +652,15 @@ function pintaCuenta(s, c) {
       <div class="muted" style="font-size:10.5px;margin-top:6px">${avance}% de su cuenta cubierto</div>
     </div>
 
+    ${c.payments.length ? `
+    <div class="row mt8" style="gap:7px">
+      <button class="btn sm ghost grow" id="pg-dl" style="display:inline-flex;align-items:center;justify-content:center;gap:7px">${DL_ICON} Guardar imagen</button>
+      <button class="btn sm ghost grow" id="pg-xls" style="display:inline-flex;align-items:center;justify-content:center;gap:7px">${DL_ICON} Excel</button>
+    </div>
+    <div class="muted" style="font-size:10.5px;margin-top:6px;text-align:center">
+      Para mandarle su estado de cuenta si pregunta c\u00f3mo fue pagando
+    </div>` : ''}
+
     ${c.can_edit && c.balance > 0.005 ? `
     <div class="card mt12">
       <div class="label">Registrar una entrega</div>
@@ -669,10 +678,7 @@ function pintaCuenta(s, c) {
 
     <div class="row mt16" style="justify-content:space-between;align-items:center">
       <div class="label" style="margin:0">Historial de pagos${c.payments.length ? ` (${c.payments.length})` : ''}</div>
-      ${c.payments.length ? `<div class="row" style="gap:6px">
-        <button class="btn sm ghost" id="pg-dl" style="width:auto">Imagen</button>
-        <button class="btn sm ghost" id="pg-xls" style="width:auto">Excel</button>
-      </div>` : ''}
+
     </div>
     <div class="scrolly" style="max-height:34dvh;overflow:auto">${filas}</div>
     <button class="btn ghost mt16" onclick="closeModal()">Cerrar</button>`);
