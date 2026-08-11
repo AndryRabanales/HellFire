@@ -95,7 +95,7 @@
         Exportar a Excel</button>
     </div>
     <div class="tablewrap mt8">
-      <table class="data cardsm"><thead><tr>
+      <table class="data"><thead><tr>
         <th>Folio</th><th>Comprador</th><th>Facultad</th><th>Tipo</th><th>Precio</th>
         <th>Vendedor</th><th>Fecha</th><th>Estado</th><th></th>
       </tr></thead><tbody id="bt-body"></tbody></table>
@@ -120,20 +120,18 @@
 
   <!-- ===== Vendedores (RF-82..88) ===== -->
   <section id="tab-vendedores" class="mt16 hidden">
-    <div class="card">
-      <div class="label">Nuevo vendedor</div>
-      <div class="row" style="flex-wrap:wrap;gap:8px">
-        <input class="input grow" id="sl-name" placeholder="Nombre del vendedor" style="min-width:180px;padding:12px">
-        <button class="btn sm" id="btn-sl-create" style="padding:13px 16px">Crear</button>
-      </div>
-      <div class="muted mt8" style="font-size:10px">El código de acceso de 4 dígitos se genera solo, al azar.</div>
-      <div class="err mt8" id="sl-err"></div>
+    <div class="row" style="gap:7px;flex-wrap:nowrap">
+      <input class="input grow" id="sl-name" placeholder="Nuevo vendedor…" style="padding:10px;font-size:14px">
+      <button class="btn sm" id="btn-sl-create" style="flex:none;padding:10px 14px">+ Crear</button>
     </div>
-    <div class="row mt12" style="max-width:320px">
-      <select class="input grow" id="sl-filter-admin" style="padding:11px"><option value="">Admin: todos</option></select>
+    <div class="err" id="sl-err" style="min-height:0"></div>
+    <div class="row mt8" style="gap:7px">
+      <input class="input grow" id="sl-q" placeholder="⌕ Buscar vendedor…" style="padding:10px;font-size:14px">
+      <select class="input" id="sl-filter-admin" style="padding:10px;font-size:14px;width:auto"><option value="">Admin: todos</option></select>
     </div>
-    <div class="tablewrap mt12">
-      <table class="data cardsm"><thead><tr>
+    <div class="muted mt8" id="sl-count" style="font-size:11px"></div>
+    <div class="tablewrap mt8">
+      <table class="data"><thead><tr>
         <th>Vendedor</th><th>Código</th><th>Vendido</th><th>Pagado a su admin</th>
         <th>Faltante</th><th>Estado</th><th style="min-width:230px">Acciones</th>
       </tr></thead><tbody id="sl-body"></tbody></table>
@@ -165,7 +163,7 @@
       <div id="gx-byaccount" class="mt8"></div>
     </div>
     <div class="tablewrap mt12">
-      <table class="data cardsm"><thead><tr>
+      <table class="data"><thead><tr>
         <th>Gasto</th><th>Monto</th><th>Cuenta</th><th>Estado</th><th style="min-width:200px">Acciones</th>
       </tr></thead><tbody id="gx-body"></tbody></table>
     </div>

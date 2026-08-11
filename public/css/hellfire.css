@@ -242,32 +242,6 @@ table.data tr.void td.strike{text-decoration:line-through}
   table.data td.cell-name .clip{display:inline-block;max-width:135px;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
 
-  /* TABLAS ANCHAS EN MÓVIL (.cardsm): con 7-9 columnas, deslizar de lado es
-     inservible en un celular — cada fila se vuelve una TARJETA con "etiqueta:
-     valor" por renglón. La etiqueta sale del data-label que pone el JS.
-     El Ranking (2 columnas) NO lleva .cardsm: ahí la tabla sí funciona. */
-  .tablewrap:has(table.cardsm){overflow-x:visible;border:none;border-radius:0}
-  table.data.cardsm{display:block;min-width:0;width:100%;font-size:12px}
-  table.data.cardsm thead{display:none}          /* los encabezados van por fila */
-  table.data.cardsm tbody{display:block}
-  table.data.cardsm tr{display:block;border:1px solid var(--line);border-radius:13px;
-    padding:9px 12px;margin-bottom:9px;background:var(--card)}
-  table.data.cardsm tr:last-child{margin-bottom:0}
-  table.data.cardsm td{display:flex;align-items:baseline;justify-content:space-between;
-    gap:12px;padding:4px 0;border-bottom:none;white-space:normal;text-align:right}
-  /* celda sin dato (ej. Facultad en boletos Externo/VIP): no ocupa renglón */
-  table.data.cardsm td:empty{display:none}
-  table.data.cardsm td::before{content:attr(data-label);flex:none;text-align:left;
-    font:600 9px "Space Grotesk";letter-spacing:.11em;text-transform:uppercase;
-    color:var(--ember-dim)}
-  /* celda sin etiqueta (los botones de acción): ocupa el ancho completo abajo */
-  table.data.cardsm td[data-label=""]{justify-content:flex-start;flex-wrap:wrap;
-    text-align:left;padding-top:10px;margin-top:5px;border-top:1px solid rgba(255,120,40,.14)}
-  table.data.cardsm td[data-label=""]:empty{display:none}   /* anulados: sin botones */
-  /* el nombre manda dentro de la tarjeta: más grande y sin recorte a 135px */
-  table.data.cardsm td.cell-name{font:800 14px Manrope;color:var(--cream)}
-  table.data.cardsm td.cell-name .clip{max-width:none;white-space:normal}
-
   /* Todo más compacto en móvil: pestañas, filtros, botones, títulos, etiquetas */
   .tab{padding:8px 12px;font-size:12px;border-radius:10px}
   /* 16px es el mínimo que evita que Safari en iOS haga zoom automático al enfocar el campo */

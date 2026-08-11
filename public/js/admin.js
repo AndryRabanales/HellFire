@@ -199,7 +199,7 @@ async function loadTicketsTable(silent) {
     const estado = t.status === 'void'
       ? '<span class="badge void">ANULADO</span>'
       : t.status === 'used'
-        ? `<div><span class="badge used">INGRESÓ</span>${t.used_at ? `<div class="muted" style="font-size:9px;margin-top:3px">${esc(t.used_at.slice(11, 16))} h</div>` : ''}</div>`
+        ? `<span class="badge used">INGRESÓ</span>${t.used_at ? `<div class="muted" style="font-size:9px;margin-top:3px">${esc(t.used_at.slice(11, 16))} h</div>` : ''}`
         : '<span class="badge active">ACTIVO</span>';
     tr.innerHTML = `
       <td data-label="Folio" style="font-family:'Space Grotesk';color:var(--ember-soft)">${esc(t.folio)}</td>
@@ -207,7 +207,7 @@ async function loadTicketsTable(silent) {
       <td data-label="Facultad">${esc(t.faculty_name)}</td>
       <td data-label="Tipo">${esc(t.type_name)}</td>
       <td data-label="Precio" class="strike" style="font-family:'Space Grotesk'">${fmtMoney(t.price)}</td>
-      <td data-label="Vendedor"><div>${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</div></td>
+      <td data-label="Vendedor">${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
       <td data-label="Fecha" class="muted">${esc(t.created_at)}</td>
       <td data-label="Estado">${estado}</td>`;
     const td = document.createElement('td');
@@ -506,16 +506,20 @@ async function loadSellers(silent) {
   const r = await API.get('/api/admin/sellers');
   populateAdminFilters(r.sellers);
   const fa = ($('#sl-filter-admin') && $('#sl-filter-admin').value) || '';
-  const sig = JSON.stringify([fa, ...r.sellers.map(s => [s.id, s.name, s.code, s.active, s.deleted, s.tickets, s.total, s.paid])]);
+  // con 30 vendedores, buscar por nombre o código es lo que se usa a diario
+  const q = (($('#sl-q') && $('#sl-q').value) || '').trim().toLowerCase();
+  const sig = JSON.stringify([fa, q, ...r.sellers.map(s => [s.id, s.name, s.code, s.active, s.deleted, s.tickets, s.total, s.paid])]);
   if (silent && sig === _sigSellers) return;
   _sigSellers = sig;
   CACHE.sellers = r.sellers;
   const body = $('#sl-body');
   body.innerHTML = '';
   // filtro por admin (cliente): "" todos, "__none__" sin asignar, o el nombre
-  const shown = r.sellers.filter(s => !fa
-    || (fa === '__none__' ? !s.owner_admin_name : s.owner_admin_name === fa));
-  if (!shown.length) { body.innerHTML = '<tr><td colspan="7" class="muted" style="padding:16px">Sin vendedores para ese admin</td></tr>'; return; }
+  const shown = r.sellers
+    .filter(s => !fa || (fa === '__none__' ? !s.owner_admin_name : s.owner_admin_name === fa))
+    .filter(s => !q || s.name.toLowerCase().includes(q) || (s.code || '').includes(q));
+  $('#sl-count').textContent = `${shown.length} vendedor(es)`;
+  if (!shown.length) { body.innerHTML = '<tr><td colspan="7" class="muted" style="padding:16px">Ningún vendedor coincide</td></tr>'; return; }
   shown.forEach(s => {
     const tr = document.createElement('tr');
     if (s.deleted) tr.style.opacity = '.45';
@@ -529,11 +533,11 @@ async function loadSellers(silent) {
           ? '<span class="badge active">COMPLETADO</span>'
           : `<b style="font-family:'Space Grotesk';color:var(--danger)">${fmtMoney(falta)}</b>`);
     tr.innerHTML = `
-      <td data-label="Vendedor" class="cell-name" style="font-weight:700"><div><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${adminLine}</div></td>
+      <td data-label="Vendedor" class="cell-name" style="font-weight:700"><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${adminLine}</td>
       <td data-label="Código">${s.deleted ? '<span class="muted">—</span>'
           : s.code ? `<span class="codechip">${esc(s.code)}</span>`
           : '<span class="muted" style="font-size:10px" title="Solo su admin puede verlo">🔒 privado</span>'}</td>
-      <td data-label="Vendido"><div><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></div></td>
+      <td data-label="Vendido"><b style="font-family:'Space Grotesk'">${fmtMoney(s.total)}</b><div class="muted" style="font-size:9px;margin-top:2px">${s.tickets} boleto(s)</div></td>
       <td data-label="Pagado" style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(s.paid)}</td>
       <td data-label="Faltante">${faltante}</td>
       <td data-label="Estado">${s.deleted ? '<span class="badge void">Eliminado</span>'
@@ -543,17 +547,22 @@ async function loadSellers(silent) {
     td.setAttribute('data-label', '');
     const mine = s.owner_admin_id == null || s.owner_admin_id === ME_ID;
     if (!s.deleted && mine) {
-      const mk = (label, fn, cls) => {
-        const b = document.createElement('button');
-        b.className = 'btn sm ' + (cls || 'ghost');
-        b.style.width = 'auto'; b.style.marginRight = '6px'; b.style.marginBottom = '4px';
-        b.textContent = label; b.onclick = fn;
-        td.appendChild(b);
-      };
-      mk('Cuenta', () => paySeller(s));
-      mk('Editar', () => editSeller(s));
-      mk(s.active ? 'Desactivar' : 'Reactivar', () => toggleSeller(s));
-      mk('Eliminar', () => deleteSeller(s), 'danger');
+      // Con 30 vendedores, cuatro botones por fila es un muro. La acción del día a
+      // día es COBRAR; editar, desactivar y eliminar casi no se usan, así que se
+      // guardan detrás de los tres puntos.
+      const cuenta = document.createElement('button');
+      cuenta.className = 'btn sm';
+      cuenta.style.cssText = 'width:auto;margin-right:6px';
+      cuenta.textContent = 'Cuenta';
+      cuenta.onclick = () => paySeller(s);
+      td.appendChild(cuenta);
+      const mas = document.createElement('button');
+      mas.className = 'btn sm ghost';
+      mas.style.cssText = 'width:auto;padding:9px 12px';
+      mas.textContent = '\u22ef';
+      mas.title = 'Más opciones';
+      mas.onclick = () => menuVendedor(s);
+      td.appendChild(mas);
     } else if (!s.deleted) {
       td.innerHTML = `<span class="muted" style="font-size:10px">solo ${esc(s.owner_admin_name || 'su admin')} puede modificarlo</span>`;
     }
@@ -597,21 +606,19 @@ function pintaCuenta(s, c) {
   const visibles = verTodos ? c.payments : c.payments.slice(0, TOPE);
   const ocultos = c.payments.length - visibles.length;
   const filas = c.payments.length ? visibles.map(p => `
-    <div style="padding:11px 0;border-bottom:1px solid rgba(255,120,40,.12)">
+    <div style="padding:10px 0;border-bottom:1px solid rgba(255,120,40,.12)">
       <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px">
-        <div style="font:800 16px 'Space Grotesk';color:var(--cream)">${fmtMoney(p.cash)}
-          <span style="font:600 10px Manrope;color:var(--cream-45)"> en efectivo</span></div>
+        <div><b style="font:800 16px 'Space Grotesk';color:var(--cream)">${fmtMoney(p.cash)}</b>
+          <span class="muted" style="font-size:11px"> entregados</span></div>
         <div class="muted" style="font-size:10px">${fmtDate(p.created_at)}</div>
       </div>
-      <div class="muted" style="font-size:11.5px;margin-top:4px;line-height:1.6">
-        Cubrió <b style="color:var(--ember-soft)">${fmtMoney(p.amount)}</b> de su cuenta
-        (se qued\u00f3 <b style="color:#f3d27a">${fmtMoney(p.commission)}</b> de comisi\u00f3n)<br>
-        Despu\u00e9s de este pago le quedaban debiendo
-        <b style="color:${p.balance_after > 0 ? 'var(--danger)' : 'var(--ok)'}">${fmtMoney(p.balance_after)}</b>
-      </div>
-      <div class="row" style="justify-content:space-between;margin-top:4px">
-        <div class="muted" style="font-size:10px">${p.note ? esc(p.note) + ' \u00b7 ' : ''}registr\u00f3 ${esc(p.created_by || '')}</div>
-        ${c.can_edit ? `<button class="linkout" style="font-size:10px;padding:2px 0" data-del="${p.id}">borrar</button>` : ''}
+      <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px;margin-top:3px">
+        <div class="muted" style="font-size:11.5px">
+          ${p.balance_after > 0.005
+            ? `Le quedaban <b style="color:var(--danger)">${fmtMoney(p.balance_after)}</b>`
+            : '<b style="color:var(--ok)">Qued\u00f3 a mano</b>'}
+          ${p.note ? ' \u00b7 ' + esc(p.note) : ''}</div>
+        ${c.can_edit ? `<button class="linkout" style="font-size:10px;padding:0" data-del="${p.id}">borrar</button>` : ''}
       </div>
     </div>`).join('') +
     (ocultos > 0 ? `<button class="btn sm ghost mt12" id="pg-mas" style="width:100%">Ver los ${ocultos} pagos anteriores</button>` : '')
@@ -835,6 +842,7 @@ async function descargarEstadoCuenta(s, c) {
 }
 
 $('#sl-filter-admin').addEventListener('change', () => { _sigSellers = ''; loadSellers(); });
+$('#sl-q').addEventListener('input', () => { _sigSellers = ''; loadSellers(); });
 
 $('#btn-sl-create').addEventListener('click', async () => {
   const btn = $('#btn-sl-create');
@@ -854,6 +862,21 @@ $('#btn-sl-create').addEventListener('click', async () => {
   } catch (e) { if (!guard(e)) $('#sl-err').textContent = e.message; }
   finally { btn.disabled = false; }
 });
+
+/* Opciones que casi no se usan, fuera de la fila para que no estorben. */
+function menuVendedor(s) {
+  modal(`<div class="h1" style="font-size:17px">${esc(s.name)}</div>
+    <div class="muted mt8" style="font-size:12px">Código ${s.code ? esc(s.code) : 'privado'} \u00b7 ${s.tickets} boleto(s) vendidos</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button class="btn ghost" id="mv-edit">Editar nombre</button>
+      <button class="btn ghost" id="mv-toggle">${s.active ? 'Desactivar' : 'Reactivar'} su acceso</button>
+      <button class="btn danger" id="mv-del">Eliminar vendedor</button>
+      <button class="btn quiet" onclick="closeModal()">Cancelar</button>
+    </div>`);
+  $('#mv-edit').onclick = () => editSeller(s);
+  $('#mv-toggle').onclick = () => toggleSeller(s);
+  $('#mv-del').onclick = () => deleteSeller(s);
+}
 
 function editSeller(s) {
   modal(`<div class="h1" style="font-size:18px">Editar vendedor</div>
