@@ -660,9 +660,12 @@ function pintaCuenta(s, c) {
 
     <div class="row mt16" style="justify-content:space-between;align-items:center">
       <div class="label" style="margin:0">Historial de pagos</div>
-      ${c.payments.length ? '<button class="btn sm ghost" id="pg-dl" style="width:auto">Descargar</button>' : ''}
+      ${c.payments.length ? `<div class="row" style="gap:6px">
+        <button class="btn sm ghost" id="pg-dl" style="width:auto">Imagen</button>
+        <button class="btn sm ghost" id="pg-xls" style="width:auto">Excel</button>
+      </div>` : ''}
     </div>
-    <div style="max-height:34dvh;overflow:auto">${filas}</div>
+    <div class="scrolly" style="max-height:34dvh;overflow:auto">${filas}</div>
     <button class="btn ghost mt16" onclick="closeModal()">Cerrar</button>`);
 
   const amt = $('#pg-amount');
@@ -693,6 +696,22 @@ function pintaCuenta(s, c) {
   }
   const dl = $('#pg-dl');
   if (dl) dl.onclick = () => descargarEstadoCuenta(s, c);
+  const xls = $('#pg-xls');
+  if (xls) xls.onclick = async () => {
+    // se baja con la sesión en el header (nunca el token en la URL: quedaría
+    // guardado en el historial del navegador y en los registros del servidor)
+    try {
+      const res = await fetch(`/api/admin/sellers/${s.id}/payments.xlsx`,
+        { headers: { Authorization: 'Bearer ' + API.token } });
+      if (!res.ok) throw new Error('No se pudo exportar');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(await res.blob());
+      const cd = res.headers.get('Content-Disposition') || '';
+      a.download = (cd.match(/filename="?([^";]+)/) || [])[1] || 'cuenta.xlsx';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 400);
+    } catch (e) { if (!guard(e)) toast(e.message); }
+  };
   $$('#modal [data-del]').forEach(b => {
     b.onclick = async () => {
       const ok = await confirmModal({ title: 'Borrar este pago',

@@ -1728,6 +1728,71 @@ def add_seller_payment(sid):
     out["can_edit"] = True
     return jsonify(**out)
 
+@app.get("/api/admin/sellers/<int:sid>/payments.xlsx")
+def export_seller_payments(sid):
+    """Estado de cuenta del vendedor en Excel, para llevar el control o mandárselo
+    si pide cuentas. Mismo detalle que la imagen, pero en hoja de cálculo."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    sel = db.execute("SELECT * FROM sellers WHERE id=? AND hidden=0", (sid,)).fetchone()
+    if not sel:
+        return jsonify(error="no existe"), 404
+    c = estado_cuenta(db, sid)
+    comision_total = c["sold"] * c["commission_pct"] / 100
+    debe_entregar = c["sold"] - comision_total
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Estado de cuenta"
+    titulo = Font(bold=True, size=14)
+    etiqueta = Font(bold=True)
+    dinero = '"$"#,##0.00'
+
+    ws["A1"] = f"Estado de cuenta · {sel['name']}"; ws["A1"].font = titulo
+    ws["A2"] = "Generado el " + now_dt().strftime("%d/%m/%Y %H:%M")
+    resumen = [
+        ("Vendió en boletos", c["sold"]),
+        (f"Su comisión ({c['commission_pct']:g}%)", -comision_total),
+        ("Debe entregar en total", debe_entregar),
+        ("Ya entregó", c["cash_total"]),
+        ("Le falta entregar", max(0, debe_entregar - c["cash_total"])),
+    ]
+    fila = 4
+    for etq, val in resumen:
+        ws.cell(row=fila, column=1, value=etq).font = etiqueta
+        celda = ws.cell(row=fila, column=2, value=val)
+        celda.number_format = dinero
+        fila += 1
+
+    fila += 1
+    encabezados = ["Fecha", "Efectivo entregado", "Cubrió de su cuenta",
+                   "Su comisión", "Quedó debiendo", "Nota", "Registró"]
+    for col, h in enumerate(encabezados, 1):
+        cel = ws.cell(row=fila, column=col, value=h)
+        cel.font = Font(bold=True, color="FFFFFF")
+        cel.fill = PatternFill("solid", fgColor="C0501E")
+    # del más viejo al más nuevo: se lee como fue pagando
+    for p in reversed(c["payments"]):
+        fila += 1
+        ws.cell(row=fila, column=1, value=p["created_at"])
+        for col, val in enumerate([p["cash"], p["amount"], p["commission"],
+                                   p["balance_after"]], 2):
+            cel = ws.cell(row=fila, column=col, value=val)
+            cel.number_format = dinero
+        ws.cell(row=fila, column=6, value=p["note"])
+        ws.cell(row=fila, column=7, value=p["created_by"])
+    for col, ancho in enumerate([19, 19, 20, 14, 17, 26, 14], 1):
+        ws.column_dimensions[get_column_letter(col)].width = ancho
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    slug = re.sub(r"[^\w]+", "_", sel["name"]).strip("_")[:40] or "vendedor"
+    return send_file(buf, as_attachment=True, download_name=f"cuenta_{slug}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
 @app.delete("/api/admin/payments/<int:pid>")
 def delete_seller_payment(pid):
     """Borra un pago mal capturado. Queda registrado en Movimientos: el historial

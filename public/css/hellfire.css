@@ -311,6 +311,15 @@ table.data tr.void td.strike{text-decoration:line-through}
 .modal{width:100%;max-width:420px;background:linear-gradient(160deg,#1c0a04,#0d0403);
   border:1px solid var(--line-strong);border-radius:18px;padding:20px;animation:pop .2s ease;
   max-height:86dvh;overflow-y:auto}
+/* En celular el modal ocupa casi toda la pantalla: con poco ancho, los 20px de
+   margen por lado se notan muchísimo. Y se quita el scroll ANIDADO del historial
+   (una lista que se desliza dentro de algo que también se desliza es un lío en
+   pantalla táctil): en móvil se desliza el modal completo y ya. */
+@media (max-width:700px){
+  .modal-bg{padding:10px;align-items:flex-end}
+  .modal{max-width:none;max-height:92dvh;padding:16px;border-radius:20px}
+  .modal .scrolly{max-height:none!important;overflow:visible!important}
+}
 
 .err{color:var(--danger);font:600 12px Manrope;min-height:16px}
 .okmsg{color:var(--ok);font:600 12px Manrope}
