@@ -280,8 +280,15 @@ table.data tr.void td.strike{text-decoration:line-through}
 
   /* Todo más compacto en móvil: pestañas, filtros, botones, títulos, etiquetas */
   .tab{padding:8px 12px;font-size:12px;border-radius:10px}
-  /* 16px es el mínimo que evita que Safari en iOS haga zoom automático al enfocar el campo */
-  .input,select.input,textarea.input{padding:11px;font-size:16px;border-radius:11px}
+  /* EL ZOOM AL ESCRIBIR. Safari en iPhone acerca la página al enfocar cualquier
+     campo cuya letra mida menos de 16px, y no hay forma de desactivarlo desde el
+     viewport (Safari ignora maximum-scale desde iOS 10). La regla de .input no
+     bastaba: el buscador del historial estaba en 14px y los campos del panel traen
+     su tamaño en el atributo style, que le gana a la clase. Así que van TODOS, sin
+     excepción, y se compensa apretando el relleno para que no crezcan. */
+  input,select,textarea,.search input{font-size:16px!important}
+  .input,select.input,textarea.input{padding:11px;border-radius:11px}
+  .search{padding:9px 12px}
   .btn{padding:13px;font-size:13.5px;border-radius:13px}
   .btn.sm{padding:7px 11px;font-size:11px;border-radius:9px}
   .label{font-size:8.5px;margin-bottom:5px}
