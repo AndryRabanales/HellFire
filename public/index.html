@@ -59,7 +59,7 @@
   <!-- ---- modo individual (UADY / Externo / VIP) ---- -->
   <div id="mode-individual" style="display:flex;flex-direction:column;gap:12px">
     <div>
-      <div class="label">Nombre del comprador</div>
+      <div class="label" id="lbl-buyer">Nombre del comprador</div>
       <input class="input" id="f-buyer" placeholder="Nombre completo" autocomplete="off">
     </div>
     <div>
@@ -161,7 +161,7 @@
   </div>
   <div class="row" style="justify-content:space-between;padding:0 2px 8px">
     <div style="font:700 10px 'Space Grotesk';letter-spacing:.14em;text-transform:uppercase;color:rgba(246,241,231,.5)">Mi historial</div>
-    <div style="font:500 9px Manrope;color:var(--ember-dim)">Más reciente ↓</div>
+    <button class="orden" id="h-orden">Más reciente<span class="o-fl">↓</span></button>
   </div>
   <div id="h-list" style="display:flex;flex-direction:column;gap:8px;padding-bottom:20px"></div>
 </div>

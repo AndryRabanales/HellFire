@@ -55,11 +55,19 @@ body{
   width:100%;padding:14px;border-radius:13px;background:var(--card);
   border:1px solid var(--line);font:600 15px Manrope;color:var(--cream);outline:none;
   appearance:none;-webkit-appearance:none}
-/* El nombre del comprador es el PASO 1 y era lo más apagado de la pantalla: campo
-   más alto, letra más grande y un filo encendido para que sea lo primero que se ve. */
-#f-buyer{padding:16px 15px;font:700 17px Manrope;border-color:rgba(255,120,40,.4);
-  background:linear-gradient(180deg,rgba(255,122,46,.07),rgba(255,255,255,.03))}
-#f-buyer::placeholder{color:rgba(246,241,231,.34);font-weight:500}
+/* El nombre del comprador es el PASO 1 de la venta y tiene que ser lo primero que
+   la vista encuentra: el campo más alto de la pantalla, con el borde más claro y un
+   resplandor propio. Jerarquía es comparación, no valor absoluto — por eso además
+   se le baja el brillo al cronómetro, que estaba encendido justo encima. */
+#f-buyer{padding:18px 16px;font:700 18px Manrope;border:1.5px solid rgba(255,122,46,.55);
+  border-radius:14px;
+  background:linear-gradient(180deg,rgba(255,122,46,.11),rgba(255,255,255,.035));
+  box-shadow:0 0 0 3px rgba(255,122,46,.06),0 3px 12px rgba(0,0,0,.3)}
+#f-buyer::placeholder{color:rgba(246,241,231,.42);font-weight:500}
+#f-buyer:focus{border-color:var(--ember);
+  box-shadow:0 0 0 3px rgba(255,122,46,.14),0 0 18px rgba(255,110,30,.28)}
+/* su rótulo también sube de rango: es el único paso obligatorio */
+label[for="f-buyer"],#lbl-buyer{color:var(--ember-dim)!important;font-size:9.5px!important}
 .input:focus{border-color:var(--ember);box-shadow:0 0 14px rgba(255,110,30,.25)}
 .input::placeholder{color:rgba(246,241,231,.3)}
 select.input{background-image:linear-gradient(45deg,transparent 50%,var(--ember-dim) 50%),linear-gradient(135deg,var(--ember-dim) 50%,transparent 50%);
@@ -100,6 +108,32 @@ select.input option{background:#160603;color:var(--cream)}
   font:700 12px Manrope;color:var(--ember-soft);
   transition:transform .1s ease,background .14s}
 .volver:active{transform:scale(.95);background:rgba(255,110,30,.18)}
+
+/* Ordenar el historial. Antes era texto plano con flecha: parecía botón sin serlo. */
+.orden{display:inline-flex;align-items:center;gap:4px;cursor:pointer;
+  padding:5px 9px;border-radius:8px;border:1px solid rgba(255,120,40,.25);
+  background:rgba(255,110,30,.07);font:700 10px Manrope;color:var(--ember-soft);
+  transition:transform .1s ease,background .14s}
+.orden:active{transform:scale(.94);background:rgba(255,110,30,.16)}
+.orden .o-fl{font-size:11px;opacity:.8}
+
+/* El último boleto generado. Es un RECIBO, no un paso de la venta que sigue: por eso
+   lleva su rótulo diciendo lo que es y una sola cosa tocable. */
+.ultimo{padding:10px 12px;border-radius:12px;
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.2)}
+.ultimo .u-cab{font:700 8.5px "Space Grotesk";letter-spacing:.15em;text-transform:uppercase;
+  color:rgba(246,241,231,.38);margin-bottom:6px}
+.ultimo .u-fila{display:flex;align-items:center;gap:10px}
+.ultimo .u-datos{flex:1;min-width:0}
+.ultimo .u-nombre{font:700 14px Manrope;color:var(--cream);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ultimo .u-meta{font:500 11px Manrope;color:var(--cream-45);margin-top:1px}
+.ultimo .u-dl{flex:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  padding:8px 12px;border-radius:10px;border:1px solid rgba(255,120,40,.35);
+  background:rgba(255,110,30,.09);font:700 11px Manrope;color:var(--ember-soft);
+  transition:transform .1s ease,background .14s}
+.ultimo .u-dl:active{transform:scale(.95);background:rgba(255,110,30,.18)}
+.ultimo .u-dl:disabled{opacity:.5}
 
 /* tarjetas */
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
@@ -314,6 +348,10 @@ table.data tr.void td.strike{text-decoration:line-through}
   input,select,textarea,.search input{font-size:16px!important}
   .input,select.input,textarea.input{padding:11px;border-radius:11px}
   .search{padding:9px 12px}
+  /* ...menos el nombre del comprador. Las dos reglas de arriba —una para el zoom y
+     otra para apretar los campos— lo dejaban del mismo tamaño que los demás, que es
+     justo lo contrario de lo que hace falta: es el paso 1 de la venta. */
+  .wrap #f-buyer{padding:17px 15px!important;font-size:18px!important;border-radius:14px}
   .btn{padding:13px;font-size:13.5px;border-radius:13px}
   .btn.sm{padding:7px 11px;font-size:11px;border-radius:9px}
   .label{font-size:8.5px;margin-bottom:5px}
@@ -396,8 +434,8 @@ table.data tr.void td.strike{text-decoration:line-through}
    —"faltan 20 días y sube"—, así que se ve: cada unidad en su casilla, números
    tabulares para que el segundero no baile y no mueva el ancho a cada tic. */
 .phase-timer{margin:0;padding:8px 10px 9px;border-radius:12px;
-  background:linear-gradient(160deg,rgba(255,122,46,.13),rgba(255,122,46,.03));
-  border:1px solid rgba(255,122,46,.3)}
+  background:linear-gradient(160deg,rgba(255,122,46,.07),rgba(255,122,46,.02));
+  border:1px solid rgba(255,122,46,.2)}
 .phase-timer .pt-head{display:flex;align-items:baseline;gap:6px;margin-bottom:6px}
 .phase-timer .pt-sub{font:600 9.5px "Space Grotesk";letter-spacing:.15em;
   text-transform:uppercase;color:var(--cream-45)}
@@ -408,7 +446,7 @@ table.data tr.void td.strike{text-decoration:line-through}
 .phase-timer .pt-u{display:flex;flex-direction:column;align-items:center;gap:1px;
   padding:4px 2px 3px;border-radius:8px;background:rgba(0,0,0,.32);
   border:1px solid rgba(255,122,46,.18)}
-.phase-timer .pt-u b{font:800 15.5px/1 "Space Grotesk",monospace;color:var(--ember-soft);
+.phase-timer .pt-u b{font:800 15.5px/1 "Space Grotesk",monospace;color:rgba(255,178,122,.82);
   font-variant-numeric:tabular-nums;letter-spacing:.01em}
 .phase-timer .pt-u i{font:600 6.5px "Space Grotesk";letter-spacing:.12em;
   text-transform:uppercase;color:var(--cream-45);font-style:normal}

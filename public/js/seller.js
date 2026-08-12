@@ -447,29 +447,30 @@ async function generate() {
    la descarga automática a veces no se ve por ningún lado, y sin esa tira el
    vendedor no tendría cómo recuperarla salvo yéndose al historial. */
 function showSoloResult(t, bajoAutomatico) {
+  // Llevaba DOS palomitas rojas idénticas —una de estado y otra en el botón— y el
+  // texto decía "toca la flecha" cuando no había ninguna flecha. Encima se quedaba
+  // ahí mientras el vendedor escribía el siguiente nombre, así que parecía parte de
+  // la venta en curso. Ahora dice qué es ("último boleto") y solo hay UNA cosa
+  // tocable, con su flecha y su palabra.
   $('#solo-row').innerHTML = `
-    <div class="grouprow done">
-      <div class="gr-num">\u2713</div>
-      <div style="flex:1;min-width:0">
-        <div class="gr-label">${esc(ticketTypeLabel(t))} \u00b7 ${fmtMoney(t.price)}</div>
-        <div style="font:700 15px Manrope;color:var(--cream);overflow:hidden;
-          text-overflow:ellipsis;white-space:nowrap">${esc(t.buyer_name)}</div>
+    <div class="ultimo">
+      <div class="u-cab">Último boleto${bajoAutomatico ? ' · descargado' : ''}</div>
+      <div class="u-fila">
+        <div class="u-datos">
+          <div class="u-nombre">${esc(t.buyer_name)}</div>
+          <div class="u-meta">${esc(ticketTypeLabel(t))} \u00b7 ${fmtMoney(t.price)}</div>
+        </div>
+        <button class="u-dl" id="solo-dl">${DL_ICON}<span>Descargar</span></button>
       </div>
-      <button class="iconbtn" id="solo-dl" title="Descargar de nuevo">${bajoAutomatico ? CHECK_ICON : DL_ICON}</button>
-    </div>
-    <div class="muted" style="font-size:10.5px;margin-top:6px;text-align:center">
-      ${bajoAutomatico ? 'Descargado. Si no lo encuentras, toca la flecha para bajarlo otra vez.'
-                       : 'Toca la flecha para descargar el boleto.'}
     </div>`;
+  if (bajoAutomatico) DOWNLOADED.add(t.id);
   const b = $('#solo-dl');
-  if (bajoAutomatico) { b.classList.add('grabbed'); DOWNLOADED.add(t.id); }
   b.addEventListener('click', async () => {
     b.disabled = true;
     try {
       await downloadTicket(t, CATALOG);
-      b.innerHTML = CHECK_ICON;
-      b.classList.add('grabbed');
       DOWNLOADED.add(t.id);
+      toast('Boleto descargado otra vez');
     } finally { b.disabled = false; }
   });
   $('#solo-result').classList.remove('hidden');
@@ -508,6 +509,10 @@ function drawPreviewQR(token) {
 /* ---------------- historial ---------------- */
 let _searchTimer = null;
 
+/* "Más reciente ↓" era un rótulo con pinta de botón: la gente lo tocaba y no pasaba
+   nada. Si tiene forma de botón, que lo sea — ordena al revés. */
+let H_VIEJOS_PRIMERO = false;
+
 async function loadHistory() {
   const q = $('#h-search').value.trim();
   try {
@@ -519,7 +524,8 @@ async function loadHistory() {
         (q ? 'Sin resultados para esa búsqueda' : 'Aún no has generado boletos') + '</div>';
       return;
     }
-    r.tickets.forEach(t => {
+    const orden = H_VIEJOS_PRIMERO ? [...r.tickets].reverse() : r.tickets;
+    orden.forEach(t => {
       const row = document.createElement('div');
       const isVoid = t.status === 'void';
       row.className = 'trow' + (isVoid ? ' void' : '');
@@ -585,6 +591,12 @@ $('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
 $('#btn-group-back').addEventListener('click', exitGroupMode);
 $('#btn-group-done').addEventListener('click', exitGroupMode);
 $('#btn-history').addEventListener('click', () => { show('history'); loadHistory(); });
+$('#h-orden').addEventListener('click', () => {
+  H_VIEJOS_PRIMERO = !H_VIEJOS_PRIMERO;
+  $('#h-orden').innerHTML = (H_VIEJOS_PRIMERO ? 'M\u00e1s antiguo' : 'M\u00e1s reciente') +
+    `<span class="o-fl">${H_VIEJOS_PRIMERO ? '\u2191' : '\u2193'}</span>`;
+  loadHistory();
+});
 $('#btn-back').addEventListener('click', () => show('form'));
 $('#btn-another').addEventListener('click', () => { clearForm(); show('form'); });  // RF-48
 $('#btn-download').addEventListener('click', async () => {
