@@ -103,7 +103,7 @@ function aplicarCierre() {
     if (cerradas) el.classList.add('hidden');
     else if (sel !== '#f-phase-timer') el.classList.remove('hidden');
   });
-  $('#f-hint').textContent = cerradas ? 'El corte ya se hizo' : 'Los datos del comprador';
+  $('#f-hint').textContent = cerradas ? 'El corte ya se hizo' : '';
   return cerradas;
 }
 
@@ -179,7 +179,7 @@ function renderPhaseTimer() {
   else             reloj = pad2(m) + ':' + pad2(sg);
 
   const lines = g.items.map(i =>
-    `${esc(i.name)} <b>${fmtMoney(i.price_cents / 100)}</b>`).join('  ');
+    `<span>${esc(i.name)}<b>${fmtMoney(i.price_cents / 100)}</b></span>`).join('');
   box.classList.remove('hidden');
   box.classList.toggle('urge', urge);
   box.innerHTML =
@@ -278,7 +278,7 @@ function exitGroupMode() {
   $('#btn-generate-group').classList.add('hidden');
   $('#btn-group-done').classList.add('hidden');
   $('#group-result-bar').classList.add('hidden'); $('#group-result-bar').classList.remove('done');
-  $('#f-hint').textContent = 'Los datos del comprador';
+  $('#f-hint').textContent = '';
   $('#f-err').textContent = '';
   $('#group-names').innerHTML = '';
 }

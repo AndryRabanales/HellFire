@@ -40,7 +40,10 @@ body{
 .sub{font:400 10px "Space Grotesk",monospace;letter-spacing:.32em;color:rgba(246,241,231,.4);text-transform:uppercase}
 .h1{font:800 22px Cinzel,serif;color:var(--cream)}
 .hint{font:500 11px Manrope;color:var(--cream-45)}
-.label{font:600 9px "Space Grotesk",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--ember-dim);margin-bottom:6px}
+/* Rótulos de formulario en gris, no en naranja: si TODO es naranja, el naranja deja
+   de querer decir "mira aquí". Se guarda para el cronómetro y el botón de generar. */
+.label{font:600 9px "Space Grotesk",monospace;letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(246,241,231,.38);margin-bottom:6px}
 
 /* controles */
 .input,select.input,textarea.input{
@@ -109,8 +112,8 @@ select.input option{background:#160603;color:var(--cream)}
   transition:transform .1s ease,border-color .14s,background .14s,box-shadow .14s}
 /* Sin elegir, las opciones se veían al 55% y parecían DESACTIVADAS. Están todas
    disponibles: se leen claras, y la elegida es la que se enciende. */
-.typeopt .tname{font:700 12.5px Manrope;color:rgba(246,241,231,.78)}
-.typeopt .tprice{font:700 17px "Space Grotesk";color:rgba(246,241,231,.9);margin-top:1px}
+.typeopt .tname{font:600 11px Manrope;color:rgba(246,241,231,.5);letter-spacing:.02em}
+.typeopt .tprice{font:700 19px "Space Grotesk";color:var(--cream);margin-top:2px}
 .typeopt.sel{background:linear-gradient(180deg,rgba(255,110,30,.2),rgba(255,110,30,.08));
   border-color:var(--ember);box-shadow:0 0 16px rgba(255,110,30,.32)}
 .typeopt:active{transform:scale(.96)}
@@ -347,9 +350,9 @@ table.data tr.void td.strike{text-decoration:line-through}
 .phase-timer .pt-fase{font:700 9.5px "Space Grotesk";letter-spacing:.13em;
   text-transform:uppercase;color:var(--ember-dim)}
 .phase-timer .pt-clock{font:600 11px Manrope;color:var(--cream-45)}
-.phase-timer .pt-items{font:500 11px Manrope;color:var(--cream-45);margin-top:2px;
-  display:flex;flex-wrap:wrap;gap:2px 12px}
-.phase-timer .pt-items b{color:var(--cream-60);font-weight:700}
+.phase-timer .pt-items{margin-top:3px;display:flex;flex-wrap:wrap;gap:2px 15px}
+.phase-timer .pt-items span{font:500 10.5px Manrope;color:rgba(246,241,231,.4)}
+.phase-timer .pt-items b{font:700 12px "Space Grotesk";color:var(--cream-60);margin-left:4px}
 
 /* Menos de 48 h: ahora sí importa y se pone al frente. */
 .phase-timer.urge{border-left-color:var(--ember);padding:9px 11px;border-radius:0 11px 11px 0;
@@ -358,6 +361,7 @@ table.data tr.void td.strike{text-decoration:line-through}
 .phase-timer.urge .pt-clock{font:800 15px/1 "Space Grotesk",monospace;color:var(--ember);
   font-variant-numeric:tabular-nums}
 .phase-timer.urge .pt-items b{color:var(--ember-soft)}
+.phase-timer.urge .pt-items span{color:var(--cream-60)}
 
 /* Bloques plegables (ej. Administradores dentro de Ajustes). El triángulo propio de
    Safari sale como emoji de color, así que se dibuja uno con CSS. */
