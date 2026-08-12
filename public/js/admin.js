@@ -1039,7 +1039,7 @@ async function loadCatalogs() {
     box.style.cssText = 'justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,120,40,.1)';
     box.innerHTML = `<div style="font:700 14px Manrope">${esc(t.name)}${t.is_vip ? ' <span style="color:#f3d27a">★</span>' : ''}
         ${t.active ? '' : ' <span class="muted">(desactivado)</span>'}
-        <div class="muted" style="font-size:10px;margin-top:2px">${t.needs_faculty ? 'pide facultad' : 'sin facultad'}</div></div>
+        <div class="muted" style="font-size:10px;margin-top:2px">${t.needs_faculty ? 'pide facultad' : 'sin facultad'}${t.sold ? ' \u00b7 ' + t.sold + ' vendidos' : ''}</div></div>
       <div style="font:700 14px 'Space Grotesk'">${fmtMoney(t.current_price_cents / 100)}
         ${t.current_phase ? `<span class="muted" style="font-size:10px"> · ${esc(t.current_phase)}</span>` : ''}</div>`;
     const eb = document.createElement('button');
@@ -1101,7 +1101,29 @@ function editType(t) {
     <div class="muted mt12">Los cambios solo aplican a boletos nuevos; los ya generados quedan como están.</div>
     <div class="err mt8" id="et-err"></div>
     <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
-    <button class="btn grow" id="et-save">Guardar</button></div>`);
+    <button class="btn grow" id="et-save">Guardar</button></div>
+    <button class="btn danger mt12" id="et-del">Eliminar este tipo de boleto</button>`);
+  // Borrar el tipo NO toca los boletos ya vendidos: cada boleto lleva su nombre y su
+  // precio copiados desde que se generó. Vale la pena decirlo, porque lo natural es
+  // temer que se caiga el historial.
+  $('#et-del').onclick = async () => {
+    const n = t.sold || 0;
+    const ok = await confirmModal({
+      title: 'Eliminar ' + t.name,
+      body: n
+        ? `Hay <b>${n} boleto(s)</b> vendidos de este tipo. <b style="color:var(--ok)">No se
+           borran</b>: cada uno guarda su nombre y su precio desde que se gener\u00f3, as\u00ed
+           que el historial, las cuentas y el esc\u00e1ner de la puerta siguen igual.<br><br>
+           Lo que desaparece es la opci\u00f3n de vender m\u00e1s de este tipo.`
+        : 'Nadie ha vendido boletos de este tipo. Desaparece del cat\u00e1logo y de la boletera.',
+      okLabel: 'Eliminar', danger: true,
+    });
+    if (!ok) return;
+    try {
+      await API.del('/api/admin/ticket-types/' + t.id);
+      closeModal(); toast(t.name + ' eliminado'); loadCatalogs();
+    } catch (e) { if (!guard(e)) toast(e.message); }
+  };
   $('#et-save').onclick = async () => {
     const price = parseFloat($('#et-price').value);
     if (!(price > 0)) { $('#et-err').textContent = 'Escribe un precio válido'; return; }

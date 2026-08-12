@@ -1453,8 +1453,12 @@ def list_types():
         phases = [dict(p) for p in db.execute(
             "SELECT * FROM price_phases WHERE type_id=? ORDER BY starts_on, id",
             (r["id"],)).fetchall()]
+        vendidos = db.execute(
+            "SELECT COUNT(*) c FROM tickets WHERE type_id=? AND status!='void'",
+            (r["id"],)).fetchone()["c"]
         out.append({**dict(r), "current_price_cents": price,
-                    "current_phase": phase, "phases": phases})
+                    "current_phase": phase, "phases": phases,
+                    "sold": vendidos})
     return jsonify(types=out)
 
 @app.post("/api/admin/ticket-types/<int:tid>/phases")
@@ -1613,6 +1617,39 @@ def edit_type(tid):
         set_setting(db, "facultad_manual", json.dumps(sorted(manual)))
     db.commit()
     return jsonify(ok=True)
+
+@app.delete("/api/admin/ticket-types/<int:tid>")
+def delete_type(tid):
+    """Borra un tipo de boleto y sus fases.
+
+    Los boletos ya generados NO se tocan: llevan el nombre, el precio y la marca de
+    VIP copiados en su propia fila desde el momento de la venta, así que el historial,
+    las cuentas y el escáner siguen igual aunque el tipo desaparezca del catálogo.
+
+    Lo que sí se impide es quedarse sin ningún tipo activo: los vendedores se
+    quedarían con una boletera vacía."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    t = db.execute("SELECT * FROM ticket_types WHERE id=?", (tid,)).fetchone()
+    if not t:
+        return jsonify(error="no existe"), 404
+    quedan = db.execute("SELECT COUNT(*) c FROM ticket_types WHERE id!=? AND active=1",
+                        (tid,)).fetchone()["c"]
+    if quedan == 0:
+        return jsonify(error="Es el único tipo a la venta: si lo borras los "
+                             "vendedores se quedan sin nada que vender."), 400
+    vendidos = db.execute("SELECT COUNT(*) c FROM tickets WHERE type_id=? AND status!='void'",
+                          (tid,)).fetchone()["c"]
+    db.execute("DELETE FROM price_phases WHERE type_id=?", (tid,))
+    db.execute("DELETE FROM ticket_types WHERE id=?", (tid,))
+    audit(db, s["admin"]["username"], "catalogo",
+          f"Eliminó el tipo de boleto '{t['name']}'" +
+          (f" ({vendidos} boletos ya vendidos se conservan)" if vendidos else ""))
+    db.commit()
+    sync_excel_async()
+    return jsonify(ok=True, sold=vendidos)
 
 @app.get("/api/admin/faculties")
 def list_faculties():
