@@ -95,8 +95,12 @@ select.input option{background:#160603;color:var(--cream)}
   box-shadow:0 0 16px rgba(255,110,30,.4),inset 0 0 12px rgba(255,110,30,.15);color:var(--ember-soft)}
 
 /* selector tipo de boleto */
-.typegrid{display:flex;gap:9px;flex-wrap:wrap}
-.typeopt{flex:1;min-width:110px;padding:13px 12px;border-radius:13px;cursor:pointer;
+/* Dos columnas fijas. Con flex, cuatro tipos caían 3+1 y el cuarto se estiraba a
+   lo ancho: quedaba chueco y parecía otra cosa. Si el número es impar, el último
+   ocupa las dos columnas a propósito, que se lee como decisión y no como sobra. */
+.typegrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.typegrid > :last-child:nth-child(odd){grid-column:1 / -1}
+.typeopt{padding:11px 12px;border-radius:13px;cursor:pointer;
   /* un poco levantado del fondo, para que se lea como algo que se toca y no como
      un simple recuadro pintado */
   background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012));
@@ -105,8 +109,8 @@ select.input option{background:#160603;color:var(--cream)}
   transition:transform .1s ease,border-color .14s,background .14s,box-shadow .14s}
 /* Sin elegir, las opciones se veían al 55% y parecían DESACTIVADAS. Están todas
    disponibles: se leen claras, y la elegida es la que se enciende. */
-.typeopt .tname{font:700 13px Manrope;color:rgba(246,241,231,.78)}
-.typeopt .tprice{font:700 16px "Space Grotesk";color:rgba(246,241,231,.9)}
+.typeopt .tname{font:700 12.5px Manrope;color:rgba(246,241,231,.78)}
+.typeopt .tprice{font:700 17px "Space Grotesk";color:rgba(246,241,231,.9);margin-top:1px}
 .typeopt.sel{background:linear-gradient(180deg,rgba(255,110,30,.2),rgba(255,110,30,.08));
   border-color:var(--ember);box-shadow:0 0 16px rgba(255,110,30,.32)}
 .typeopt:active{transform:scale(.96)}

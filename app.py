@@ -1501,9 +1501,14 @@ def create_phase_all():
     types = db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY id").fetchall()
     if not types:
         return jsonify(error="No hay tipos de boleto activos"), 400
+    # Un tipo que se deja EN BLANCO simplemente no entra en la fase: se queda en su
+    # precio base. Hace falta para los tipos que existen pero no se venden todavía
+    # (Ultra VIP), que si no obligaban a inventarles un precio en cada fase.
     parsed = []
     for t in types:
         raw = prices.get(str(t["id"]), prices.get(t["id"]))
+        if raw is None or str(raw).strip() == "":
+            continue
         try:
             cents = int(round(float(raw) * 100))
         except (TypeError, ValueError):
@@ -1511,6 +1516,8 @@ def create_phase_all():
         if cents <= 0:
             return jsonify(error=f"Pon un precio válido para {t['name']}"), 400
         parsed.append((t["id"], cents))
+    if not parsed:
+        return jsonify(error="Pon al menos un precio para la fase"), 400
     for tid, cents in parsed:
         db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on) "
                    "VALUES(?,?,?,?)", (tid, name, cents, date))

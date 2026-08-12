@@ -38,11 +38,14 @@
     <div class="row"><div class="avatar" id="av-1">H</div><div class="who" id="hello-1">Hola</div></div>
     <button class="linkout" id="btn-logout-1"><span style="font-size:13px">⏻</span>Salir</button>
   </div>
-  <div class="h1" style="margin:24px 0 4px">Nuevo boleto</div>
-  <div class="hint" style="margin-bottom:18px" id="f-hint">Los datos del comprador</div>
+  <!-- El cronómetro va ARRIBA: es lo primero que el vendedor le enseña al comprador
+       ("cómpralo hoy, mañana sube"). Abajo del formulario nadie lo veía. -->
+  <div class="phase-timer hidden mt12" id="f-phase-timer"></div>
+  <div class="h1" style="margin:16px 0 3px">Nuevo boleto</div>
+  <div class="hint" style="margin-bottom:14px" id="f-hint">Los datos del comprador</div>
 
   <!-- ---- modo individual (UADY / Externo / VIP) ---- -->
-  <div id="mode-individual" style="display:flex;flex-direction:column;gap:14px">
+  <div id="mode-individual" style="display:flex;flex-direction:column;gap:12px">
     <div>
       <div class="label">Nombre del comprador</div>
       <input class="input" id="f-buyer" placeholder="Nombre completo" autocomplete="off">
@@ -55,7 +58,6 @@
       <div class="label">Facultad</div>
       <select class="input" id="f-faculty"></select>
     </div>
-    <div class="phase-timer hidden" id="f-phase-timer"></div>
   </div>
 
   <!-- ---- resultado del boleto individual: se queda en pantalla con su botón de
