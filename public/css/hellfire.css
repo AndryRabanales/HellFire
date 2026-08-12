@@ -96,11 +96,20 @@ select.input option{background:#160603;color:var(--cream)}
 
 /* selector tipo de boleto */
 .typegrid{display:flex;gap:9px;flex-wrap:wrap}
-.typeopt{flex:1;min-width:110px;padding:13px 12px;border-radius:13px;background:var(--card);
-  border:1.5px solid rgba(255,120,40,.18);cursor:pointer;transition:all .12s}
-.typeopt .tname{font:700 13px Manrope;color:rgba(246,241,231,.55)}
-.typeopt .tprice{font:700 16px "Space Grotesk";color:rgba(246,241,231,.55)}
-.typeopt.sel{background:rgba(255,110,30,.12);border-color:var(--ember);box-shadow:0 0 14px rgba(255,110,30,.3)}
+.typeopt{flex:1;min-width:110px;padding:13px 12px;border-radius:13px;cursor:pointer;
+  /* un poco levantado del fondo, para que se lea como algo que se toca y no como
+     un simple recuadro pintado */
+  background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012));
+  border:1.5px solid rgba(255,120,40,.26);
+  box-shadow:0 1px 0 rgba(255,255,255,.05) inset,0 2px 6px rgba(0,0,0,.25);
+  transition:transform .1s ease,border-color .14s,background .14s,box-shadow .14s}
+/* Sin elegir, las opciones se veían al 55% y parecían DESACTIVADAS. Están todas
+   disponibles: se leen claras, y la elegida es la que se enciende. */
+.typeopt .tname{font:700 13px Manrope;color:rgba(246,241,231,.78)}
+.typeopt .tprice{font:700 16px "Space Grotesk";color:rgba(246,241,231,.9)}
+.typeopt.sel{background:linear-gradient(180deg,rgba(255,110,30,.2),rgba(255,110,30,.08));
+  border-color:var(--ember);box-shadow:0 0 16px rgba(255,110,30,.32)}
+.typeopt:active{transform:scale(.96)}
 .typeopt.sel .tname{color:var(--ember-soft)}
 .typeopt.sel .tprice{color:var(--cream)}
 
@@ -351,3 +360,31 @@ details.card > summary::before{content:"";width:0;height:0;flex:none;
   border-left:6px solid var(--ember);border-top:4.5px solid transparent;
   border-bottom:4.5px solid transparent;transition:transform .18s}
 details.card[open] > summary::before{transform:rotate(90deg)}
+
+/* ---------------------------------------------------------------------------
+   QUE SE SIENTAN BOTONES
+   En el teléfono no hay cursor ni "hover": si al tocar algo no se mueve nada, no
+   se sabe si registró el toque. Todo lo tocable se hunde un poco mientras el dedo
+   está encima y vuelve al soltar. Se quita además el destello gris de Safari (que
+   aparecía tarde y descuadrado) y el retardo de 300ms al tocar.
+   --------------------------------------------------------------------------- */
+button,.typeopt,.tab,.linkout,.iconbtn,label,summary,select.input{
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation}
+
+.btn{transition:transform .1s ease,filter .14s,box-shadow .14s}
+.btn:active:not(:disabled){transform:scale(.97);filter:brightness(1.12)}
+.btn.ghost:active:not(:disabled){background:rgba(255,110,30,.14);border-color:var(--ember)}
+.btn.danger:active:not(:disabled){background:rgba(232,112,106,.16)}
+
+.tab{transition:transform .1s ease,background .14s}
+.tab:active{transform:scale(.95)}
+
+.linkout,.iconbtn{transition:transform .1s ease,color .14s}
+.linkout:active,.iconbtn:active{transform:scale(.9);color:var(--ember)}
+
+/* filas y tarjetas que se abren al tocarlas */
+.grouprow,details.card>summary{transition:transform .1s ease,background .14s}
+details.card>summary:active{transform:scale(.99)}
+
+/* Un botón deshabilitado tiene que SENTIRSE deshabilitado: no se hunde. */
+.btn:disabled:active{transform:none;filter:none}

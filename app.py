@@ -611,6 +611,24 @@ def init_db():
         db.commit()
         print(f"[OnFire] RESET v3: base limpia, unico admin '{init_user}'.")
 
+    # La facultad es cosa de los boletos UADY: un VIP o un Ultra VIP no pertenece a
+    # ninguna. Los tipos creados antes nacieron con la casilla marcada (venía activa
+    # por defecto), así que pedían facultad y la imprimían en el boleto. Se corrige
+    # UNA sola vez; si algún día se quiere lo contrario, se marca desde Editar y esto
+    # ya no vuelve a tocarlo.
+    if setting(db, "fix_vip_sin_facultad") != "1":
+        arreglados = db.execute(
+            "SELECT name FROM ticket_types WHERE is_vip=1 AND needs_faculty=1").fetchall()
+        if arreglados:
+            db.execute("UPDATE ticket_types SET needs_faculty=0 WHERE is_vip=1")
+            nombres = ", ".join(r["name"] for r in arreglados)
+            db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
+                       ("sistema", "catalogo",
+                        f"Los boletos VIP ya no piden facultad: {nombres}", now_iso()))
+            print(f"[OnFire] VIP sin facultad: {nombres}")
+        set_setting(db, "fix_vip_sin_facultad", "1")
+        db.commit()
+
     # RESET A PETICIÓN — para volver a dejar el sistema en cero cuantas veces haga
     # falta (por ejemplo después de enseñárselo al equipo), sin tocar código:
     # en Railway → Variables, pon RESET_KEY con cualquier valor. Al arrancar borra
