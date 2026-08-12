@@ -154,18 +154,15 @@ select.input option{background:#160603;color:var(--cream)}
 
 /* beneficio del grupo de 10: la botella es el gancho, así que se muestra como un
    premio (dorado, con brillo) y no como una línea de texto más */
-/* El extra del grupo. Antes era un cuadro dorado macizo con un emoji: gritaba más
-   que el botón que de verdad hay que tocar. Ahora es una nota al mismo tono que el
-   resto —oro discreto sobre el fondo oscuro— y el dibujo toma el color por herencia. */
-.perk{display:flex;align-items:flex-start;gap:12px;margin:11px 0 13px;padding:13px 14px;
-  border-radius:14px;background:rgba(243,210,122,.05);
-  border:1px solid rgba(243,210,122,.22)}
-.perk .pk-ico{flex:none;width:38px;height:38px;border-radius:50%;display:flex;
-  align-items:center;justify-content:center;color:#e8c979;
-  background:rgba(243,210,122,.08);border:1px solid rgba(243,210,122,.3)}
-.perk .pk-t{font:700 11px "Space Grotesk";letter-spacing:.13em;text-transform:uppercase;
-  color:#e8c979}
-.perk .pk-s{font:500 11.5px Manrope;color:var(--cream-60);margin-top:4px;line-height:1.5}
+/* El extra del grupo, en una línea. Primero fue un cuadro dorado con emoji, después
+   una tarjeta con dos párrafos que decían lo mismo dos veces. Es un dato, no un
+   anuncio: el botón de abajo es lo que hay que tocar. */
+.perk{display:inline-flex;align-items:center;gap:7px;margin:10px 0 11px;
+  padding:6px 11px 6px 8px;border-radius:99px;background:rgba(243,210,122,.06);
+  border:1px solid rgba(243,210,122,.26);color:#e8c979}
+.perk .pk-ico{flex:none;display:flex}
+.perk .pk-t{font:700 10.5px "Space Grotesk";letter-spacing:.09em;text-transform:uppercase;
+  white-space:nowrap}
 
 /* resultado de una venta: ocupa la pantalla en vez de dejarla vacía */
 .doneblock{text-align:center;padding:26px 18px 22px;border-radius:20px;margin-top:14px;
@@ -337,20 +334,19 @@ table.data tr.void td.strike{text-decoration:line-through}
 #toast.show{opacity:1}
 
 /* Cronómetro de fase (panel de vendedor): cuenta regresiva al próximo cambio de precio */
-.phase-timer{margin-top:10px;padding:10px 13px;border-radius:12px;
+/* Cronómetro de fase: dos renglones y ya. Ocupaba media pantalla con el reloj
+   gigante y los precios uno debajo de otro; la información es la misma, pero el
+   protagonista del formulario tiene que ser el campo del nombre, no esto. */
+.phase-timer{margin-top:10px;padding:8px 11px;border-radius:11px;
   background:linear-gradient(135deg,rgba(255,122,46,.09),rgba(255,122,46,.03));
-  border:1px solid rgba(255,122,46,.28);display:flex;flex-direction:column;gap:3px;align-items:center;text-align:center}
-.phase-timer .pt-label{font:600 10.5px Manrope;color:var(--cream-60)}
-.phase-timer .pt-label b{color:var(--ember-soft);font-weight:700}
-.phase-timer .pt-clock{font:800 19px/1 "Space Grotesk",monospace;color:var(--ember);
-  letter-spacing:.04em;text-shadow:0 0 12px rgba(255,110,30,.4);font-variant-numeric:tabular-nums}
-.phase-timer .pt-items{display:flex;flex-direction:column;gap:1px;width:100%;max-width:200px;
-  margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,122,46,.18)}
-.phase-timer .pt-item{display:flex;justify-content:space-between;gap:14px;
-  font:600 11.5px Manrope;color:var(--cream-60)}
-.phase-timer .pt-item b{color:var(--ember-soft);font-weight:800}
-.phase-timer .pt-date{font:600 8.5px "Space Grotesk",monospace;letter-spacing:.1em;
-  text-transform:uppercase;color:var(--ember-dim);margin-top:4px}
+  border:1px solid rgba(255,122,46,.28)}
+.phase-timer .pt-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.phase-timer .pt-label{font:600 10px Manrope;color:var(--cream-60)}
+.phase-timer .pt-clock{font:800 14px/1 "Space Grotesk",monospace;color:var(--ember);
+  letter-spacing:.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.phase-timer .pt-items{font:600 10.5px Manrope;color:var(--cream-45);margin-top:4px;
+  line-height:1.45}
+.phase-timer .pt-items b{color:var(--ember-soft);font-weight:800}
 
 /* Bloques plegables (ej. Administradores dentro de Ajustes). El triángulo propio de
    Safari sale como emoji de color, así que se dibuja uno con CSS. */

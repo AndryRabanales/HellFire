@@ -146,17 +146,20 @@ function renderPhaseTimer() {
   const m = Math.floor(diff % 3600000 / 60000);
   const s = Math.floor(diff % 60000 / 1000);
   const clock = (d > 0 ? d + 'd ' : '') + pad2(h) + ':' + pad2(m) + ':' + pad2(s);
+  // mes abreviado: "28 ago" en vez de "28 de agosto", para que la línea no se parta
   const fecha = phaseStart(g.starts_on).toLocaleDateString('es-MX',
-    { day: 'numeric', month: 'long' });
+    { day: 'numeric', month: 'short' }).replace('.', '');
+  // todo en un renglón: "UADY $200 · Externo $225 · VIP ★ $425 · desde el 28 de agosto"
   const lines = g.items.map(i =>
-    `<div class="pt-item"><span>${esc(i.name)}${i.is_vip ? ' ★' : ''}</span><b>${fmtMoney(i.price_cents / 100)}</b></div>`
-  ).join('');
+    `${esc(i.name)}${i.is_vip ? ' \u2605' : ''} <b>${fmtMoney(i.price_cents / 100)}</b>`
+  ).join(' \u00b7 ');
   box.classList.remove('hidden');
   box.innerHTML =
-    `<div class="pt-label">Los precios suben · ${esc(g.name)}</div>
-     <div class="pt-clock">${clock}</div>
-     <div class="pt-items">${lines}</div>
-     <div class="pt-date">a partir del ${fecha}</div>`;
+    `<div class="pt-top">
+       <span class="pt-label">Los precios suben \u00b7 ${esc(g.name)}</span>
+       <span class="pt-clock">${clock}</span>
+     </div>
+     <div class="pt-items">${lines} \u00b7 desde el ${fecha}</div>`;
 }
 
 // al vencer una fase se recarga el catálogo para reflejar el precio nuevo
