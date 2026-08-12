@@ -170,6 +170,19 @@ async function reloadCatalog() {
   finally { _reloadingCatalog = false; }
 }
 
+/* El catálogo se leía UNA sola vez, al entrar. Un vendedor que dejaba la sesión
+   abierta todo el día seguía con los precios y los tipos de la mañana: si un admin
+   corregía algo, en su teléfono no cambiaba nada hasta volver a entrar. Ahora se
+   refresca al volver a la pantalla y cada pocos minutos, sin estorbar mientras
+   está escribiendo un nombre o armando un grupo. */
+function catalogoAlDia() {
+  if (!CATALOG || !API.token) return;
+  if (GROUP_SIZE || $('#f-buyer').value.trim()) return;   // venta a medias: no se toca
+  reloadCatalog();
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) catalogoAlDia(); });
+setInterval(catalogoAlDia, 120000);
+
 function startPhaseTimer() {
   if (PHASE_INT) clearInterval(PHASE_INT);
   PHASE_INT = setInterval(renderPhaseTimer, 1000);

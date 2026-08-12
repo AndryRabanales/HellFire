@@ -611,23 +611,35 @@ def init_db():
         db.commit()
         print(f"[OnFire] RESET v3: base limpia, unico admin '{init_user}'.")
 
-    # La facultad es cosa de los boletos UADY: un VIP o un Ultra VIP no pertenece a
-    # ninguna. Los tipos creados antes nacieron con la casilla marcada (venía activa
-    # por defecto), así que pedían facultad y la imprimían en el boleto. Se corrige
-    # UNA sola vez; si algún día se quiere lo contrario, se marca desde Editar y esto
-    # ya no vuelve a tocarlo.
-    if setting(db, "fix_vip_sin_facultad") != "1":
-        arreglados = db.execute(
-            "SELECT name FROM ticket_types WHERE is_vip=1 AND needs_faculty=1").fetchall()
-        if arreglados:
-            db.execute("UPDATE ticket_types SET needs_faculty=0 WHERE is_vip=1")
-            nombres = ", ".join(r["name"] for r in arreglados)
-            db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
-                       ("sistema", "catalogo",
-                        f"Los boletos VIP ya no piden facultad: {nombres}", now_iso()))
-            print(f"[OnFire] VIP sin facultad: {nombres}")
-        set_setting(db, "fix_vip_sin_facultad", "1")
+    # La facultad es SOLO de los boletos UADY: ni Externo, ni VIP, ni Ultra VIP
+    # pertenecen a una. Los tipos creados antes nacieron con la casilla marcada
+    # (venía activa por defecto), así que la pedían y la imprimían en el boleto.
+    #
+    # El primer intento solo miraba los marcados como VIP ★, y un "Ultra VIP" creado
+    # sin esa marca se quedaba pidiendo facultad igual. Aquí se corrige por lo que
+    # de verdad importa: el único tipo con facultad es UADY. Corre una vez; si algún
+    # día se quiere otra cosa, se marca desde Editar y esto ya no vuelve a tocarlo.
+    # No es una migración de una sola vez: se revisa en CADA arranque. La versión
+    # anterior se marcaba como hecha en el primer arranque —cuando todavía no existía
+    # el tipo problemático— y después ya nunca corregía nada. Un tipo creado más tarde
+    # con la casilla mal se quedaba pidiendo facultad para siempre.
+    #
+    # Lo único que respeta es la decisión explícita de un admin: si alguien marca a
+    # mano "Pedir facultad" desde Editar, ese tipo queda en la lista de excepciones
+    # (facultad_manual) y esto no lo vuelve a tocar.
+    manual = set(json.loads(setting(db, "facultad_manual") or "[]"))
+    arreglados = [r for r in db.execute(
+        "SELECT id, name FROM ticket_types WHERE needs_faculty=1 "
+        "AND LOWER(TRIM(name)) != 'uady'").fetchall() if r["id"] not in manual]
+    if arreglados:
+        for r in arreglados:
+            db.execute("UPDATE ticket_types SET needs_faculty=0 WHERE id=?", (r["id"],))
+        nombres = ", ".join(r["name"] for r in arreglados)
+        db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
+                   ("sistema", "catalogo",
+                    f"Ya no piden facultad (solo UADY la lleva): {nombres}", now_iso()))
         db.commit()
+        print(f"[OnFire] Sin facultad: {nombres}")
 
     # RESET A PETICIÓN — para volver a dejar el sistema en cero cuantas veces haga
     # falta (por ejemplo después de enseñárselo al equipo), sin tocar código:
@@ -1534,7 +1546,10 @@ def create_type():
     price = int(round(float(b.get("price", 0)) * 100))
     if not name or price <= 0:
         return jsonify(error="Nombre y precio válidos requeridos"), 400
-    needs_fac = 0 if b.get("needs_faculty") is False else 1
+    # La facultad es la EXCEPCIÓN, no la regla: solo la llevan los boletos UADY. Antes
+    # el valor por omisión era "sí", así que cualquier tipo nuevo nacía pidiéndola y
+    # sacándola impresa en el boleto aunque nadie lo hubiera querido.
+    needs_fac = 1 if b.get("needs_faculty") else 0
     db.execute("INSERT INTO ticket_types(name, price_cents, is_vip, needs_faculty) VALUES(?,?,?,?)",
                (name, price, 1 if b.get("is_vip") else 0, needs_fac))
     audit(db, s["admin"]["username"], "precio", f"Creó tipo '{name}' a ${price/100:.2f}")
@@ -1569,6 +1584,11 @@ def edit_type(tid):
         # cambia lo que se le pide al comprador y lo que sale impreso en el boleto
         audit(db, s["admin"]["username"], "catalogo",
               f"'{name}' {'ahora pide' if needs_fac else 'ya no pide'} facultad")
+        # Decisión a mano: se apunta para que la corrección automática del arranque
+        # (que quita la facultad a todo lo que no sea UADY) no la deshaga.
+        manual = set(json.loads(setting(db, "facultad_manual") or "[]"))
+        manual.add(tid) if needs_fac else manual.discard(tid)
+        set_setting(db, "facultad_manual", json.dumps(sorted(manual)))
     db.commit()
     return jsonify(ok=True)
 
