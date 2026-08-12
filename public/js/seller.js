@@ -168,25 +168,26 @@ function renderPhaseTimer() {
   const m = Math.floor(diff % 3600000 / 60000);
   const sg = Math.floor(diff % 60000 / 1000);
 
-  // La precisión va con la urgencia. Un reloj con segundos corriendo cuando faltan
-  // 20 días es ruido que se mueve y no dice nada; a media hora del cambio, en
-  // cambio, el segundero ES el mensaje.
-  const urge = diff < 48 * 3600000;
-  let reloj;
-  if (d >= 2)      reloj = d + ' días';
-  else if (d >= 1) reloj = d + 'd ' + h + 'h';
-  else if (h >= 1) reloj = h + 'h ' + pad2(m) + 'm';
-  else             reloj = pad2(m) + ':' + pad2(sg);
+  // Cuenta regresiva de verdad: cada unidad en su casilla, con el segundero
+  // corriendo. Es lo que el vendedor le enseña al comprador para cerrar la venta
+  // ("mira, faltan 20 días y sube"), así que tiene que verse.
+  const casilla = (v, etq) => `<div class="pt-u"><b>${pad2(v)}</b><i>${etq}</i></div>`;
+  const reloj = casilla(d, 'días') + casilla(h, 'hrs') +
+                casilla(m, 'min') + casilla(sg, 'seg');
 
+  // Menos de 48 h: se enciende. Si gritara siempre, dejaría de significar.
+  const urge = diff < 48 * 3600000;
   const lines = g.items.map(i =>
     `<span>${esc(i.name)}<b>${fmtMoney(i.price_cents / 100)}</b></span>`).join('');
+
   box.classList.remove('hidden');
   box.classList.toggle('urge', urge);
   box.innerHTML =
-    `<div class="pt-top">
+    `<div class="pt-head">
+       <span class="pt-sub">Los precios suben</span>
        <span class="pt-fase">${esc(g.name)}</span>
-       <span class="pt-clock">en ${reloj}</span>
      </div>
+     <div class="pt-clock">${reloj}</div>
      <div class="pt-items">${lines}</div>`;
 }
 

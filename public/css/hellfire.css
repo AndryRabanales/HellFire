@@ -341,25 +341,38 @@ table.data tr.void td.strike{text-decoration:line-through}
 #toast.show{opacity:1}
 
 /* Cronómetro de fase (panel de vendedor): cuenta regresiva al próximo cambio de precio */
-/* Cronómetro de fase. Es un DATO de apoyo, no el protagonista: una tira delgada
-   con una línea de acento, sin caja ni reloj gigante. Solo cuando de verdad falta
-   poco (menos de 48 h) se enciende — si grita todo el tiempo, deja de significar. */
-.phase-timer{margin:0;padding:7px 0 7px 11px;border-left:2px solid rgba(255,122,46,.5);
-  background:none;border-radius:0}
-.phase-timer .pt-top{display:flex;align-items:baseline;gap:7px}
-.phase-timer .pt-fase{font:700 9.5px "Space Grotesk";letter-spacing:.13em;
-  text-transform:uppercase;color:var(--ember-dim)}
-.phase-timer .pt-clock{font:600 11px Manrope;color:var(--cream-45)}
-.phase-timer .pt-items{margin-top:3px;display:flex;flex-wrap:wrap;gap:2px 15px}
-.phase-timer .pt-items span{font:500 10.5px Manrope;color:rgba(246,241,231,.4)}
+/* Cuenta regresiva al cambio de precio. Es la herramienta de venta del vendedor
+   —"faltan 20 días y sube"—, así que se ve: cada unidad en su casilla, números
+   tabulares para que el segundero no baile y no mueva el ancho a cada tic. */
+.phase-timer{margin:0;padding:11px 12px 12px;border-radius:14px;
+  background:linear-gradient(160deg,rgba(255,122,46,.13),rgba(255,122,46,.03));
+  border:1px solid rgba(255,122,46,.3)}
+.phase-timer .pt-head{display:flex;align-items:baseline;gap:7px;margin-bottom:9px}
+.phase-timer .pt-sub{font:600 9.5px "Space Grotesk";letter-spacing:.15em;
+  text-transform:uppercase;color:var(--cream-45)}
+.phase-timer .pt-fase{font:800 9.5px "Space Grotesk";letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ember)}
+
+.phase-timer .pt-clock{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.phase-timer .pt-u{display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:7px 2px 6px;border-radius:10px;background:rgba(0,0,0,.32);
+  border:1px solid rgba(255,122,46,.18)}
+.phase-timer .pt-u b{font:800 21px/1 "Space Grotesk",monospace;color:var(--ember-soft);
+  font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.phase-timer .pt-u i{font:600 7.5px "Space Grotesk";letter-spacing:.13em;
+  text-transform:uppercase;color:var(--cream-45);font-style:normal}
+
+.phase-timer .pt-items{margin-top:9px;display:flex;flex-wrap:wrap;gap:2px 15px;
+  justify-content:center;padding-top:8px;border-top:1px solid rgba(255,122,46,.16)}
+.phase-timer .pt-items span{font:500 10.5px Manrope;color:var(--cream-45)}
 .phase-timer .pt-items b{font:700 12px "Space Grotesk";color:var(--cream-60);margin-left:4px}
 
-/* Menos de 48 h: ahora sí importa y se pone al frente. */
-.phase-timer.urge{border-left-color:var(--ember);padding:9px 11px;border-radius:0 11px 11px 0;
-  background:linear-gradient(90deg,rgba(255,122,46,.13),rgba(255,122,46,0))}
-.phase-timer.urge .pt-fase{color:var(--ember-soft)}
-.phase-timer.urge .pt-clock{font:800 15px/1 "Space Grotesk",monospace;color:var(--ember);
-  font-variant-numeric:tabular-nums}
+/* Menos de 48 h: los números se ponen al rojo vivo y el bloque respira. */
+.phase-timer.urge{border-color:var(--ember);
+  background:linear-gradient(160deg,rgba(255,122,46,.22),rgba(255,122,46,.05));
+  box-shadow:0 0 22px rgba(255,110,30,.2)}
+.phase-timer.urge .pt-u{border-color:rgba(255,122,46,.35)}
+.phase-timer.urge .pt-u b{color:var(--ember);text-shadow:0 0 14px rgba(255,110,30,.5)}
 .phase-timer.urge .pt-items b{color:var(--ember-soft)}
 .phase-timer.urge .pt-items span{color:var(--cream-60)}
 
