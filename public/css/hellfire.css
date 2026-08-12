@@ -183,12 +183,26 @@ select.input option{background:#160603;color:var(--cream)}
 /* Grupo de 10: UN botón, dos renglones. Antes la botella era una pastilla dorada
    encima del botón y la gente la tocaba creyendo que era otro botón — con razón:
    tenía borde, fondo y forma de pastilla. El premio no es una acción, es la razón
-   para tocar el que sí lo es, así que vive dentro. */
-.btn.grupo10{display:flex;flex-direction:column;align-items:center;gap:4px;
-  padding:12px;width:100%}
-.btn.grupo10 .g-t{font:800 14px Manrope;color:var(--ember-soft)}
+   para tocar el que sí lo es, así que vive dentro.
+
+   Y el botón iba en "contorno", que en esta pantalla se confunde con las tarjetas de
+   tipo de boleto: mismo borde, mismo fondo. Ahora lleva relleno, relieve y flecha —
+   relleno para decir "soy un botón", flecha para decir "te llevo a otro lado". */
+.btn.grupo10{display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:12px;width:100%;border:1px solid rgba(255,122,46,.55);
+  background:linear-gradient(180deg,rgba(255,122,46,.2),rgba(255,122,46,.08));
+  box-shadow:0 1px 0 rgba(255,255,255,.09) inset,0 3px 10px rgba(0,0,0,.3)}
+.btn.grupo10 .g-t{font:800 14px Manrope;color:var(--ember-soft);
+  display:inline-flex;align-items:center}
 .btn.grupo10 .g-s{display:inline-flex;align-items:center;gap:5px;
   font:600 10.5px Manrope;color:#e8c979}
+.btn.grupo10:active{background:linear-gradient(180deg,rgba(255,122,46,.3),rgba(255,122,46,.14))}
+
+/* La flecha: señal de "esto te lleva a otra pantalla", no de "esto se marca". */
+.g-arrow{font:700 17px/1 Manrope;margin-left:7px;opacity:.65;transform:translateY(-1px)}
+
+/* "Ver mi historial" era texto suelto y no se leía como algo que se toca. */
+.btn.quiet{border:1px solid rgba(255,120,40,.18);border-radius:12px}
 
 /* resultado de una venta: ocupa la pantalla en vez de dejarla vacía */
 .doneblock{text-align:center;padding:26px 18px 22px;border-radius:20px;margin-top:14px;
