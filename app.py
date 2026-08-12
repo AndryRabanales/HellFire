@@ -1547,6 +1547,10 @@ def edit_type(tid):
     if active != t["active"]:
         audit(db, s["admin"]["username"], "catalogo",
               f"{'Activó' if active else 'Desactivó'} tipo '{name}'")
+    if needs_fac != t["needs_faculty"]:
+        # cambia lo que se le pide al comprador y lo que sale impreso en el boleto
+        audit(db, s["admin"]["username"], "catalogo",
+              f"'{name}' {'ahora pide' if needs_fac else 'ya no pide'} facultad")
     db.commit()
     return jsonify(ok=True)
 

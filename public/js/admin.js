@@ -1081,13 +1081,18 @@ async function loadCatalogs() {
 }
 
 function editType(t) {
-  // solo el precio es editable; nombre/VIP/facultad/disponibilidad son fijos por tipo
-  const rasgo = t.is_vip ? 'VIP ★' : (t.needs_faculty ? 'pide facultad (UADY)' : 'sin facultad (Externo)');
-  modal(`<div class="h1" style="font-size:18px">Editar precio · ${esc(t.name)}</div>
-    <div class="muted" style="margin-top:4px">${esc(t.name)} — ${rasgo} · siempre disponible</div>
+  // El nombre y el VIP son fijos, pero la facultad SÍ se puede corregir: solo UADY la
+  // necesita, y un tipo creado con la casilla marcada por error quedaba pidiéndola
+  // para siempre (y sacándola impresa en el boleto) sin forma de arreglarlo.
+  modal(`<div class="h1" style="font-size:18px">Editar · ${esc(t.name)}</div>
+    <div class="muted" style="margin-top:4px">${esc(t.name)}${t.is_vip ? ' — VIP ★' : ''} · siempre disponible</div>
     <div class="label mt16">Precio ($)</div>
     <input class="input" id="et-price" type="number" min="1" value="${t.price_cents / 100}">
-    <div class="muted mt12">El cambio de precio solo aplica a boletos nuevos; los ya generados conservan su precio.</div>
+    <label class="row mt16" style="gap:8px;cursor:pointer">
+      <input type="checkbox" id="et-fac" ${t.needs_faculty ? 'checked' : ''}>
+      <span style="font:600 13px Manrope;color:var(--cream)">Pedir facultad al comprador</span></label>
+    <div class="muted" style="font-size:11px;margin-top:4px">Solo los boletos UADY la llevan. Si la quitas, deja de preguntarse y deja de salir impresa en el boleto.</div>
+    <div class="muted mt12">Los cambios solo aplican a boletos nuevos; los ya generados quedan como están.</div>
     <div class="err mt8" id="et-err"></div>
     <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
     <button class="btn grow" id="et-save">Guardar</button></div>`);
@@ -1095,9 +1100,10 @@ function editType(t) {
     const price = parseFloat($('#et-price').value);
     if (!(price > 0)) { $('#et-err').textContent = 'Escribe un precio válido'; return; }
     try {
-      // solo mandamos el precio; el resto de propiedades quedan intactas en el backend
-      await API.put('/api/admin/ticket-types/' + t.id, { price });
-      closeModal(); toast('Precio actualizado'); loadCatalogs();
+      // el resto de propiedades quedan intactas en el backend
+      await API.put('/api/admin/ticket-types/' + t.id,
+                    { price, needs_faculty: $('#et-fac').checked });
+      closeModal(); toast('Guardado'); loadCatalogs();
     } catch (e) { if (!guard(e)) $('#et-err').textContent = e.message; }
   };
 }
@@ -1112,7 +1118,7 @@ $('#btn-tt-create').addEventListener('click', async () => {
       needs_faculty: $('#tt-needfac').checked,
     });
     $('#tt-name').value = ''; $('#tt-price').value = '';
-    $('#tt-vip').checked = false; $('#tt-needfac').checked = true;
+    $('#tt-vip').checked = false; $('#tt-needfac').checked = false;
     loadCatalogs();
   } catch (e) { if (!guard(e)) $('#tt-err').textContent = e.message; }
 });
