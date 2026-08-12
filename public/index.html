@@ -61,9 +61,10 @@
   <!-- ---- resultado del boleto individual: se queda en pantalla con su botón de
        descarga, igual que el de grupo (en el celular la descarga automática se
        pierde y el vendedor no sabía si salió) ---- -->
-  <div id="solo-result" class="hidden">
+  <!-- Tira del último boleto individual: se queda bajo el formulario, sin tapar
+       nada, para poder volver a descargarlo si la bajada automática no se vio. -->
+  <div id="solo-result" class="hidden mt16">
     <div id="solo-row"></div>
-    <div class="group-price-bar mt16 done" id="solo-bar"></div>
   </div>
 
   <!-- ---- switch a plan de grupo ---- -->
@@ -96,7 +97,6 @@
   <button class="btn" id="btn-generate" style="margin-top:auto">GENERAR BOLETO</button>
   <button class="btn hidden" id="btn-generate-group" style="margin-top:auto">GENERAR GRUPO</button>
   <button class="btn hidden" id="btn-group-done" style="margin-top:auto">✓&nbsp;&nbsp;Listo</button>
-  <button class="btn hidden" id="btn-solo-done" style="margin-top:auto">✓&nbsp;&nbsp;Listo</button>
   <button class="btn quiet" id="btn-history"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>&nbsp;Ver mi historial&nbsp;<span style="color:var(--ember-dim)">→</span></button>
 </div>
 

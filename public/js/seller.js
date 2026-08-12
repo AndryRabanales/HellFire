@@ -99,9 +99,11 @@ function renderTypes() {
     el.addEventListener('click', () => { SELECTED_TYPE = t.id; renderTypes(); });
     box.appendChild(el);
   });
-  // la facultad solo se pide para tipos que la requieren (UADY); Externo y VIP no
+  // La facultad solo se pide para tipos que la requieren (UADY). Antes también se
+  // mostraba SIN tipo elegido; ahora que tras cada venta el formulario se queda en
+  // pantalla, eso dejaba un "Elige facultad..." colgando después de cada boleto.
   const sel = CATALOG.types.find(t => t.id === SELECTED_TYPE);
-  const showFac = !sel || sel.needs_faculty;
+  const showFac = !!sel && !!sel.needs_faculty;
   $('#f-faculty-block').style.display = showFac ? '' : 'none';
   renderPhaseTimer();
 }
@@ -363,8 +365,14 @@ async function generate() {
     });
     LAST_TICKET = r.ticket;
     VENTA_REF = null;                       // venta cerrada: la siguiente lleva otra
-    showSoloResult(r.ticket);
-    if (r.repetido) toast('Ese boleto ya se hab\u00eda generado: es el mismo, no se duplic\u00f3');
+    // se descarga en el acto; si el navegador lo bloquea queda el botón de la tira
+    let bajo = false;
+    try { await downloadTicket(r.ticket, CATALOG); bajo = true; } catch (_) {}
+    showSoloResult(r.ticket, bajo);
+    clearForm();                            // listo para la siguiente venta
+    toast(r.repetido
+      ? 'Ese boleto ya se hab\u00eda generado: es el mismo, no se duplic\u00f3'
+      : (bajo ? 'Boleto descargado' : 'Boleto generado \u00b7 toca la flecha para bajarlo'));
   } catch (e) {
     if (e.data && e.data._unauthorized) return sessionLost();
     $('#f-err').textContent = mensajeDeError(e);
@@ -373,59 +381,44 @@ async function generate() {
   }
 }
 
-/* Tras generar un boleto individual NO se sale de la pantalla ni se descarga solo:
-   queda su tarjeta con el botón de descarga, igual que en grupos. La descarga
-   automática se perdía en el celular y el vendedor tenía que ir al historial a
-   buscarla; así es un toque real del usuario, que es lo que funciona en iPhone. */
-function showSoloResult(t) {
+/* Boleto individual: NO se cambia de pantalla. Se descarga y punto — el formulario
+   se queda listo para la siguiente venta, que es lo que se hace 100 veces al día.
+
+   Debajo del formulario queda una tira con el último boleto y su botón: en iPhone
+   la descarga automática a veces no se ve por ningún lado, y sin esa tira el
+   vendedor no tendría cómo recuperarla salvo yéndose al historial. */
+function showSoloResult(t, bajoAutomatico) {
   $('#solo-row').innerHTML = `
     <div class="grouprow done">
       <div class="gr-num">\u2713</div>
       <div style="flex:1;min-width:0">
         <div class="gr-label">${esc(ticketTypeLabel(t))} \u00b7 ${fmtMoney(t.price)}</div>
-        <div style="font:700 15px Manrope;color:var(--cream);
-          text-decoration:underline;text-decoration-color:#ff7a4d;text-underline-offset:4px">
-          ${esc(t.buyer_name)}
-        </div>
+        <div style="font:700 15px Manrope;color:var(--cream);overflow:hidden;
+          text-overflow:ellipsis;white-space:nowrap">${esc(t.buyer_name)}</div>
       </div>
-      <button class="iconbtn" id="solo-dl" title="Descargar boleto">${DL_ICON}</button>
+      <button class="iconbtn" id="solo-dl" title="Descargar de nuevo">${bajoAutomatico ? CHECK_ICON : DL_ICON}</button>
+    </div>
+    <div class="muted" style="font-size:10.5px;margin-top:6px;text-align:center">
+      ${bajoAutomatico ? 'Descargado. Si no lo encuentras, toca la flecha para bajarlo otra vez.'
+                       : 'Toca la flecha para descargar el boleto.'}
     </div>`;
   const b = $('#solo-dl');
+  if (bajoAutomatico) { b.classList.add('grabbed'); DOWNLOADED.add(t.id); }
   b.addEventListener('click', async () => {
     b.disabled = true;
     try {
       await downloadTicket(t, CATALOG);
-      b.innerHTML = CHECK_ICON;              // queda en check para saber que ya sali\u00f3
+      b.innerHTML = CHECK_ICON;
       b.classList.add('grabbed');
-      b.title = 'Ya descargado \u00b7 toca para volver a descargarlo';
       DOWNLOADED.add(t.id);
     } finally { b.disabled = false; }
   });
-  $('#solo-bar').outerHTML = `
-    <div class="doneblock" id="solo-bar">
-      <div class="db-ball">\u2713</div>
-      <div class="db-t">\u00a1Boleto generado!</div>
-      <div class="db-name">${esc(t.buyer_name)}</div>
-      <div class="db-meta">${esc(ticketTypeLabel(t))}${t.faculty_name ? ' \u00b7 ' + esc(t.faculty_name) : ''} \u00b7 ${fmtMoney(t.price)}</div>
-      <div class="db-hint">Toca el bot\u00f3n de descarga de arriba y p\u00e1sale la imagen al comprador.<br>
-        Queda guardado en tu historial por si lo necesitas despu\u00e9s.</div>
-    </div>`;
-  $('#mode-individual').classList.add('hidden');
-  $('#group-switch').classList.add('hidden');
   $('#solo-result').classList.remove('hidden');
-  $('#btn-generate').classList.add('hidden');
-  $('#btn-solo-done').classList.remove('hidden');
-  $('#f-hint').textContent = 'Descarga el boleto abajo';
 }
 
 function exitSoloResult() {
-  clearForm();
   $('#solo-result').classList.add('hidden');
-  $('#mode-individual').classList.remove('hidden');
-  $('#group-switch').classList.remove('hidden');
-  $('#btn-generate').classList.remove('hidden');
-  $('#btn-solo-done').classList.add('hidden');
-  $('#f-hint').textContent = 'Los datos del comprador';
+  $('#solo-row').innerHTML = '';
 }
 
 /* ---------------- confirmación (RF-47) ---------------- */
@@ -532,7 +525,6 @@ $('#btn-generate-group').addEventListener('click', generateGroup);
 $('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
 $('#btn-group-back').addEventListener('click', exitGroupMode);
 $('#btn-group-done').addEventListener('click', exitGroupMode);
-$('#btn-solo-done').addEventListener('click', exitSoloResult);
 $('#btn-history').addEventListener('click', () => { show('history'); loadHistory(); });
 $('#btn-back').addEventListener('click', () => show('form'));
 $('#btn-another').addEventListener('click', () => { clearForm(); show('form'); });  // RF-48
