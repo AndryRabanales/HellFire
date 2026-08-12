@@ -56,17 +56,21 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--ember-
   background-position:calc(100% - 20px) 55%,calc(100% - 15px) 55%;background-size:5px 5px;background-repeat:no-repeat}
 select.input option{background:#160603;color:var(--cream)}
 
-.btn{width:100%;padding:16px;border:none;border-radius:16px;cursor:pointer;
-  background:linear-gradient(180deg,#ff8a3d,#e8480d);color:#1a0800;
-  font:800 15px Manrope;letter-spacing:.02em;box-shadow:0 0 24px rgba(255,90,20,.5);
+/* El botón principal llevaba un halo naranja de 24px sin dirección: manchaba todo lo
+   que tenía cerca. Ahora la sombra cae hacia abajo, como caería la luz, y un filo
+   claro arriba le da volumen en vez de brillo. */
+.btn{width:100%;padding:16px;border:none;border-radius:14px;cursor:pointer;
+  background:linear-gradient(180deg,#ff8f45,#e8480d);color:#1a0800;
+  font:800 15px Manrope;letter-spacing:.02em;
+  box-shadow:0 1px 0 rgba(255,255,255,.28) inset,0 6px 20px rgba(232,72,13,.38);
   transition:transform .08s}
 .btn:active{transform:scale(.98)}
 .btn:disabled{opacity:.5;box-shadow:none;cursor:default}
-.btn.ghost{background:transparent;border:1.5px solid var(--line-strong);color:var(--ember-soft);box-shadow:none}
+.btn.ghost{background:rgba(255,255,255,.02);border:1px solid var(--line-strong);color:var(--ember-soft);box-shadow:none}
 .btn.ghost.sel{background:linear-gradient(180deg,#ff8a3d,#e8480d);border-color:transparent;color:#1a0800}
 .btn.quiet{background:transparent;color:var(--cream-60);box-shadow:none;font-weight:700;font-size:12px;padding:12px}
-.btn.danger{background:transparent;border:1.5px solid rgba(232,112,106,.5);color:var(--danger);box-shadow:none}
-.btn.sm{width:auto;padding:9px 14px;font-size:12px;border-radius:11px}
+.btn.danger{background:rgba(232,112,106,.05);border:1px solid rgba(232,112,106,.45);color:var(--danger);box-shadow:none}
+.btn.sm{width:auto;padding:9px 14px;font-size:12px;border-radius:10px}
 
 .iconbtn{flex:none;width:36px;height:36px;border-radius:10px;border:1px solid var(--line-strong);
   background:rgba(255,110,30,.12);color:var(--ember-soft);font-size:15px;cursor:pointer;transition:all .15s}
@@ -81,13 +85,17 @@ select.input option{background:#160603;color:var(--cream)}
 .card.hot{background:rgba(255,110,30,.1);border-color:rgba(255,120,40,.28)}
 
 /* barra superior */
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+/* La barra de arriba necesita su propio aire: pegada al bloque de abajo, el nombre
+   y "Salir" parecían parte de él. Una línea tenue la cierra. */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding-bottom:13px;margin-bottom:15px;border-bottom:1px solid rgba(255,120,40,.13)}
 .avatar{width:36px;height:36px;border-radius:11px;background:rgba(255,110,30,.12);
   border:1px solid rgba(255,110,30,.4);display:flex;align-items:center;justify-content:center;
   font:800 16px Cinzel;color:var(--ember)}
 .who{font:700 14px Manrope;color:var(--cream)}
-.linkout{display:flex;align-items:center;gap:5px;font:600 11px Manrope;color:var(--cream-45);
-  background:none;border:none;cursor:pointer;padding:8px}
+.linkout{display:flex;align-items:center;gap:6px;font:600 11px Manrope;color:var(--cream-45);
+  background:none;border:1px solid rgba(255,120,40,.16);border-radius:10px;cursor:pointer;
+  padding:7px 12px}
 
 /* código PIN */
 .pinrow{display:flex;gap:11px;justify-content:center}
@@ -344,28 +352,33 @@ table.data tr.void td.strike{text-decoration:line-through}
 /* Cuenta regresiva al cambio de precio. Es la herramienta de venta del vendedor
    —"faltan 20 días y sube"—, así que se ve: cada unidad en su casilla, números
    tabulares para que el segundero no baile y no mueva el ancho a cada tic. */
-.phase-timer{margin:0;padding:11px 12px 12px;border-radius:14px;
+.phase-timer{margin:0;padding:9px 11px 10px;border-radius:14px;
   background:linear-gradient(160deg,rgba(255,122,46,.13),rgba(255,122,46,.03));
   border:1px solid rgba(255,122,46,.3)}
-.phase-timer .pt-head{display:flex;align-items:baseline;gap:7px;margin-bottom:9px}
+.phase-timer .pt-head{display:flex;align-items:baseline;gap:7px;margin-bottom:7px}
 .phase-timer .pt-sub{font:600 9.5px "Space Grotesk";letter-spacing:.15em;
   text-transform:uppercase;color:var(--cream-45)}
 .phase-timer .pt-fase{font:800 9.5px "Space Grotesk";letter-spacing:.13em;
   text-transform:uppercase;color:var(--ember)}
 
 .phase-timer .pt-clock{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.phase-timer .pt-u{display:flex;flex-direction:column;align-items:center;gap:2px;
-  padding:7px 2px 6px;border-radius:10px;background:rgba(0,0,0,.32);
+.phase-timer .pt-u{display:flex;flex-direction:column;align-items:center;gap:1px;
+  padding:5px 2px 4px;border-radius:9px;background:rgba(0,0,0,.32);
   border:1px solid rgba(255,122,46,.18)}
-.phase-timer .pt-u b{font:800 21px/1 "Space Grotesk",monospace;color:var(--ember-soft);
+.phase-timer .pt-u b{font:800 18px/1 "Space Grotesk",monospace;color:var(--ember-soft);
   font-variant-numeric:tabular-nums;letter-spacing:.01em}
 .phase-timer .pt-u i{font:600 7.5px "Space Grotesk";letter-spacing:.13em;
   text-transform:uppercase;color:var(--cream-45);font-style:normal}
 
-.phase-timer .pt-items{margin-top:9px;display:flex;flex-wrap:wrap;gap:2px 15px;
-  justify-content:center;padding-top:8px;border-top:1px solid rgba(255,122,46,.16)}
-.phase-timer .pt-items span{font:500 10.5px Manrope;color:var(--cream-45)}
-.phase-timer .pt-items b{font:700 12px "Space Grotesk";color:var(--cream-60);margin-left:4px}
+.phase-timer .pt-items{margin-top:8px;padding-top:7px;display:grid;gap:4px;
+  grid-auto-flow:column;grid-auto-columns:1fr;
+  border-top:1px solid rgba(255,122,46,.16)}
+/* nombre y precio en la MISMA línea, centrados dentro de su columna: así los tres
+   bloques miden lo mismo sin que el cronómetro crezca un renglón */
+.phase-timer .pt-items span{display:flex;align-items:baseline;justify-content:center;gap:5px;
+  font:500 9px "Space Grotesk";letter-spacing:.1em;text-transform:uppercase;color:var(--cream-45)}
+.phase-timer .pt-items b{font:700 12.5px "Space Grotesk";color:var(--cream-60);margin:0;
+  letter-spacing:0;text-transform:none}
 
 /* Menos de 48 h: los números se ponen al rojo vivo y el bloque respira. */
 .phase-timer.urge{border-color:var(--ember);
