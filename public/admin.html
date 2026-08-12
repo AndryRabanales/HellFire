@@ -182,7 +182,7 @@
     </div>
     <div class="card">
       <div class="label">Fases de venta · suben todos los boletos</div>
-      <div class="muted" style="margin-bottom:10px">Al llegar su fecha, <b>todos los tipos</b> pasan al precio que pongas aquí. Los boletos ya generados no cambian.</div>
+      <div class="muted" style="margin-bottom:10px">La fecha es cuándo <b>ARRANCA</b> esa fase: ese día a las 00:00 todos los tipos pasan al precio que pongas aquí, y siguen así hasta que empiece la siguiente. No se pone fecha de fin. Los boletos ya generados no cambian de precio.</div>
       <div id="ph-list"></div>
       <div id="ph-add" class="mt12"></div>
       <div class="err mt8" id="ph-err"></div>
@@ -214,6 +214,16 @@
       <div class="label">Flyers del boleto — uno por tipo</div>
       <div class="muted" style="margin-bottom:10px">Una imagen por tipo. Al que no tenga la suya se le pone la de Externo. Ultra VIP está oculto: es solo para ver el diseño.</div>
       <div id="flyer-editors" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px"></div>
+    </div>
+    <!-- Cierre de ventas: se usa una vez, la noche de la fiesta, pero cuando se
+         necesita hay prisa. Por eso va con su propio bloque y no escondido. -->
+    <div class="card mt12" id="vt-card">
+      <div class="label">Boletera de los vendedores</div>
+      <div class="muted" id="vt-estado" style="margin:6px 0 10px"></div>
+      <button class="btn" id="btn-vt-toggle"></button>
+      <div class="muted" style="font-size:10.5px;margin-top:8px">
+        El escáner de la puerta y este panel siguen funcionando aunque cierres.
+      </div>
     </div>
     <div class="card mt12">
       <div class="label">Respaldo y Excel</div>

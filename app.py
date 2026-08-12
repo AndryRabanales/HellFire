@@ -296,6 +296,10 @@ DEFAULT_SETTINGS = {
     "event_subtitle": "Noche de brujas",
     "event_date_text": "",
     "folio_prefix": "HF-",
+    # Cierre de ventas: la noche de la fiesta se apaga la boletera para poder cortar
+    # cuentas con los vendedores sabiendo que el número ya no se mueve. El ESCÁNER y
+    # el panel de admin siguen funcionando: la puerta no puede depender de esto.
+    "ventas_cerradas": "0",
     "folio_start": "1",              # número del primer folio (no revela lo vendido)
     "session_minutes": "480",
     "admin_session_minutes": "480",
@@ -1023,10 +1027,14 @@ def catalog():
                       "group_price_cents": group_price,
                       "savings_cents": externo["price_cents"] - group_price}
     return jsonify(types=types, faculties=facs, group=group_info,
+                   ventas_cerradas=ventas_cerradas(db),
                    event_name=setting(db, "event_name"),
                    event_subtitle=setting(db, "event_subtitle"),
                    event_date_text=setting(db, "event_date_text"),
                    **flyer_info(db))
+
+def ventas_cerradas(db):
+    return setting(db, "ventas_cerradas") == "1"
 
 def ticket_public(t):
     return {"id": t["id"], "folio": t["folio"], "qr_token": t["qr_token"],
@@ -1094,6 +1102,11 @@ def create_ticket():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
+    # Ventas cerradas: la noche de la fiesta se apaga para cortar cuentas sabiendo que
+    # el número ya no se mueve. El código de invitados es la excepción a propósito:
+    # es privado del organizador y sirve de salida para una cortesía de último momento.
+    if ventas_cerradas(db) and not is_guest_seller(s["seller"]):
+        return jsonify(error="Las ventas ya cerraron. Habla con tu administrador."), 403
     body = request.json or {}
     # Si al vendedor se le cayó el internet DESPUÉS de que el boleto se creó, no
     # recibió respuesta y va a volver a darle a Generar. Sin esto quedaban dos
@@ -1154,6 +1167,8 @@ def create_group():
     if is_guest_seller(s["seller"]):
         return jsonify(error="Esta cuenta genera boletos de invitado uno por uno"), 403
     db = get_db()
+    if ventas_cerradas(db):
+        return jsonify(error="Las ventas ya cerraron. Habla con tu administrador."), 403
     b = request.json or {}
     size = b.get("size")
     if size != 10:
@@ -2183,8 +2198,31 @@ def get_settings():
     db = get_db()
     out = {k: setting(db, k) for k in ["event_name", "event_subtitle", "event_date_text",
                                        "folio_start"]}
+    out["ventas_cerradas"] = ventas_cerradas(db)
     out.update(flyer_info(db))
     return jsonify(out)
+
+@app.post("/api/admin/ventas")
+def toggle_ventas():
+    """Apaga o enciende la boletera de los vendedores.
+
+    Es para la noche de la fiesta: se cierra un par de horas antes para poder cortar
+    cuentas sabiendo que el total ya no se mueve. Deliberadamente NO toca el escáner
+    —la gente tiene que seguir entrando— ni el panel de admin. Queda en Movimientos
+    porque es de las cosas más gordas que se pueden hacer aquí."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    cerrar = bool((request.json or {}).get("cerrar"))
+    antes = ventas_cerradas(db)
+    set_setting(db, "ventas_cerradas", "1" if cerrar else "0")
+    if antes != cerrar:
+        audit(db, s["admin"]["username"], "catalogo",
+              "CERRÓ las ventas: los vendedores ya no pueden generar boletos"
+              if cerrar else "Reabrió las ventas: los vendedores vuelven a generar")
+    db.commit()
+    return jsonify(ok=True, ventas_cerradas=cerrar)
 
 def _clamp(v, lo, hi, default):
     try:

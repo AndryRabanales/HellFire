@@ -83,7 +83,28 @@ async function enterApp() {
   exitSoloResult();
   DOWNLOADED.clear();
   LAST_TICKET = null;
+  // AL FINAL: exitGroupMode vuelve a mostrar el formulario, así que el cierre tiene
+  // que ser lo último que se aplica o el vendedor vería la boletera igual que siempre.
+  aplicarCierre();
   show('form');
+}
+
+/* Con las ventas cerradas se retira el formulario entero: campos, tipos, grupo y el
+   botón de generar. Da igual que el servidor rechace la petición —eso el vendedor lo
+   vería después de escribir todo—; mejor que no empiece. */
+function aplicarCierre() {
+  const cerradas = !!(CATALOG && CATALOG.ventas_cerradas);
+  // OJO: exitGroupMode vuelve a MOSTRAR el formulario, así que va antes de esconderlo.
+  if (cerradas) exitGroupMode();
+  $('#ventas-cerradas').classList.toggle('hidden', !cerradas);
+  ['#mode-individual', '#group-switch', '#btn-generate', '#f-phase-timer'].forEach(sel => {
+    const el = $(sel);
+    if (!el) return;
+    if (cerradas) el.classList.add('hidden');
+    else if (sel !== '#f-phase-timer') el.classList.remove('hidden');
+  });
+  $('#f-hint').textContent = cerradas ? 'El corte ya se hizo' : 'Los datos del comprador';
+  return cerradas;
 }
 
 function renderTypes() {
@@ -106,6 +127,7 @@ function renderTypes() {
   const showFac = !!sel && !!sel.needs_faculty;
   $('#f-faculty-block').style.display = showFac ? '' : 'none';
   renderPhaseTimer();
+  aplicarCierre();
 }
 
 /* ---------------- cronómetro de la próxima fase de precio ---------------- */
@@ -183,6 +205,20 @@ function catalogoAlDia() {
   if (GROUP_SIZE || $('#f-buyer').value.trim()) return;   // venta a medias: no se toca
   reloadCatalog();
 }
+// El cierre de ventas SÍ se consulta aunque haya una venta a medias: si el
+// organizador ya cortó, el vendedor tiene que enterarse ahora, no al fallarle el
+// botón después de escribir diez nombres.
+async function revisaCierre() {
+  if (!API.token || !CATALOG) return;
+  try {
+    const c = await API.get('/api/catalog');
+    if (!!c.ventas_cerradas !== !!CATALOG.ventas_cerradas) {
+      CATALOG = c;
+      if (aplicarCierre()) toast('El organizador cerr\u00f3 las ventas');
+    }
+  } catch (_) { /* se reintenta en el siguiente tick */ }
+}
+setInterval(revisaCierre, 45000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) catalogoAlDia(); });
 setInterval(catalogoAlDia, 120000);
 

@@ -1000,9 +1000,11 @@ function renderPhases(types) {
   // formulario de alta: nombre + fecha + un precio por cada tipo
   const add = $('#ph-add');
   add.innerHTML = `
-    <div class="row" style="gap:6px;flex-wrap:wrap">
-      <input class="input" id="ph-name" placeholder="Nombre de la fase (ej. Preventa 2)" style="flex:1;min-width:130px;padding:9px;font-size:12px">
-      <input class="input" id="ph-date" type="date" style="width:150px;padding:9px;font-size:12px">
+    <div class="row" style="gap:6px;flex-wrap:wrap;align-items:flex-end">
+      <label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px;flex:1;min-width:130px">Nombre de la fase
+        <input class="input" id="ph-name" placeholder="ej. Fase 2" style="padding:9px;font-size:12px"></label>
+      <label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">Arranca el
+        <input class="input" id="ph-date" type="date" style="width:150px;padding:9px;font-size:12px"></label>
     </div>
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
       ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)}${t.is_vip ? ' ★' : ''} — precio nuevo
@@ -1335,8 +1337,41 @@ async function loadAjustes() {
   await Promise.all([loadSettings(), loadAdmins().catch(() => {})]);
 }
 
+/* Cerrar la boletera: se toca una sola vez, la noche de la fiesta, y con prisa.
+   Por eso el botón dice qué va a pasar (no "Activado/Desactivado") y pide una
+   confirmación explícita: apagarla por error deja a 30 vendedores sin poder vender. */
+function pintaVentas(cerradas) {
+  const est = $('#vt-estado'), btn = $('#btn-vt-toggle'), card = $('#vt-card');
+  if (!btn) return;
+  card.style.borderColor = cerradas ? 'rgba(232,112,106,.45)' : '';
+  est.innerHTML = cerradas
+    ? '<b style="color:var(--danger)">CERRADA</b> \u00b7 los vendedores no pueden generar boletos'
+    : '<b style="color:var(--ok)">ABIERTA</b> \u00b7 los vendedores est\u00e1n vendiendo';
+  btn.textContent = cerradas ? 'Reabrir las ventas' : 'Cerrar las ventas';
+  btn.className = cerradas ? 'btn' : 'btn danger';
+  btn.onclick = async () => {
+    const ok = await confirmModal({
+      title: cerradas ? 'Reabrir las ventas' : 'Cerrar las ventas',
+      body: cerradas
+        ? 'Los vendedores vuelven a poder generar boletos.'
+        : `Los <b>30 vendedores</b> dejan de poder generar boletos al instante, para que
+           puedas cortar cuentas sabiendo que el total ya no se mueve.<br><br>
+           <b style="color:var(--ok)">El esc\u00e1ner de la puerta sigue funcionando</b>, y
+           puedes reabrir cuando quieras.`,
+      okLabel: cerradas ? 'Reabrir' : 'Cerrar ahora', danger: !cerradas,
+    });
+    if (!ok) return;
+    try {
+      const r = await API.post('/api/admin/ventas', { cerrar: !cerradas });
+      pintaVentas(r.ventas_cerradas);
+      toast(r.ventas_cerradas ? 'Ventas CERRADAS' : 'Ventas reabiertas');
+    } catch (e) { if (!guard(e)) toast(e.message); }
+  };
+}
+
 async function loadSettings() {
   const s = await API.get('/api/admin/settings');
+  pintaVentas(s.ventas_cerradas);
   $('#st-name').value = s.event_name;
   $('#st-subtitle').value = s.event_subtitle;
   $('#st-folio').value = s.folio_start || '1';

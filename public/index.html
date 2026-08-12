@@ -44,6 +44,18 @@
   <div class="h1" style="margin:16px 0 3px">Nuevo boleto</div>
   <div class="hint" style="margin-bottom:14px" id="f-hint">Los datos del comprador</div>
 
+  <!-- Ventas cerradas: sustituye al formulario. Sin esto el vendedor seguiría
+       escribiendo nombres y solo se enteraría al fallar el botón. -->
+  <div id="ventas-cerradas" class="hidden">
+    <div class="doneblock" style="border-color:rgba(232,112,106,.4);
+      background:linear-gradient(160deg,rgba(232,112,106,.12),rgba(232,112,106,.02))">
+      <div class="db-ball" style="background:linear-gradient(160deg,#e8706a,#a8322c)">✕</div>
+      <div class="db-t">Ventas cerradas</div>
+      <div class="db-hint">Ya no se pueden generar boletos.<br>
+        Los que ya entregaste siguen siendo válidos en la puerta.</div>
+    </div>
+  </div>
+
   <!-- ---- modo individual (UADY / Externo / VIP) ---- -->
   <div id="mode-individual" style="display:flex;flex-direction:column;gap:12px">
     <div>
