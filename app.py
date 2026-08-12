@@ -2314,17 +2314,46 @@ def serve_flyer():
 
 # ---------------------------------------------------------------- estáticos
 
+def _version_estaticos():
+    """Sello de esta versión del CSS y el JS: la fecha del archivo más nuevo.
+
+    Sin esto, un arreglo subido a media venta NO llega a los teléfonos: Safari se
+    queda con el CSS y el JS que descargó la primera vez y no vuelve a pedirlos,
+    aunque el HTML sí se revalide. Con el sello pegado a la URL, cada versión es un
+    archivo distinto para el navegador y no hay nada viejo que reusar."""
+    ultimo = 0
+    for carpeta in ("css", "js"):
+        d = os.path.join(PUBLIC, carpeta)
+        if not os.path.isdir(d):
+            continue
+        for f in os.listdir(d):
+            try:
+                ultimo = max(ultimo, int(os.path.getmtime(os.path.join(d, f))))
+            except OSError:
+                pass
+    return str(ultimo)
+
+ASSET_V = _version_estaticos()
+_RE_ASSET = re.compile(r'(?P<a>(?:src|href)=")(?P<p>/(?:css|js)/[^"?]+)"')
+
+def pagina(nombre):
+    """Sirve una página pegándole el sello de versión al CSS y al JS que carga."""
+    with open(os.path.join(PUBLIC, nombre), encoding="utf-8") as fh:
+        html = fh.read()
+    html = _RE_ASSET.sub(lambda m: f'{m.group("a")}{m.group("p")}?v={ASSET_V}"', html)
+    return Response(html, mimetype="text/html")
+
 @app.get("/")
 def index():
-    return send_from_directory(PUBLIC, "index.html")
+    return pagina("index.html")
 
 @app.get("/admin")
 def admin_page():
-    return send_from_directory(PUBLIC, "admin.html")
+    return pagina("admin.html")
 
 @app.get("/scan")
 def scan_page():
-    return send_from_directory(PUBLIC, "scan.html")
+    return pagina("scan.html")
 
 @app.get("/sw.js")
 def service_worker():
@@ -2335,6 +2364,10 @@ def service_worker():
 
 @app.get("/<path:path>")
 def static_files(path):
+    # las páginas también se piden por su nombre de archivo (/admin.html): que pasen
+    # por el mismo sellado, o cargarían el CSS viejo
+    if path in ("index.html", "admin.html", "scan.html"):
+        return pagina(path)
     return send_from_directory(PUBLIC, path)
 
 # ---------------------------------------------------------------- arranque

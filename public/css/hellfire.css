@@ -90,6 +90,17 @@ select.input option{background:#160603;color:var(--cream)}
 .iconbtn.grabbed{background:linear-gradient(160deg,#ff7a4d,#c81e3a);
   border-color:transparent;color:#fff3ee}
 
+/* Volver. Antes eran una flecha suelta de 36px sin texto (historial) y un enlace de
+   4px de alto pegado al borde (grupo): ninguno se veía como algo que se toca, y el
+   de la flecha ni siquiera decía a dónde llevaba. Botón con su forma, su flecha y
+   su palabra. */
+.volver{display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+  padding:8px 14px 8px 11px;border-radius:11px;
+  border:1px solid rgba(255,120,40,.35);background:rgba(255,110,30,.09);
+  font:700 12px Manrope;color:var(--ember-soft);
+  transition:transform .1s ease,background .14s}
+.volver:active{transform:scale(.95);background:rgba(255,110,30,.18)}
+
 /* tarjetas */
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
 .card.hot{background:rgba(255,110,30,.1);border-color:rgba(255,120,40,.28)}
