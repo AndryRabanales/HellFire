@@ -1094,6 +1094,10 @@ function editType(t) {
       <input type="checkbox" id="et-fac" ${t.needs_faculty ? 'checked' : ''}>
       <span style="font:600 13px Manrope;color:var(--cream)">Pedir facultad al comprador</span></label>
     <div class="muted" style="font-size:11px;margin-top:4px">Solo los boletos UADY la llevan. Si la quitas, deja de preguntarse y deja de salir impresa en el boleto.</div>
+    <label class="row mt12" style="gap:8px;cursor:pointer">
+      <input type="checkbox" id="et-act" ${t.active ? 'checked' : ''}>
+      <span style="font:600 13px Manrope;color:var(--cream)">A la venta</span></label>
+    <div class="muted" style="font-size:11px;margin-top:4px">Si lo apagas, los vendedores dejan de verlo en su boletera: no sabrán que existe hasta que lo habilites. Los boletos ya vendidos de ese tipo no se tocan.</div>
     <div class="muted mt12">Los cambios solo aplican a boletos nuevos; los ya generados quedan como están.</div>
     <div class="err mt8" id="et-err"></div>
     <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
@@ -1104,7 +1108,8 @@ function editType(t) {
     try {
       // el resto de propiedades quedan intactas en el backend
       await API.put('/api/admin/ticket-types/' + t.id,
-                    { price, needs_faculty: $('#et-fac').checked });
+                    { price, needs_faculty: $('#et-fac').checked,
+                      active: $('#et-act').checked });
       closeModal(); toast('Guardado'); loadCatalogs();
     } catch (e) { if (!guard(e)) $('#et-err').textContent = e.message; }
   };

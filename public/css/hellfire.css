@@ -14,6 +14,11 @@
   --ok:#7ee2a8;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* Safari en iPhone hace ZOOM al doble toque en cualquier elemento —una fila del
+   historial, una tarjeta, un botón— y encima retrasa 300ms cada tap esperando a ver
+   si viene el segundo. Se apaga en toda la página: el pellizco para acercar sigue
+   funcionando, que es el que de verdad hace falta. */
+html,body{touch-action:manipulation}
 html,body{margin:0;min-height:100%}
 body{
   background:radial-gradient(120% 70% at 50% -10%,#2a0c04 0%,#120503 40%,var(--bg) 100%) fixed;
@@ -50,6 +55,11 @@ body{
   width:100%;padding:14px;border-radius:13px;background:var(--card);
   border:1px solid var(--line);font:600 15px Manrope;color:var(--cream);outline:none;
   appearance:none;-webkit-appearance:none}
+/* El nombre del comprador es el PASO 1 y era lo más apagado de la pantalla: campo
+   más alto, letra más grande y un filo encendido para que sea lo primero que se ve. */
+#f-buyer{padding:16px 15px;font:700 17px Manrope;border-color:rgba(255,120,40,.4);
+  background:linear-gradient(180deg,rgba(255,122,46,.07),rgba(255,255,255,.03))}
+#f-buyer::placeholder{color:rgba(246,241,231,.34);font-weight:500}
 .input:focus{border-color:var(--ember);box-shadow:0 0 14px rgba(255,110,30,.25)}
 .input::placeholder{color:rgba(246,241,231,.3)}
 select.input{background-image:linear-gradient(45deg,transparent 50%,var(--ember-dim) 50%),linear-gradient(135deg,var(--ember-dim) 50%,transparent 50%);
@@ -106,12 +116,13 @@ select.input option{background:#160603;color:var(--cream)}
   box-shadow:0 0 16px rgba(255,110,30,.4),inset 0 0 12px rgba(255,110,30,.15);color:var(--ember-soft)}
 
 /* selector tipo de boleto */
-/* Dos columnas fijas. Con flex, cuatro tipos caían 3+1 y el cuarto se estiraba a
-   lo ancho: quedaba chueco y parecía otra cosa. Si el número es impar, el último
-   ocupa las dos columnas a propósito, que se lee como decisión y no como sobra. */
-.typegrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.typegrid > :last-child:nth-child(odd){grid-column:1 / -1}
-.typeopt{padding:11px 12px;border-radius:13px;cursor:pointer;
+/* Tres en fila: son los tres tipos que se venden siempre. Si algún día se habilita
+   un cuarto (Ultra VIP), baja solo a un cuadro largo debajo — se lee como lo que es,
+   algo aparte, y no rompe la fila de los tres. */
+.typegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.typegrid > :nth-child(4){grid-column:1 / -1}
+.typegrid > :nth-child(n+5){grid-column:1 / -1}
+.typeopt{padding:10px;border-radius:12px;cursor:pointer;
   /* un poco levantado del fondo, para que se lea como algo que se toca y no como
      un simple recuadro pintado */
   background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012));
@@ -120,8 +131,8 @@ select.input option{background:#160603;color:var(--cream)}
   transition:transform .1s ease,border-color .14s,background .14s,box-shadow .14s}
 /* Sin elegir, las opciones se veían al 55% y parecían DESACTIVADAS. Están todas
    disponibles: se leen claras, y la elegida es la que se enciende. */
-.typeopt .tname{font:600 11px Manrope;color:rgba(246,241,231,.5);letter-spacing:.02em}
-.typeopt .tprice{font:700 19px "Space Grotesk";color:var(--cream);margin-top:2px}
+.typeopt .tname{font:600 10.5px Manrope;color:rgba(246,241,231,.5);letter-spacing:.02em}
+.typeopt .tprice{font:700 17px "Space Grotesk";color:var(--cream);margin-top:2px}
 .typeopt.sel{background:linear-gradient(180deg,rgba(255,110,30,.2),rgba(255,110,30,.08));
   border-color:var(--ember);box-shadow:0 0 16px rgba(255,110,30,.32)}
 .typeopt:active{transform:scale(.96)}
@@ -169,15 +180,15 @@ select.input option{background:#160603;color:var(--cream)}
 
 /* beneficio del grupo de 10: la botella es el gancho, así que se muestra como un
    premio (dorado, con brillo) y no como una línea de texto más */
-/* El extra del grupo, en una línea. Primero fue un cuadro dorado con emoji, después
-   una tarjeta con dos párrafos que decían lo mismo dos veces. Es un dato, no un
-   anuncio: el botón de abajo es lo que hay que tocar. */
-.perk{display:inline-flex;align-items:center;gap:7px;margin:10px 0 11px;
-  padding:6px 11px 6px 8px;border-radius:99px;background:rgba(243,210,122,.06);
-  border:1px solid rgba(243,210,122,.26);color:#e8c979}
-.perk .pk-ico{flex:none;display:flex}
-.perk .pk-t{font:700 10.5px "Space Grotesk";letter-spacing:.09em;text-transform:uppercase;
-  white-space:nowrap}
+/* Grupo de 10: UN botón, dos renglones. Antes la botella era una pastilla dorada
+   encima del botón y la gente la tocaba creyendo que era otro botón — con razón:
+   tenía borde, fondo y forma de pastilla. El premio no es una acción, es la razón
+   para tocar el que sí lo es, así que vive dentro. */
+.btn.grupo10{display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:12px;width:100%}
+.btn.grupo10 .g-t{font:800 14px Manrope;color:var(--ember-soft)}
+.btn.grupo10 .g-s{display:inline-flex;align-items:center;gap:5px;
+  font:600 10.5px Manrope;color:#e8c979}
 
 /* resultado de una venta: ocupa la pantalla en vez de dejarla vacía */
 .doneblock{text-align:center;padding:26px 18px 22px;border-radius:20px;margin-top:14px;
@@ -352,10 +363,10 @@ table.data tr.void td.strike{text-decoration:line-through}
 /* Cuenta regresiva al cambio de precio. Es la herramienta de venta del vendedor
    —"faltan 20 días y sube"—, así que se ve: cada unidad en su casilla, números
    tabulares para que el segundero no baile y no mueva el ancho a cada tic. */
-.phase-timer{margin:0;padding:9px 11px 10px;border-radius:14px;
+.phase-timer{margin:0;padding:8px 10px 9px;border-radius:12px;
   background:linear-gradient(160deg,rgba(255,122,46,.13),rgba(255,122,46,.03));
   border:1px solid rgba(255,122,46,.3)}
-.phase-timer .pt-head{display:flex;align-items:baseline;gap:7px;margin-bottom:7px}
+.phase-timer .pt-head{display:flex;align-items:baseline;gap:6px;margin-bottom:6px}
 .phase-timer .pt-sub{font:600 9.5px "Space Grotesk";letter-spacing:.15em;
   text-transform:uppercase;color:var(--cream-45)}
 .phase-timer .pt-fase{font:800 9.5px "Space Grotesk";letter-spacing:.13em;
@@ -363,14 +374,14 @@ table.data tr.void td.strike{text-decoration:line-through}
 
 .phase-timer .pt-clock{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .phase-timer .pt-u{display:flex;flex-direction:column;align-items:center;gap:1px;
-  padding:5px 2px 4px;border-radius:9px;background:rgba(0,0,0,.32);
+  padding:4px 2px 3px;border-radius:8px;background:rgba(0,0,0,.32);
   border:1px solid rgba(255,122,46,.18)}
-.phase-timer .pt-u b{font:800 18px/1 "Space Grotesk",monospace;color:var(--ember-soft);
+.phase-timer .pt-u b{font:800 15.5px/1 "Space Grotesk",monospace;color:var(--ember-soft);
   font-variant-numeric:tabular-nums;letter-spacing:.01em}
-.phase-timer .pt-u i{font:600 7.5px "Space Grotesk";letter-spacing:.13em;
+.phase-timer .pt-u i{font:600 6.5px "Space Grotesk";letter-spacing:.12em;
   text-transform:uppercase;color:var(--cream-45);font-style:normal}
 
-.phase-timer .pt-items{margin-top:8px;padding-top:7px;display:grid;gap:4px;
+.phase-timer .pt-items{margin-top:6px;padding-top:6px;display:grid;gap:4px;
   grid-auto-flow:column;grid-auto-columns:1fr;
   border-top:1px solid rgba(255,122,46,.16)}
 /* nombre y precio en la MISMA línea, centrados dentro de su columna: así los tres
