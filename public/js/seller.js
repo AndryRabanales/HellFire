@@ -166,22 +166,28 @@ function renderPhaseTimer() {
   const d = Math.floor(diff / 86400000);
   const h = Math.floor(diff % 86400000 / 3600000);
   const m = Math.floor(diff % 3600000 / 60000);
-  const s = Math.floor(diff % 60000 / 1000);
-  const clock = (d > 0 ? d + 'd ' : '') + pad2(h) + ':' + pad2(m) + ':' + pad2(s);
-  // mes abreviado: "28 ago" en vez de "28 de agosto", para que la línea no se parta
-  const fecha = phaseStart(g.starts_on).toLocaleDateString('es-MX',
-    { day: 'numeric', month: 'short' }).replace('.', '');
-  // todo en un renglón: "UADY $200 · Externo $225 · VIP ★ $425 · desde el 28 de agosto"
+  const sg = Math.floor(diff % 60000 / 1000);
+
+  // La precisión va con la urgencia. Un reloj con segundos corriendo cuando faltan
+  // 20 días es ruido que se mueve y no dice nada; a media hora del cambio, en
+  // cambio, el segundero ES el mensaje.
+  const urge = diff < 48 * 3600000;
+  let reloj;
+  if (d >= 2)      reloj = d + ' días';
+  else if (d >= 1) reloj = d + 'd ' + h + 'h';
+  else if (h >= 1) reloj = h + 'h ' + pad2(m) + 'm';
+  else             reloj = pad2(m) + ':' + pad2(sg);
+
   const lines = g.items.map(i =>
-    `${esc(i.name)}${i.is_vip ? ' \u2605' : ''} <b>${fmtMoney(i.price_cents / 100)}</b>`
-  ).join(' \u00b7 ');
+    `${esc(i.name)} <b>${fmtMoney(i.price_cents / 100)}</b>`).join('  ');
   box.classList.remove('hidden');
+  box.classList.toggle('urge', urge);
   box.innerHTML =
     `<div class="pt-top">
-       <span class="pt-label">Los precios suben \u00b7 ${esc(g.name)}</span>
-       <span class="pt-clock">${clock}</span>
+       <span class="pt-fase">${esc(g.name)}</span>
+       <span class="pt-clock">en ${reloj}</span>
      </div>
-     <div class="pt-items">${lines} \u00b7 desde el ${fecha}</div>`;
+     <div class="pt-items">${lines}</div>`;
 }
 
 // al vencer una fase se recarga el catálogo para reflejar el precio nuevo

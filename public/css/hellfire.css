@@ -338,19 +338,26 @@ table.data tr.void td.strike{text-decoration:line-through}
 #toast.show{opacity:1}
 
 /* Cronómetro de fase (panel de vendedor): cuenta regresiva al próximo cambio de precio */
-/* Cronómetro de fase: dos renglones y ya. Ocupaba media pantalla con el reloj
-   gigante y los precios uno debajo de otro; la información es la misma, pero el
-   protagonista del formulario tiene que ser el campo del nombre, no esto. */
-.phase-timer{margin-top:10px;padding:8px 11px;border-radius:11px;
-  background:linear-gradient(135deg,rgba(255,122,46,.09),rgba(255,122,46,.03));
-  border:1px solid rgba(255,122,46,.28)}
-.phase-timer .pt-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.phase-timer .pt-label{font:600 10px Manrope;color:var(--cream-60)}
-.phase-timer .pt-clock{font:800 14px/1 "Space Grotesk",monospace;color:var(--ember);
-  letter-spacing:.02em;font-variant-numeric:tabular-nums;white-space:nowrap}
-.phase-timer .pt-items{font:600 10.5px Manrope;color:var(--cream-45);margin-top:4px;
-  line-height:1.45}
-.phase-timer .pt-items b{color:var(--ember-soft);font-weight:800}
+/* Cronómetro de fase. Es un DATO de apoyo, no el protagonista: una tira delgada
+   con una línea de acento, sin caja ni reloj gigante. Solo cuando de verdad falta
+   poco (menos de 48 h) se enciende — si grita todo el tiempo, deja de significar. */
+.phase-timer{margin:0;padding:7px 0 7px 11px;border-left:2px solid rgba(255,122,46,.5);
+  background:none;border-radius:0}
+.phase-timer .pt-top{display:flex;align-items:baseline;gap:7px}
+.phase-timer .pt-fase{font:700 9.5px "Space Grotesk";letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ember-dim)}
+.phase-timer .pt-clock{font:600 11px Manrope;color:var(--cream-45)}
+.phase-timer .pt-items{font:500 11px Manrope;color:var(--cream-45);margin-top:2px;
+  display:flex;flex-wrap:wrap;gap:2px 12px}
+.phase-timer .pt-items b{color:var(--cream-60);font-weight:700}
+
+/* Menos de 48 h: ahora sí importa y se pone al frente. */
+.phase-timer.urge{border-left-color:var(--ember);padding:9px 11px;border-radius:0 11px 11px 0;
+  background:linear-gradient(90deg,rgba(255,122,46,.13),rgba(255,122,46,0))}
+.phase-timer.urge .pt-fase{color:var(--ember-soft)}
+.phase-timer.urge .pt-clock{font:800 15px/1 "Space Grotesk",monospace;color:var(--ember);
+  font-variant-numeric:tabular-nums}
+.phase-timer.urge .pt-items b{color:var(--ember-soft)}
 
 /* Bloques plegables (ej. Administradores dentro de Ajustes). El triángulo propio de
    Safari sale como emoji de color, así que se dibuja uno con CSS. */
