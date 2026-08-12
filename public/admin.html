@@ -23,6 +23,14 @@
     border:1px solid rgba(126,226,168,.5);background:rgba(126,226,168,.12)}
   .live-chip .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);
     box-shadow:0 0 8px var(--ok);animation:ember 2s ease-in-out infinite}
+  /* En el teléfono la barra de arriba no alcanza para las tres cosas y "Salir"
+     quedaba cortado contra el borde. El chip se queda solo con el punto: sigue
+     diciendo que el panel está vivo, sin robar 60px. */
+  @media (max-width:700px){
+    .live-chip .lc-txt{display:none}
+    .live-chip{padding:7px}
+    .topbar .row{gap:7px}
+  }
 </style>
 </head>
 <body>
@@ -50,7 +58,7 @@
       <div><div class="who" id="who">Admin</div><div class="muted" style="font-size:9px;letter-spacing:.14em;text-transform:uppercase">Administración</div></div>
     </div>
     <div class="row">
-      <div class="live-chip" title="El panel se actualiza solo"><span class="dot"></span>En vivo</div>
+      <div class="live-chip" title="El panel se actualiza solo"><span class="dot"></span><span class="lc-txt">En vivo</span></div>
       <a href="/scan" target="_blank" class="btn ghost sm" style="text-decoration:none;text-align:center">▣ Escáner</a>
       <button class="linkout" id="btn-logout"><span style="font-size:13px">⏻</span>Salir</button>
     </div>
@@ -102,7 +110,7 @@
 
   <!-- ===== Movimientos: feed de actividad visible para TODOS los admins ===== -->
   <section id="tab-movimientos" class="mt16 hidden" style="max-width:720px">
-    <div class="muted" style="margin-bottom:10px">Todo lo que pasa en el sistema: boletos generados y anulados, vendedores creados/eliminados, cambios de fases y precios. Visible para todos los administradores.</div>
+    <div class="muted" style="margin-bottom:10px">Todo lo que pasa en el sistema. Lo ven todos los administradores.</div>
     <div id="mv-list" style="display:flex;flex-direction:column;gap:8px"></div>
   </section>
 
@@ -128,7 +136,7 @@
 
   <!-- ===== Grupos (5/10 con descuento, plan aparte de Externo) ===== -->
   <section id="tab-grupos" class="mt16 hidden" style="max-width:640px">
-    <div class="muted" style="margin-bottom:10px">Grupos de 10 generados por los vendedores (boletos Externo a precio normal). El representante es quien recibe la botella.</div>
+    <div class="muted" style="margin-bottom:10px">Grupos de 10 (boletos Externo a precio normal). El representante recibe la botella.</div>
     <div id="gr-list" style="display:flex;flex-direction:column;gap:10px"></div>
   </section>
 
@@ -161,7 +169,7 @@
   <section id="tab-catalogos" class="mt16 hidden" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
     <div class="card">
       <div class="label">Tipos de boleto · precio base</div>
-      <div class="muted" style="margin-bottom:10px">El precio base aplica cuando ninguna fase está vigente. Las fases de venta (abajo) suben todos los tipos a la vez.</div>
+      <div class="muted" style="margin-bottom:10px">Se usa cuando ninguna fase está vigente. Las fases (abajo) suben todos los tipos a la vez.</div>
       <div id="tt-list"></div>
       <div class="row mt12" style="flex-wrap:wrap;gap:8px">
         <input class="input grow" id="tt-name" placeholder="Nuevo tipo (ej. General)" style="min-width:130px;padding:11px">
@@ -174,7 +182,7 @@
     </div>
     <div class="card">
       <div class="label">Fases de venta · suben todos los boletos</div>
-      <div class="muted" style="margin-bottom:10px">Una fase tiene nombre y fecha. Al llegar la fecha, <b>todos los tipos</b> cambian al precio que definas aquí (uno por tipo). Los boletos ya generados no cambian.</div>
+      <div class="muted" style="margin-bottom:10px">Al llegar su fecha, <b>todos los tipos</b> pasan al precio que pongas aquí. Los boletos ya generados no cambian.</div>
       <div id="ph-list"></div>
       <div id="ph-add" class="mt12"></div>
       <div class="err mt8" id="ph-err"></div>
@@ -197,14 +205,14 @@
       <input class="input" id="st-name" placeholder="Nombre del evento">
       <input class="input mt8" id="st-subtitle" placeholder="Subtítulo (ej. Noche de brujas)">
       <div class="label mt12">Folio inicial</div>
-      <div class="muted" style="margin-bottom:6px;font-size:11px">Número del primer boleto (ej. 4180 → HF-4180). Así nadie sabe cuántos llevamos vendidos. Solo aplica si aún no hay boletos con número mayor.</div>
+      <div class="muted" style="margin-bottom:6px">Número del primer boleto (ej. 4180 → HF-4180), para que nadie sepa cuántos llevamos. Solo aplica si aún no hay folios mayores.</div>
       <input class="input" id="st-folio" type="number" min="1" max="9999" placeholder="1" style="max-width:160px">
       <button class="btn mt16" id="btn-st-save">Guardar ajustes</button>
       <div class="okmsg mt8" id="st-ok"></div>
     </div>
     <div class="card mt12" style="max-width:none">
       <div class="label">Flyers del boleto — uno por tipo</div>
-      <div class="muted" style="margin-bottom:10px">Cada tipo de boleto usa su propia imagen: UADY, Externo, VIP, Grupo de 5 y Grupo de 10. Si un tipo no tiene el suyo, usa el de Externo mientras tanto. Ultra VIP es solo para probar el diseño — está oculto, no se puede vender todavía. Elige el archivo, acomódalo y guarda.</div>
+      <div class="muted" style="margin-bottom:10px">Una imagen por tipo. Al que no tenga la suya se le pone la de Externo. Ultra VIP está oculto: es solo para ver el diseño.</div>
       <div id="flyer-editors" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px"></div>
     </div>
     <div class="card mt12">

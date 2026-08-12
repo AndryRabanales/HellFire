@@ -69,12 +69,16 @@
   <!-- ---- switch a plan de grupo ---- -->
   <div class="card mt16" id="group-switch">
     <div class="label">¿Vienen en grupo?</div>
-    <div class="muted" id="group-switch-sub" style="font-size:11px">Registra a 10 personas de una sola vez, cada una con su boleto.</div>
     <div class="perk">
-      <div class="pk-ico">🍾</div>
+      <!-- botella dibujada, no emoji: en iPhone el emoji sale a todo color e ignora
+           la paleta, y era justo lo que desentonaba con el resto de la pantalla -->
+      <div class="pk-ico"><svg viewBox="0 0 24 24" width="21" height="21" fill="none"
+        stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.2 2.6h3.6v2.9c0 .85.3 1.66.87 2.29l.65.73c.82.92 1.28 2.1 1.28 3.33v7.55c0 1-.8 1.8-1.8 1.8H9.2c-1 0-1.8-.8-1.8-1.8v-7.55c0-1.23.46-2.41 1.28-3.33l.65-.73c.57-.63.87-1.44.87-2.29V2.6Z"/>
+        <path d="M10.2 5.5h3.6"/><path d="M7.6 13.2h8.8"/></svg></div>
       <div>
-        <div class="pk-t">BOTELLA GRATIS</div>
-        <div class="pk-s">Al juntar 10 boletos, el representante del grupo se lleva una botella sin costo.</div>
+        <div class="pk-t">Botella gratis</div>
+        <div class="pk-s">Registra a 10 personas de una vez, cada quien con su boleto. El representante se lleva una botella sin costo.</div>
       </div>
     </div>
     <button class="btn sm ghost" id="btn-group-10" style="width:100%;padding:13px">Armar grupo de 10</button>
@@ -89,11 +93,11 @@
   </div>
 
   <div class="err mt12" id="f-err"></div>
-  <button class="btn" id="btn-generate" style="margin-top:auto">GENERAR BOLETO&nbsp;&nbsp;🎟</button>
-  <button class="btn hidden" id="btn-generate-group" style="margin-top:auto">GENERAR GRUPO&nbsp;&nbsp;🎟</button>
+  <button class="btn" id="btn-generate" style="margin-top:auto">GENERAR BOLETO</button>
+  <button class="btn hidden" id="btn-generate-group" style="margin-top:auto">GENERAR GRUPO</button>
   <button class="btn hidden" id="btn-group-done" style="margin-top:auto">✓&nbsp;&nbsp;Listo</button>
   <button class="btn hidden" id="btn-solo-done" style="margin-top:auto">✓&nbsp;&nbsp;Listo</button>
-  <button class="btn quiet" id="btn-history"><span style="font-size:13px">🧾</span>&nbsp;Ver mi historial&nbsp;<span style="color:var(--ember-dim)">→</span></button>
+  <button class="btn quiet" id="btn-history"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>&nbsp;Ver mi historial&nbsp;<span style="color:var(--ember-dim)">→</span></button>
 </div>
 
 <!-- ============ VISTA: CONFIRMACIÓN (RF-47) ============ -->

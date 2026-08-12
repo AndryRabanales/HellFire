@@ -199,7 +199,7 @@ function enterGroupMode(size) {
   $('#mode-group').classList.remove('hidden');
   $('#btn-generate').classList.add('hidden');
   $('#btn-generate-group').classList.remove('hidden');
-  $('#btn-generate-group').textContent = 'GENERAR GRUPO DE ' + size + '  🎟';
+  $('#btn-generate-group').textContent = 'GENERAR GRUPO DE ' + size;
   $('#btn-group-done').classList.add('hidden');
   $('#btn-group-back').classList.remove('hidden');
   $('#group-result-bar').classList.add('hidden'); $('#group-result-bar').classList.remove('done');
@@ -337,7 +337,7 @@ async function generateGroup() {
     $('#f-err').textContent = e.message;
   } finally {
     btn.disabled = false;
-    if (!GROUP_RESULT) btn.textContent = 'GENERAR GRUPO DE ' + GROUP_SIZE + '  🎟';
+    if (!GROUP_RESULT) btn.textContent = 'GENERAR GRUPO DE ' + GROUP_SIZE;
   }
 }
 
@@ -369,7 +369,7 @@ async function generate() {
     if (e.data && e.data._unauthorized) return sessionLost();
     $('#f-err').textContent = mensajeDeError(e);
   } finally {
-    btn.disabled = false; btn.textContent = 'GENERAR BOLETO  🎟';
+    btn.disabled = false; btn.textContent = 'GENERAR BOLETO';
   }
 }
 
