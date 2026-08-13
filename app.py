@@ -133,8 +133,13 @@ if IS_PG:
             cur.execute(sql.replace("?", "%s"), params)
             return _PGCursor(cur, self._conn)
         def executescript(self, script):
+            # Se quitan los comentarios ANTES de partir por ";". Sin esto, un simple
+            # punto y coma dentro de un comentario —"-- su comisión; NULL = ..."—
+            # corta la sentencia a la mitad y el arranque revienta con "syntax error
+            # at end of input", que no dice nada de dónde está el problema real.
+            limpio = "\n".join(re.sub(r"--.*$", "", ln) for ln in script.splitlines())
             with self._conn.cursor() as cur:
-                for stmt in script.split(";"):
+                for stmt in limpio.split(";"):
                     if stmt.strip():
                         cur.execute(stmt)
         def commit(self):
@@ -187,7 +192,7 @@ CREATE TABLE IF NOT EXISTS sellers (
   owner_admin_name TEXT,           -- nombre del admin dueño (etiqueta visible)
   paid_cents INTEGER NOT NULL DEFAULT 0,  -- dinero que el vendedor ya entregó a su admin
   hidden INTEGER NOT NULL DEFAULT 0,      -- vendedor de INVITADOS: sus boletos no cuentan como venta
-  commission_pct REAL,             -- su comisión; NULL = la general de Ajustes (0 = sin comisión)
+  commission_pct REAL,             -- su comisión propia (NULL = la general, 0 = ninguna)
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ticket_types (
