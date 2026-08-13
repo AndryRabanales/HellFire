@@ -187,6 +187,7 @@ CREATE TABLE IF NOT EXISTS sellers (
   owner_admin_name TEXT,           -- nombre del admin dueño (etiqueta visible)
   paid_cents INTEGER NOT NULL DEFAULT 0,  -- dinero que el vendedor ya entregó a su admin
   hidden INTEGER NOT NULL DEFAULT 0,      -- vendedor de INVITADOS: sus boletos no cuentan como venta
+  commission_pct REAL,             -- su comisión; NULL = la general de Ajustes (0 = sin comisión)
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ticket_types (
@@ -424,7 +425,8 @@ def init_db():
             db.execute(f"ALTER TABLE tickets ADD COLUMN IF NOT EXISTS {col}")
         for col in ("owner_admin_id INTEGER", "owner_admin_name TEXT",
                     "paid_cents INTEGER NOT NULL DEFAULT 0",
-                    "hidden INTEGER NOT NULL DEFAULT 0"):
+                    "hidden INTEGER NOT NULL DEFAULT 0",
+                    "commission_pct REAL"):
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
                    "needs_faculty INTEGER NOT NULL DEFAULT 1")
@@ -447,6 +449,8 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN owner_admin_name TEXT")
         if "paid_cents" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN paid_cents INTEGER NOT NULL DEFAULT 0")
+        if "commission_pct" not in scols:
+            db.execute("ALTER TABLE sellers ADD COLUMN commission_pct REAL")
         if "hidden" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
         ttcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
@@ -1721,11 +1725,25 @@ def list_sellers():
         out.append(d)
     return jsonify(sellers=out)
 
-def comision_pct(db):
+def comision_general(db):
+    """El porcentaje que se aplica a quien no tenga uno propio."""
     try:
         return max(0.0, min(100.0, float(setting(db, "seller_commission_pct") or 10)))
     except (TypeError, ValueError):
         return 10.0
+
+def comision_pct(db, sid=None):
+    """La comisión de ESTE vendedor.
+
+    No todos llevan lo mismo: a unos se les da 10%, a otros 15 y a otros nada. El
+    valor propio manda; si no tiene, se usa el general. Un 0 explícito es "sin
+    comisión" y NO cae al general —por eso se compara contra None y no por verdadero
+    o falso, que trataría el 0 como "sin definir"—."""
+    if sid is not None:
+        r = db.execute("SELECT commission_pct FROM sellers WHERE id=?", (sid,)).fetchone()
+        if r is not None and r["commission_pct"] is not None:
+            return max(0.0, min(100.0, float(r["commission_pct"])))
+    return comision_general(db)
 
 def vendido_cents(db, sid):
     return db.execute("""SELECT COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS c
@@ -1761,7 +1779,11 @@ def estado_cuenta(db, sid):
             "commission_total": money(com), "cash_total": money(efectivo),
             "balance": money(vendido - abonado),
             "settled": vendido > 0 and abonado >= vendido,
-            "commission_pct": comision_pct(db), "payments": historial}
+            "commission_pct": comision_pct(db, sid),
+            "commission_general": comision_general(db),
+            "commission_propia": (lambda r: r and r["commission_pct"] is not None)(
+                db.execute("SELECT commission_pct FROM sellers WHERE id=?", (sid,)).fetchone()),
+            "payments": historial}
 
 @app.get("/api/admin/sellers/<int:sid>/payments")
 def list_seller_payments(sid):
@@ -1812,7 +1834,7 @@ def add_seller_payment(sid):
     if ya + abono > vendido:
         falta = (vendido - ya) / 100
         return jsonify(error=f"Se pasa de lo que debe. Su saldo pendiente es ${falta:,.2f}"), 400
-    pct = comision_pct(db)
+    pct = comision_pct(db, sid)
     comision = int(round(abono * pct / 100))
     efectivo = abono - comision
     db.execute("""INSERT INTO seller_payments
@@ -1988,6 +2010,25 @@ def edit_seller(sid):
     db.execute("UPDATE sellers SET name=?, code=? WHERE id=?", (name, code, sid))
     audit(db, s["admin"]["username"], "usuarios",
           f"Editó vendedor '{sel['name']}' → nombre '{name}', código {code}")
+
+    # Comisión propia. Se manda "" (o null) para que vuelva a usar la general, y un
+    # número —incluido el 0— para fijarla. Los pagos YA registrados no cambian:
+    # cada uno guardó el porcentaje con el que se hizo.
+    if "commission_pct" in b:
+        crudo = b.get("commission_pct")
+        if crudo is None or str(crudo).strip() == "":
+            nueva = None
+        else:
+            try:
+                nueva = max(0.0, min(100.0, float(crudo)))
+            except (TypeError, ValueError):
+                return jsonify(error="La comisión debe ser un número entre 0 y 100"), 400
+        if nueva != sel["commission_pct"]:
+            db.execute("UPDATE sellers SET commission_pct=? WHERE id=?", (nueva, sid))
+            audit(db, s["admin"]["username"], "usuarios",
+                  f"Comisión de '{name}': " +
+                  (f"{nueva:g}%" if nueva is not None
+                   else f"la general ({comision_general(db):g}%)"))
     db.commit()
     return jsonify(ok=True)
 
@@ -2236,6 +2277,7 @@ def get_settings():
     out = {k: setting(db, k) for k in ["event_name", "event_subtitle", "event_date_text",
                                        "folio_start"]}
     out["ventas_cerradas"] = ventas_cerradas(db)
+    out["seller_commission_pct"] = comision_general(db)
     out.update(flyer_info(db))
     return jsonify(out)
 
@@ -2288,6 +2330,14 @@ def save_settings():
             fs = 1
         set_setting(db, "folio_start", str(fs))
         changed.append(f"folio inicial {fs:04d}")
+    if "seller_commission_pct" in b:
+        # el porcentaje que se aplica a quien no tenga uno propio
+        try:
+            pc = max(0.0, min(100.0, float(b["seller_commission_pct"])))
+        except (TypeError, ValueError):
+            return jsonify(error="La comisión debe ser un número entre 0 y 100"), 400
+        set_setting(db, "seller_commission_pct", str(pc))
+        changed.append(f"comisión general {pc:g}%")
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
     for v in FLYER_VARIANTS:
         if f"flyer_focus_{v}" in b:

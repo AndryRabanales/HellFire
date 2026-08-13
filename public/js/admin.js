@@ -899,21 +899,52 @@ function menuVendedor(s) {
   $('#mv-del').onclick = () => deleteSeller(s);
 }
 
-function editSeller(s) {
+async function editSeller(s) {
+  // La comisión no es igual para todos: unos llevan 10%, otros 15 y otros nada.
+  // Se lee la suya para poder mostrarla tal cual está.
+  let cta = {};
+  try { cta = await API.get(`/api/admin/sellers/${s.id}/payments`); } catch (_) {}
+  const propia = cta.commission_propia === true;
+  const general = cta.commission_general != null ? cta.commission_general : 10;
   modal(`<div class="h1" style="font-size:18px">Editar vendedor</div>
     <div class="label mt12">Nombre</div><input class="input" id="es-name" value="${esc(s.name)}">
     <div class="label mt12">Código de 4 dígitos</div>
     <input class="input" id="es-code" value="${esc(s.code)}" maxlength="4" inputmode="numeric">
     <div class="muted mt8">Si cambias el código, su sesión actual se cierra.</div>
+
+    <div class="label mt16">Su comisión</div>
+    <label class="row" style="gap:8px;cursor:pointer">
+      <input type="checkbox" id="es-com-on" ${propia ? 'checked' : ''}>
+      <span style="font:600 13px Manrope;color:var(--cream)">Ponerle un porcentaje distinto</span></label>
+    <div class="row mt8" id="es-com-box" style="gap:8px;align-items:center;${propia ? '' : 'display:none'}">
+      <input class="input" id="es-com" type="number" min="0" max="100" step="0.5"
+        value="${propia ? cta.commission_pct : general}" style="width:110px">
+      <span style="font:700 15px Manrope;color:var(--cream-60)">%</span>
+    </div>
+    <div class="muted mt8" style="font-size:11px" id="es-com-hint"></div>
     <div class="err mt8" id="es-err"></div>
     <div class="row mt16">
       <button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
       <button class="btn grow" id="es-save">Guardar</button>
     </div>`);
+  const sincroniza = () => {
+    const on = $('#es-com-on').checked;
+    $('#es-com-box').style.display = on ? '' : 'none';
+    const v = parseFloat($('#es-com').value);
+    $('#es-com-hint').innerHTML = !on
+      ? `Usa la comisi\u00f3n general: <b>${general}%</b>`
+      : (v > 0 ? `De cada $100 que te entregue, se queda <b>$${v.toFixed(2)}</b>`
+               : '<b style="color:var(--danger)">Sin comisi\u00f3n</b>: te entrega todo lo que venda');
+  };
+  $('#es-com-on').onchange = sincroniza;
+  $('#es-com').oninput = sincroniza;
+  sincroniza();
   $('#es-save').onclick = async () => {
     try {
       await API.put('/api/admin/sellers/' + s.id, {
         name: $('#es-name').value.trim(), code: $('#es-code').value.trim(),
+        // "" devuelve al vendedor a la comisión general
+        commission_pct: $('#es-com-on').checked ? $('#es-com').value : '',
       });
       closeModal(); toast('Vendedor actualizado'); loadSellers();
     } catch (e) { if (!guard(e)) $('#es-err').textContent = e.message; }
@@ -1402,6 +1433,7 @@ async function loadSettings() {
   $('#st-name').value = s.event_name;
   $('#st-subtitle').value = s.event_subtitle;
   $('#st-folio').value = s.folio_start || '1';
+  $('#st-com').value = s.seller_commission_pct != null ? s.seller_commission_pct : 10;
   for (const v of FLYER_VARIANTS) {
     const st = FLY_ED[v];
     st.focus = parseFloat(s['flyer_focus_' + v]) || 0.5;
@@ -1426,6 +1458,7 @@ $('#btn-st-save').addEventListener('click', async () => {
     await API.post('/api/admin/settings', {
       event_name: $('#st-name').value, event_subtitle: $('#st-subtitle').value,
       folio_start: parseInt($('#st-folio').value, 10) || 1,
+      seller_commission_pct: $('#st-com').value,
     });
     $('#st-ok').textContent = 'Ajustes guardados ✓';
     setTimeout(() => $('#st-ok').textContent = '', 2500);
