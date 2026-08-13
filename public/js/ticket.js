@@ -54,10 +54,9 @@ function nameFontFor(text) {
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, Number(v))); }
 
-/* Un flyer por tipo de boleto: uady, externo, vip, grupo5, grupo10. */
-const _flyerCache = { uady: undefined, externo: undefined, vip: undefined, grupo5: undefined, grupo10: undefined };
+/* Un flyer por tipo de boleto: uady, externo, vip, grupo10, ultravip. */
+const _flyerCache = { uady: undefined, externo: undefined, vip: undefined, grupo10: undefined, ultravip: undefined };
 function flyerVariantFor(ticket) {
-  if (ticket.group_size === 5) return 'grupo5';
   if (ticket.group_size === 10) return 'grupo10';
   // se compara contra el NOMBRE del tipo, para que un tipo nuevo que cree el admin
   // (ej. "Ultra VIP") use su propio flyer en vez de caer en el de VIP o Externo

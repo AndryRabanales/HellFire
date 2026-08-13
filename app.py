@@ -319,7 +319,6 @@ DEFAULT_SETTINGS = {
     "flyer_data_gen": "", "flyer_mime_gen": "", "flyer_focus_gen": "", "flyer_scale_gen": "",
     "flyer_data_uady": "", "flyer_mime_uady": "", "flyer_focus_uady": "", "flyer_scale_uady": "",
     "flyer_data_externo": "", "flyer_mime_externo": "", "flyer_focus_externo": "", "flyer_scale_externo": "",
-    "flyer_data_grupo5": "", "flyer_mime_grupo5": "", "flyer_focus_grupo5": "", "flyer_scale_grupo5": "",
     "flyer_data_grupo10": "", "flyer_mime_grupo10": "", "flyer_focus_grupo10": "", "flyer_scale_grupo10": "",
     # Ultra VIP: en pruebas de diseño, aún no es un tipo de boleto vendible (oculto en las boleteras)
     "flyer_data_ultravip": "", "flyer_mime_ultravip": "", "flyer_focus_ultravip": "", "flyer_scale_ultravip": "",
@@ -336,12 +335,12 @@ def set_setting(db, key, value):
     db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
-FLYER_VARIANTS = ("uady", "externo", "vip", "grupo5", "grupo10", "ultravip")
+FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip")
 FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
-               "grupo5": "Grupo de 5", "grupo10": "Grupo de 10", "ultravip": "Ultra VIP"}
+               "grupo10": "Grupo de 10", "ultravip": "Ultra VIP"}
 # cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
 # relacionado antes de caer al flyer legado de una sola imagen
-FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo5": "externo", "grupo10": "externo",
+FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
                    "ultravip": "vip"}
 # Ultra VIP es solo una prueba de diseño: no hay tipo de boleto que lo use todavía,
 # así que no aparece en las boleteras ni se puede vender aunque tenga flyer subido.
@@ -2383,7 +2382,7 @@ def upload_flyer():
 
 @app.get("/flyer")
 def serve_flyer():
-    """Sirve el flyer del tipo pedido (?v=uady|externo|vip|grupo5|grupo10), con
+    """Sirve el flyer del tipo pedido (?v=uady|externo|vip|grupo10|ultravip), con
     respaldo en cadena hasta el flyer legado de una sola imagen."""
     db = get_db()
     v = request.args.get("v")

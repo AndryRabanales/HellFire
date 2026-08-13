@@ -1245,10 +1245,6 @@ const FLYER_META = {
          sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
                    faculty_name: '', type_name: 'VIP', type_is_vip: 1,
                    price: 500, phase_name: 'Fase 1' } },
-  grupo5: { label: 'Flyer Grupo de 5',
-            sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
-                      faculty_name: '', type_name: 'Externo', type_is_vip: 0,
-                      price: 153, normal_price: 175, group_size: 5, phase_name: 'Fase 1' } },
   grupo10: { label: 'Flyer Grupo de 10',
              sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
                        faculty_name: '', type_name: 'Externo', type_is_vip: 0,
@@ -1258,7 +1254,7 @@ const FLYER_META = {
                         faculty_name: '', type_name: 'Ultra VIP', type_is_vip: 1,
                         price: 600, phase_name: 'Fase 1' } },
 };
-const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo5', 'grupo10', 'ultravip'];
+const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
 const FLY_ED = {};
 for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null };
