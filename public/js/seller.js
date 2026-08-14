@@ -735,7 +735,10 @@ function mostrarTour(i = 0) {
   foco.style.cssText = `top:${r.top - pad}px;left:${r.left - pad}px;` +
     `width:${r.width + pad * 2}px;height:${r.height + pad * 2}px`;
 
-  const total = TOUR.filter(x => { const e = $(x.sel); return e && e.offsetParent !== null; }).length;
+  // Solo cuentan las paradas cuyo elemento está en pantalla: si el grupo o el reloj
+  // no salen, ni el contador ni los puntos deben prometer paradas que no van a venir.
+  const visibles = TOUR.filter(x => { const e = $(x.sel); return e && e.offsetParent !== null; });
+  const total = visibles.length;
   const nEste = TOUR.slice(0, i + 1).filter(x => { const e = $(x.sel); return e && e.offsetParent !== null; }).length;
   const ultimo = i === TOUR.length - 1 || nEste === total;
 
@@ -743,8 +746,8 @@ function mostrarTour(i = 0) {
   globo.innerHTML = `<div class="tr-num">${nEste} de ${total}</div>
     <div class="tr-txt">${paso.txt}</div>
     <div class="tr-pie">
-      <div class="tr-dots">${TOUR.map((_, k) =>
-        `<span class="tr-dot${k <= i ? ' on' : ''}"></span>`).join('')}</div>
+      <div class="tr-dots">${visibles.map((_, k) =>
+        `<span class="tr-dot${k < nEste ? ' on' : ''}"></span>`).join('')}</div>
       <button class="btn sm" id="tr-next" style="width:auto;padding:11px 20px">
         ${ultimo ? 'Listo' : 'Siguiente ›'}</button>
     </div>`;
@@ -764,32 +767,7 @@ function mostrarTour(i = 0) {
   $('#tr-next').onclick = () => ultimo ? cerrarTour(true) : mostrarTour(i + 1);
 }
 
-/* Bienvenida antes del recorrido. Un vendedor que entra por primera vez no sabe
-   siquiera dónde está parado: primero se le dice qué es esto y de qué evento, y ya
-   después se le señalan los botones. */
-function mostrarBienvenida() {
-  const evento = (CATALOG && CATALOG.event_name) || 'HELLFIRE';
-  const sub = (CATALOG && CATALOG.event_subtitle) || '';
-  const c = document.createElement('div');
-  c.id = 'tour';
-  c.className = 'bienvenida';   // sin foco que oscurezca, el fondo lo pone la clase
-  c.innerHTML = `<div class="tr-bien">
-      <div class="tb-marca">${esc(evento)}</div>
-      ${sub ? `<div class="tb-sub">${esc(sub)}</div>` : ''}
-      <div class="tb-t">¡Bienvenido a las ventas!</div>
-      <div class="tb-x">Desde aquí generas los boletos y se los mandas a quien te compre.
-        Te enseño la pantalla en 5 pasos.</div>
-      <div class="tb-barra"><span></span></div>
-    </div>`;
-  document.body.appendChild(c);
-  document.body.style.overflow = 'hidden';
-  // Ni siquiera hay botón: se lee el saludo y el recorrido entra solo. Preguntarle
-  // "¿empezamos?" es un toque de más para llegar al mismo sitio. La barra de abajo
-  // avisa que va a avanzar, y tocar la pantalla lo adelanta para el que ya leyó.
-  let ido = false;
-  const seguir = () => { if (ido) return; ido = true; clearTimeout(reloj); c.remove(); mostrarTour(0); };
-  const reloj = setTimeout(seguir, 3400);
-  c.addEventListener('click', seguir);
-}
-
-function mostrarTutorial() { setTimeout(mostrarBienvenida, 400); }
+/* Directo al recorrido: sin pantalla de bienvenida. La primera parada ya saluda
+   sola —oscurece todo y señala el campo del nombre— y nadie quería leer un saludo
+   antes de eso. */
+function mostrarTutorial() { setTimeout(() => mostrarTour(0), 400); }
