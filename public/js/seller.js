@@ -640,35 +640,43 @@ function modal(html) {
 function closeModal() { $('#modal-bg').classList.add('hidden'); }
 $('#modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') closeModal(); });
 
-function paso(n, titulo, texto) {
-  return `<div class="g-item"><div class="g-n">${n}</div>
-    <div><div class="g-tit">${titulo}</div><div class="g-txt">${texto}</div></div></div>`;
+function paso(n, texto) {
+  return `<div class="g-item"><div class="g-n">${n}</div><div class="g-tit">${texto}</div></div>`;
+}
+function duda(preg, resp) {
+  return `<details class="faq"><summary>${preg}</summary><div>${resp}</div></details>`;
 }
 
 function mostrarAyuda() {
-  // La guía se arma con el catálogo REAL, no con nombres inventados: si mañana se
-  // quita un tipo o cambia un precio, la explicación cambia sola. Y solo se habla de
-  // la facultad si de verdad hay algún tipo que la pida.
+  // Dos niveles a propósito. Arriba, los cuatro pasos de una venta: se leen en tres
+  // segundos y son el 90% de lo que hace falta. Abajo, las dudas PLEGADAS: quien
+  // tiene una la abre, y quien no, no carga con nueve párrafos que no va a leer
+  // parado en una fiesta con alguien esperando su boleto.
   const tipos = (CATALOG && CATALOG.types || []);
   const conFac = tipos.filter(t => t.needs_faculty).map(t => esc(t.name));
   const lista = tipos.map(t => `${esc(t.name)} $${(t.price_cents / 100).toFixed(0)}`).join(' · ');
-  const notaFac = conFac.length
-    ? ` Si eliges <b>${conFac.join(' o ')}</b> te va a pedir también la facultad.` : '';
   modal(`<div class="h1" style="font-size:19px">Cómo vender</div>
-    <div class="muted mt8" style="font-size:12px">De arriba hacia abajo, en el orden en que se hace.</div>
     <div class="guia mt16">
-      ${paso(1, 'Escribe el nombre', 'El nombre completo de quien te compra. Es el que va impreso en el boleto, así que escríbelo bien: en la puerta le pueden pedir identificación.')}
-      ${paso(2, 'Elige el tipo', `Toca el recuadro del boleto que te pidieron${lista ? ' — ahorita: ' + lista : ''}.${notaFac}`)}
-      ${paso(3, 'GENERAR BOLETO', 'El botón naranja de abajo. El boleto se descarga solo a tu teléfono y aparece una tira abajo del formulario diciendo cuál fue el último. Si no lo encuentras en tus fotos, toca <b>Descargar</b> en esa tira.')}
-      ${paso(4, 'Mándaselo por WhatsApp', 'Búscalo en tus fotos y envíaselo. Esa imagen ES su boleto: trae un QR que se escanea en la entrada. Sin esa imagen no entra.')}
-      <div class="g-sep"></div>
-      ${paso('★', 'El contador de arriba', 'Dice cuántos días faltan para que suban los precios y a cuánto van a quedar. Es tu mejor argumento: <b>"cómpralo hoy, que el martes sube"</b>. Enséñaselo.')}
-      ${paso('10', 'Armar grupo de 10', 'Si son diez personas juntas, usa ese botón en vez de hacerlos uno por uno: escribes los diez nombres de un jalón y marcas con la ★ quién es el representante. A esa persona le va <b>botella gratis</b>.')}
-      ${paso('≡', 'Ver mi historial', 'Todos los boletos que has hecho. Puedes buscar por nombre y volver a descargar cualquiera — sirve cuando alguien te dice <b>"se me borró el boleto"</b>.')}
-      <div class="g-sep"></div>
-      ${paso('$', 'Tu dinero', 'Tú cobras el boleto completo. En el corte le entregas a tu admin y ahí se te descuenta tu comisión. Todo queda guardado con fecha, así que en cualquier momento se puede revisar cuánto llevas y cuánto entregaste.')}
-      ${paso('!', 'Si se cae el internet', 'Vuelve a darle a GENERAR sin miedo: el sistema reconoce que es la misma venta y <b>no lo duplica</b>. Nunca le vas a cobrar dos veces a nadie por un error de señal.')}
+      ${paso(1, 'Escribe el <b>nombre</b> de quien te compra')}
+      ${paso(2, 'Toca el <b>tipo</b> de boleto')}
+      ${paso(3, 'Dale a <b>GENERAR</b> — se descarga solo')}
+      ${paso(4, '<b>Mándaselo por WhatsApp</b>. Esa imagen es su boleto')}
     </div>
+    ${lista ? `<div class="muted mt12" style="font-size:11px;text-align:center">Precios de hoy: ${lista}</div>` : ''}
+
+    <div class="label mt16">¿Dudas?</div>
+    ${duda('¿Qué es el reloj de arriba?',
+           'Los días que faltan para que <b>suban los precios</b>, y a cuánto van a quedar. Enséñaselo: <i>"cómpralo hoy, que el martes sube"</i>.')}
+    ${conFac.length ? duda('¿Cuándo pido la facultad?',
+           `Solo si eliges <b>${conFac.join(' o ')}</b>. El sistema te la pide solo; si no aparece, no hace falta.`) : ''}
+    ${duda('¿Cómo hago un grupo de 10?',
+           'Con el botón <b>Armar grupo de 10</b>. Escribes los diez nombres de un jalón y marcas con la <b>★</b> al representante: a esa persona le va <b>botella gratis</b>.')}
+    ${duda('Se me borró un boleto',
+           'Entra a <b>Ver mi historial</b>, búscalo por nombre y vuelve a descargarlo. Están todos ahí.')}
+    ${duda('¿Cuándo me pagan?',
+           'Tú cobras el boleto completo. En el corte le entregas a tu admin y ahí se te descuenta tu comisión. Todo queda con fecha.')}
+    ${duda('Se cayó el internet a media venta',
+           'Dale a <b>GENERAR</b> otra vez sin miedo: el sistema sabe que es la misma venta y <b>no la duplica</b>.')}
     <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
 }
 $('#btn-ayuda').addEventListener('click', mostrarAyuda);

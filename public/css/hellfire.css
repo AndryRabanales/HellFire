@@ -143,16 +143,29 @@ select.input option{background:#160603;color:var(--cream)}
   transition:transform .1s ease,background .14s}
 .ayuda:active{transform:scale(.9);background:rgba(255,110,30,.2)}
 
-/* Guía: cada paso numerado y su explicación en una línea. */
-.guia{display:flex;flex-direction:column;gap:13px;margin-top:4px}
-.guia .g-item{display:flex;gap:11px;align-items:flex-start}
-.guia .g-n{flex:none;width:23px;height:23px;border-radius:7px;display:flex;
-  align-items:center;justify-content:center;font:800 11px "Space Grotesk";
+/* Guía. Los cuatro pasos de una venta, un renglón cada uno: se leen de un vistazo
+   y son casi todo lo que hace falta. Lo demás va plegado más abajo. */
+.guia{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+.guia .g-item{display:flex;gap:11px;align-items:center}
+.guia .g-n{flex:none;width:25px;height:25px;border-radius:8px;display:flex;
+  align-items:center;justify-content:center;font:800 12px "Space Grotesk";
   background:rgba(255,110,30,.14);border:1px solid rgba(255,120,40,.35);color:var(--ember-soft)}
-.guia .g-tit{font:700 13px Manrope;color:var(--cream)}
-.guia .g-txt{font:500 12px Manrope;color:var(--cream-60);line-height:1.5;margin-top:2px}
-.guia .g-sep{height:1px;background:rgba(255,120,40,.15);margin:3px 0}
-.guia .g-tit b{color:var(--ember-soft)}
+.guia .g-tit{font:500 13.5px Manrope;color:var(--cream-60);line-height:1.35}
+.guia .g-tit b{color:var(--cream);font-weight:700}
+
+/* Dudas: plegadas. Quien tiene una la abre; quien no, no carga con el texto. */
+.faq{border-bottom:1px solid rgba(255,120,40,.13)}
+.faq > summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;
+  padding:11px 2px;font:600 13px Manrope;color:var(--ember-soft)}
+.faq > summary::-webkit-details-marker{display:none}
+.faq > summary::before{content:"";flex:none;width:0;height:0;
+  border-left:5px solid var(--ember-dim);border-top:4px solid transparent;
+  border-bottom:4px solid transparent;transition:transform .18s}
+.faq[open] > summary::before{transform:rotate(90deg)}
+.faq > div{font:500 12.5px Manrope;color:var(--cream-60);line-height:1.55;
+  padding:0 2px 12px 21px}
+.faq > div b{color:var(--cream)}
+.faq > div i{color:var(--ember-soft);font-style:normal}
 
 /* tarjetas */
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
