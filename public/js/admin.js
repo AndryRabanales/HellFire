@@ -884,6 +884,64 @@ $('#btn-sl-create').addEventListener('click', async () => {
   finally { btn.disabled = false; }
 });
 
+/* Alta masiva: se pegan los nombres y salen todos con su código. Con 50 vendedores,
+   capturarlos de uno en uno son 50 formularios y 50 códigos copiados a mano. */
+$('#btn-sl-bulk').addEventListener('click', () => {
+  modal(`<div class="h1" style="font-size:18px">Cargar varios vendedores</div>
+    <div class="muted mt8" style="font-size:12px">Un nombre por línea. A cada uno se le asigna
+      su código de 5 dígitos.</div>
+    <textarea class="input mt12" id="bk-names" rows="8" placeholder="Ana Pérez
+Luis Canul
+María Chi" style="resize:vertical;line-height:1.6"></textarea>
+    <div class="err mt8" id="bk-err"></div>
+    <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
+    <button class="btn grow" id="bk-go">Crear todos</button></div>`);
+  $('#bk-go').onclick = async () => {
+    const names = $('#bk-names').value;
+    if (!names.trim()) { $('#bk-err').textContent = 'Pega al menos un nombre'; return; }
+    $('#bk-go').disabled = true;
+    try {
+      const r = await API.post('/api/admin/sellers/bulk', { names });
+      mostrarCodigos(r.creados, r.repetidos);
+      loadSellers();
+    } catch (e) { if (!guard(e)) $('#bk-err').textContent = e.message; }
+    finally { $('#bk-go').disabled = false; }
+  };
+});
+
+/* El resultado sirve para REPARTIR: nombre y código en una lista que se copia de un
+   toque y se pega en WhatsApp. Sin esto habría que ir vendedor por vendedor
+   apuntando su código a mano, que es justo lo que se quería evitar. */
+function mostrarCodigos(creados, repetidos) {
+  const texto = creados.map(c => `${c.name}: ${c.code}`).join('\n');
+  modal(`<div class="h1" style="font-size:18px">${creados.length} vendedor(es) creados</div>
+    ${repetidos.length ? `<div class="muted mt8" style="font-size:11.5px;color:var(--danger)">
+      Ya existían y se omitieron: ${esc(repetidos.join(', '))}</div>` : ''}
+    <div class="scrolly mt12" style="max-height:44dvh;overflow:auto">
+      ${creados.map(c => `
+        <div class="row" style="justify-content:space-between;gap:10px;padding:9px 2px;
+          border-bottom:1px solid rgba(255,120,40,.12)">
+          <div style="font:700 13px Manrope;min-width:0;overflow:hidden;
+            text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</div>
+          <span class="codechip">${esc(c.code)}</span>
+        </div>`).join('')}
+    </div>
+    <button class="btn mt16" id="bk-copy">Copiar la lista</button>
+    <button class="btn ghost mt8" onclick="closeModal()">Listo</button>`);
+  $('#bk-copy').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast('Lista copiada · pégala en WhatsApp');
+    } catch (_) {
+      // sin permiso de portapapeles (pasa en algunos navegadores): se muestra para
+      // seleccionar a mano en vez de dejar al admin sin salida
+      modal(`<div class="h1" style="font-size:17px">Copia la lista</div>
+        <textarea class="input mt12" rows="10" style="line-height:1.6">${esc(texto)}</textarea>
+        <button class="btn mt12" onclick="closeModal()">Listo</button>`);
+    }
+  };
+}
+
 /* Opciones que casi no se usan, fuera de la fila para que no estorben. */
 function menuVendedor(s) {
   modal(`<div class="h1" style="font-size:17px">${esc(s.name)}</div>

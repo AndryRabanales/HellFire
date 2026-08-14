@@ -2064,6 +2064,51 @@ def delete_seller_payment(pid):
     db.commit()
     return jsonify(ok=True)
 
+@app.post("/api/admin/sellers/bulk")
+def create_sellers_bulk():
+    """Alta de varios vendedores de un jalón, pegando la lista de nombres.
+
+    Con 50 vendedores, capturarlos uno por uno son 50 formularios y 50 códigos
+    copiados a mano. Aquí se pegan los nombres —uno por línea— y salen todos con su
+    código listo para repartir. Los repetidos NO frenan la carga: se apartan y se
+    reportan, para que 49 altas buenas no se pierdan por un nombre duplicado."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    crudo = str((request.json or {}).get("names", ""))
+    nombres, vistos = [], set()
+    for linea in crudo.splitlines():
+        n = re.sub(r"\s+", " ", linea).strip()
+        if not n:
+            continue
+        if n.lower() in vistos:          # repetido DENTRO de la misma lista
+            continue
+        vistos.add(n.lower())
+        nombres.append(n)
+    if not nombres:
+        return jsonify(error="Pega al menos un nombre"), 400
+    if len(nombres) > 200:
+        return jsonify(error="Máximo 200 por vez"), 400
+
+    creados, repetidos = [], []
+    for n in nombres:
+        ya = db.execute("SELECT 1 FROM sellers WHERE deleted=0 AND hidden=0 "
+                        "AND LOWER(TRIM(name))=LOWER(TRIM(?))", (n,)).fetchone()
+        if ya:
+            repetidos.append(n)
+            continue
+        code = gen_seller_code(db)
+        db.execute("INSERT INTO sellers(name, code, owner_admin_id, owner_admin_name, created_at) "
+                   "VALUES(?,?,?,?,?)",
+                   (n, code, s["admin"]["id"], s["admin"]["username"], now_iso()))
+        creados.append({"name": n, "code": code})
+    if creados:
+        audit(db, s["admin"]["username"], "vendedor_creado",
+              f"Alta masiva: {len(creados)} vendedores")
+    db.commit()
+    return jsonify(ok=True, creados=creados, repetidos=repetidos)
+
 @app.post("/api/admin/sellers")
 def create_seller():
     s = require_admin()
