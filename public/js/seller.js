@@ -776,13 +776,17 @@ function mostrarBienvenida() {
       <div class="tb-t">¡Bienvenido a las ventas!</div>
       <div class="tb-x">Desde aquí generas los boletos y se los mandas a quien te compre.
         Te enseño la pantalla en 5 pasos.</div>
-      <button class="btn mt16" id="tb-go">Empezar</button>
+      <div class="tb-barra"><span></span></div>
     </div>`;
   document.body.appendChild(c);
   document.body.style.overflow = 'hidden';
-  // Un solo camino: no se le pregunta si quiere el tutorial, se le da. Son cinco
-  // toques y es la única vez que lo va a ver.
-  $('#tb-go').onclick = () => { c.remove(); mostrarTour(0); };
+  // Ni siquiera hay botón: se lee el saludo y el recorrido entra solo. Preguntarle
+  // "¿empezamos?" es un toque de más para llegar al mismo sitio. La barra de abajo
+  // avisa que va a avanzar, y tocar la pantalla lo adelanta para el que ya leyó.
+  let ido = false;
+  const seguir = () => { if (ido) return; ido = true; clearTimeout(reloj); c.remove(); mostrarTour(0); };
+  const reloj = setTimeout(seguir, 3400);
+  c.addEventListener('click', seguir);
 }
 
 function mostrarTutorial() { setTimeout(mostrarBienvenida, 400); }
