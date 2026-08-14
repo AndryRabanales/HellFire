@@ -236,6 +236,21 @@ select.input option{background:#160603;color:var(--cream)}
 .faq > div b{color:var(--cream)}
 .faq > div i{color:var(--ember-soft);font-style:normal}
 
+/* Formulario de gasto: cada campo con su rótulo arriba (antes el placeholder hacía
+   de etiqueta y al escribir desaparecía), y "Ya se pagó" como pastilla que se
+   enciende, no un checkbox flotando en el aire. */
+.gx-f{display:flex;flex-direction:column;gap:4px;
+  font:600 10px "Space Grotesk";letter-spacing:.1em;text-transform:uppercase;
+  color:rgba(246,241,231,.42)}
+.gx-f .gx-op{color:rgba(246,241,231,.25);letter-spacing:.06em}
+.gx-check{display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+  padding:11px 14px;border-radius:11px;border:1px solid var(--line);
+  background:rgba(255,255,255,.02);transition:border-color .15s,background .15s}
+.gx-check input{accent-color:#e8480d;width:15px;height:15px;cursor:pointer}
+.gx-check span{font:600 12px Manrope;color:var(--cream-60)}
+.gx-check:has(input:checked){border-color:rgba(126,226,168,.5);background:rgba(126,226,168,.07)}
+.gx-check:has(input:checked) span{color:var(--ok)}
+
 /* tarjetas */
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
 .card.hot{background:rgba(255,110,30,.1);border-color:rgba(255,120,40,.28)}
@@ -263,6 +278,9 @@ select.input option{background:#160603;color:var(--cream)}
 
 /* Seis dígitos no caben con el ancho de cuatro: se aprietan para que quepan en el
    teléfono más angosto sin deslizar. */
+.pinrow.pin5{gap:9px}
+.pinrow.pin5 .pinbox{width:52px;height:64px;font-size:28px;border-radius:13px}
+@media (max-width:360px){ .pinrow.pin5 .pinbox{width:47px;height:59px;font-size:25px} }
 .pinrow.gate6{gap:7px}
 .pinrow.gate6 .pinbox{width:46px;height:58px;font-size:26px;border-radius:12px}
 @media (max-width:360px){ .pinrow.gate6 .pinbox{width:42px;height:54px;font-size:23px} }
@@ -475,7 +493,12 @@ table.data tr.void td.strike{text-decoration:line-through}
      wrap). En la de "nuevo vendedor", que va en una sola línea con su botón, un
      min-width:100% empujaba el botón FUERA de la pantalla y hacía que la página
      entera se deslizara en horizontal. */
-  #ad-user,#ad-pass,#gx-name,#gx-amount,#gx-account{min-width:100%!important}
+  #ad-user,#ad-pass{min-width:100%!important}
+  /* los campos de gasto viven dentro de su etiqueta: es ELLA la que debe ocupar
+     todo el ancho para que se apilen uno por línea */
+  .gx-f{width:100%!important;min-width:100%!important}
+  .gx-check{width:100%;justify-content:center}
+  #btn-gx-create{width:100%}
 
   /* Los campos y botones traen padding en el atributo style del HTML, que le gana
      a la clase; por eso en el teléfono se veían enormes. Aquí se aprietan todos de

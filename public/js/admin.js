@@ -372,9 +372,9 @@ async function loadExpenses(silent) {
       <div class="sv" style="color:var(--danger)">${fmtMoney(g.pending)}</div></div>
     <div class="stat"><div class="sk">Ya pagado</div><div class="sv">${fmtMoney(g.paid)}</div></div>
     <div class="stat"><div class="sk">Total de gastos</div><div class="sv">${fmtMoney(g.total)}</div></div>
-    <div class="stat"><div class="sk">Ganancia neta (vendido − gastos)</div>
+    <div class="stat"><div class="sk">Ganancia neta</div>
       <div class="sv" style="color:${neta >= 0 ? 'var(--ok)' : 'var(--danger)'}">${fmtMoney(neta)}</div>
-      <div class="muted" style="font-size:9px;margin-top:2px">vendido ${fmtMoney(vendido)}</div></div>`;
+      <div class="muted" style="font-size:9px;margin-top:2px">vendido ${fmtMoney(vendido)} − gastos ${fmtMoney(g.total)}</div></div>`;
   // desglose por cuenta (quién puso cuánto)
   const bac = $('#gx-byaccount-card');
   if (g.by_account.length) {
@@ -908,8 +908,8 @@ async function editSeller(s) {
   const general = cta.commission_general != null ? cta.commission_general : 10;
   modal(`<div class="h1" style="font-size:18px">Editar vendedor</div>
     <div class="label mt12">Nombre</div><input class="input" id="es-name" value="${esc(s.name)}">
-    <div class="label mt12">Código de 4 dígitos</div>
-    <input class="input" id="es-code" value="${esc(s.code)}" maxlength="4" inputmode="numeric">
+    <div class="label mt12">Código de 5 dígitos</div>
+    <input class="input" id="es-code" value="${esc(s.code)}" maxlength="5" inputmode="numeric">
     <div class="muted mt8">Si cambias el código, su sesión actual se cierra.</div>
 
     <div class="label mt16">Su comisión</div>

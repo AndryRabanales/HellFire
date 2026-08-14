@@ -34,13 +34,16 @@ function bindLogin() {
   const focus = () => input.focus({ preventScroll: true });
   $('#pinrow').addEventListener('click', focus);
   input.addEventListener('input', () => {
-    PIN = input.value.replace(/\D/g, '').slice(0, 4);
+    // Los códigos de vendedor son de 5; al quinto dígito entra solo. El de
+    // invitados puede ser más corto o más largo (4 a 6): ese se manda con el botón
+    // ENTRAR, sin que la pantalla delate que existen códigos de otras medidas.
+    PIN = input.value.replace(/\D/g, '').slice(0, 6);
     input.value = PIN;
     renderPin();
     $('#lg-err').textContent = '';
-    if (PIN.length === 4) doLogin();
+    if (PIN.length === 5) doLogin();
   });
-  $('#btn-enter').addEventListener('click', () => PIN.length === 4 ? doLogin() : focus());
+  $('#btn-enter').addEventListener('click', () => PIN.length >= 4 ? doLogin() : focus());
   setTimeout(focus, 300);
 }
 

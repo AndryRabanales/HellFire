@@ -98,17 +98,35 @@ window.addEventListener('online', updateNet);
 window.addEventListener('offline', updateNet);
 
 /* ---------- validación ---------- */
+/* Si la señal se cae justo DESPUÉS de que el servidor marcó el ingreso, este
+   teléfono no recibió la respuesta y al reintentar el mismo QR vería "YA SE USÓ"
+   en rojo... por su propio escaneo. Se apuntan los códigos cuya respuesta se
+   perdió: si al reintentar el servidor dice "usado" y ese código está apuntado
+   AQUÍ, en este teléfono, es nuestro propio escaneo y la persona ENTRA.
+   Solo vale en el dispositivo que lo escaneó: una copia en otra puerta no está
+   en esta lista y sigue saliendo en rojo. */
+const SIN_RESPUESTA = new Map();   // code -> cuándo falló
+const REINTENTO_MS = 45000;   // el reintento real toma segundos; 45s ya es generoso
+
 async function validate(code) {
   if (busy) return;
   busy = true;
   try {
     const r = await call(code);
+    if (r.result === 'usado' && SIN_RESPUESTA.has(code) &&
+        Date.now() - SIN_RESPUESTA.get(code) < REINTENTO_MS) {
+      r.result = 'valido';
+      r.recuperado = true;
+    }
+    SIN_RESPUESTA.delete(code);
     render(r);
     if (r.result === 'valido') cargarEntradas();   // el contador y la lista al día
     if (navigator.vibrate) navigator.vibrate(r.result === 'valido' ? 90 : [70, 60, 70]);
   } catch (e) {
+    if (e.message !== 'sin permiso') SIN_RESPUESTA.set(code, Date.now());
     render({ result: 'error', message: navigator.onLine === false
-      ? 'Sin conexión — revisa el internet de la puerta' : 'Error, intenta de nuevo' });
+      ? 'Sin conexión — vuelve a apuntar al MISMO código al regresar la señal'
+      : 'Error, intenta de nuevo con el mismo código' });
   } finally {
     setTimeout(() => { busy = false; }, 600);   // pequeño respiro entre escaneos
   }

@@ -21,11 +21,12 @@
   </div>
   <div style="margin-top:auto">
     <div class="hint" style="text-align:center;margin-bottom:16px;font-size:12px;color:var(--cream-60)">Ingresa tu código de acceso</div>
-    <div class="pinrow" id="pinrow">
-      <div class="pinbox">•</div><div class="pinbox">•</div><div class="pinbox">•</div><div class="pinbox">•</div>
+    <div class="pinrow pin5" id="pinrow">
+      <div class="pinbox">•</div><div class="pinbox">•</div><div class="pinbox">•</div>
+      <div class="pinbox">•</div><div class="pinbox">•</div>
     </div>
-    <input id="pin-input" type="tel" inputmode="numeric" maxlength="4" autocomplete="one-time-code"
-           style="position:absolute;opacity:0;pointer-events:none" aria-label="Código de 4 dígitos">
+    <input id="pin-input" type="tel" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
+           style="position:absolute;opacity:0;pointer-events:none" aria-label="Código de 5 dígitos">
     <div class="err mt12" id="lg-err" style="text-align:center"></div>
     <button class="btn" id="btn-enter">ENTRAR&nbsp;&nbsp;⟶</button>
     <div class="muted" style="text-align:center;margin-top:16px;font-size:10px;color:rgba(246,241,231,.3)">Tu código es tu identidad de vendedor</div>

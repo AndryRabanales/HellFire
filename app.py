@@ -402,8 +402,13 @@ def next_phase(db, type_row):
     return None
 
 def gen_seller_code(db):
+    """Código de vendedor de 5 dígitos. Eran 4: con 50 vendedores, 1 de cada 200
+    números al azar era un código válido y adivinar alguno tomaba ~3 horas desde un
+    solo teléfono. Con 5 son 1 de cada 2,000 —más de un día por IP, y el candado de
+    intentos avisa mucho antes—. Puro número a propósito: con letras se dicta mal y
+    obliga a cambiar de teclado en el celular."""
     for _ in range(500):
-        code = f"{secrets.randbelow(10000):04d}"
+        code = f"{secrets.randbelow(100000):05d}"
         taken = db.execute(
             "SELECT 1 FROM sellers WHERE code=? AND deleted=0", (code,)).fetchone()
         if not taken:
@@ -531,7 +536,7 @@ def init_db():
         for i in range(1, 5):
             code = None
             while code is None:
-                c = f"{secrets.randbelow(10000):04d}"
+                c = f"{secrets.randbelow(100000):05d}"
                 if not db.execute("SELECT 1 FROM sellers WHERE code=?", (c,)).fetchone():
                     code = c
             codes.append(code)
@@ -663,6 +668,24 @@ def init_db():
         db.commit()
         print(f"[OnFire] Sin facultad: {nombres}")
 
+    # Códigos de vendedor a 5 dígitos. Se revisa en CADA arranque (no es bandera de
+    # una sola vez): cualquier vendedor visible con código corto recibe uno nuevo.
+    # El de invitados NO se toca —viene de la variable de entorno y es privado del
+    # organizador—. Las sesiones abiertas siguen vivas: al vendedor no se le corta
+    # la venta, solo necesita el código nuevo para su próximo login.
+    cortos = db.execute(
+        "SELECT id, name FROM sellers WHERE deleted=0 AND hidden=0 "
+        "AND code IS NOT NULL AND LENGTH(code) < 5").fetchall()
+    if cortos:
+        for r in cortos:
+            db.execute("UPDATE sellers SET code=? WHERE id=?", (gen_seller_code(db), r["id"]))
+        db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
+                   ("sistema", "usuarios",
+                    f"Códigos de vendedor renovados a 5 dígitos ({len(cortos)}): "
+                    "compárteles el nuevo desde Vendedores", now_iso()))
+        db.commit()
+        print(f"[OnFire] {len(cortos)} códigos de vendedor renovados a 5 dígitos.")
+
     # RESET A PETICIÓN — para volver a dejar el sistema en cero cuantas veces haga
     # falta (por ejemplo después de enseñárselo al equipo), sin tocar código:
     # en Railway → Variables, pon RESET_KEY con cualquier valor. Al arrancar borra
@@ -683,9 +706,9 @@ def init_db():
     # escaneando. Sus boletos NO cuentan como venta en ninguna pantalla del panel.
     guest_code = (os.environ.get("GUEST_SELLER_CODE") or "").strip()
     if guest_code:
-        if not re.fullmatch(r"\d{4}", guest_code):
+        if not re.fullmatch(r"\d{4,6}", guest_code):
             print(f"[OnFire] AVISO: GUEST_SELLER_CODE='{guest_code}' no sirve. "
-                  "Debe ser EXACTAMENTE 4 dígitos (ej. 4821). No se creó el vendedor de invitados.")
+                  "Debe ser de 4 a 6 dígitos (ej. 482113). No se creó el vendedor de invitados.")
         else:
             row = db.execute("SELECT * FROM sellers WHERE code=?", (guest_code,)).fetchone()
             if row and not row["hidden"]:
@@ -963,7 +986,9 @@ def login_code():
     # primer intento; si fuera distinto, delataría que ese código sí existe.
     BAD = "Código incorrecto. Intenta de nuevo."
     code = str((request.json or {}).get("code", "")).strip()
-    if not re.fullmatch(r"\d{4}", code):
+    # 4 a 6 dígitos: los códigos nuevos son de 5; el de invitados (variable de
+    # entorno) puede ser de 4 a 6 y no hay por qué delatarlo rechazándolo
+    if not re.fullmatch(r"\d{4,6}", code):
         record_attempt(db, key); db.commit()
         return jsonify(error=BAD), 401
     seller = db.execute(
@@ -2053,8 +2078,8 @@ def create_seller():
         return jsonify(error="Nombre requerido"), 400
     code = str(b.get("code", "")).strip()
     if code:
-        if not re.fullmatch(r"\d{4}", code):
-            return jsonify(error="El código debe ser de 4 dígitos"), 400
+        if not re.fullmatch(r"\d{5}", code):
+            return jsonify(error="El código debe ser de 5 dígitos"), 400
         if db.execute("SELECT 1 FROM sellers WHERE code=? AND deleted=0", (code,)).fetchone():
             return jsonify(error="Ese código ya está en uso"), 400   # RF-84
     else:
@@ -2095,8 +2120,8 @@ def edit_seller(sid):
     name = str(b.get("name", sel["name"])).strip() or sel["name"]
     code = str(b.get("code", sel["code"])).strip()
     if code != sel["code"]:
-        if not re.fullmatch(r"\d{4}", code):
-            return jsonify(error="El código debe ser de 4 dígitos"), 400
+        if not re.fullmatch(r"\d{5}", code):
+            return jsonify(error="El código debe ser de 5 dígitos"), 400
         if db.execute("SELECT 1 FROM sellers WHERE code=? AND deleted=0 AND id!=?",
                       (code, sid)).fetchone():
             return jsonify(error="Ese código ya está en uso"), 400
