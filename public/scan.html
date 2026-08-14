@@ -49,6 +49,30 @@
   .r-type{padding:6px 18px;border-radius:10px;font:800 14px "Space Grotesk";letter-spacing:.06em}
   .r-type.vip{background:linear-gradient(150deg,#f3d27a,#d9a53a);color:#3a1e00;box-shadow:0 0 18px rgba(243,210,122,.5)}
   .r-type.gen{background:rgba(255,255,255,.1);color:rgba(255,255,255,.72)}
+
+  /* contador de entradas: chico arriba, y es el botón para ver quiénes pasaron */
+  .ent-btn{display:flex;align-items:baseline;gap:5px;cursor:pointer;padding:6px 11px;
+    border-radius:20px;border:1px solid rgba(255,120,40,.35);background:rgba(255,110,30,.1);
+    transition:transform .1s ease,background .14s}
+  .ent-btn:active{transform:scale(.94);background:rgba(255,110,30,.2)}
+  .ent-btn b{font:800 14px "Space Grotesk";color:var(--ember-soft);font-variant-numeric:tabular-nums}
+  .ent-btn span{font:600 10px Manrope;color:var(--cream-45)}
+
+  #entradas{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.75);
+    display:flex;align-items:flex-end}
+  #entradas.hidden{display:none}
+  .ent-caja{width:100%;max-height:82dvh;display:flex;flex-direction:column;
+    background:linear-gradient(160deg,#1c0a04,#0d0403);border-top:1px solid var(--line-strong);
+    border-radius:20px 20px 0 0;padding:16px 15px calc(16px + env(safe-area-inset-bottom));
+    animation:pop .2s ease}
+  .ent-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  #ent-lista{margin-top:12px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .ent-fila{display:flex;align-items:center;gap:10px;padding:10px 2px;
+    border-bottom:1px solid rgba(255,120,40,.1)}
+  .ent-fila .e-n{flex:1;min-width:0;font:700 14px Manrope;color:var(--cream);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ent-fila .e-t{flex:none;font:600 11px Manrope;color:var(--cream-45)}
+  .ent-fila .e-vip{flex:none;font:800 9px "Space Grotesk";letter-spacing:.1em;color:#f3d27a}
 </style>
 </head>
 <body>
@@ -57,17 +81,27 @@
 <!-- Candado de la puerta: si no hay permiso (ni sesión de admin ni clave del día),
      la cámara ni se enciende. -->
 <div id="view-gate" class="wrap hidden">
-  <div style="margin-top:14dvh;text-align:center">
-    <div class="kicker">PUERTA</div>
-    <div class="brand" style="margin-top:8px">ESCÁNER</div>
-    <div class="sub" style="margin-top:14px">Pide la clave al organizador</div>
+  <div style="margin-top:11dvh;text-align:center">
+    <div class="kicker">CONTROL DE ACCESO</div>
+    <div class="brand" id="gate-evento" style="margin-top:8px">HELLFIRE</div>
+    <div class="sub" style="margin-top:14px">Escáner de la puerta</div>
   </div>
+
   <div style="margin-top:auto">
-    <input class="input" id="gate-code" type="tel" inputmode="numeric" maxlength="6"
-           placeholder="Clave de 6 dígitos" autocomplete="one-time-code"
-           style="text-align:center;font:800 24px 'Space Grotesk';letter-spacing:.35em">
+    <div class="hint" style="text-align:center;margin-bottom:16px;font-size:12px;color:var(--cream-60)">
+      Escribe la clave que te dio el organizador</div>
+    <!-- Seis casillas en vez de un campo de texto: se ve cuántos dígitos faltan sin
+         contarlos, y es el mismo gesto que ya conocen del panel de vendedor. -->
+    <div class="pinrow gate6" id="gate-row">
+      <div class="pinbox">•</div><div class="pinbox">•</div><div class="pinbox">•</div>
+      <div class="pinbox">•</div><div class="pinbox">•</div><div class="pinbox">•</div>
+    </div>
+    <input id="gate-code" type="tel" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
+           style="position:absolute;opacity:0;pointer-events:none" aria-label="Clave de 6 dígitos">
     <div class="err mt12" id="gate-err" style="text-align:center"></div>
-    <button class="btn" id="btn-gate">ENTRAR</button>
+    <button class="btn" id="btn-gate">ENTRAR&nbsp;&nbsp;⟶</button>
+    <div class="muted" style="text-align:center;margin-top:16px;font-size:10px;color:rgba(246,241,231,.3)">
+      Sin la clave no se puede validar ningún boleto</div>
   </div>
 </div>
 
@@ -77,13 +111,35 @@
       <a href="/admin" class="iconbtn" id="btn-scan-back" title="Volver al panel" style="text-decoration:none;display:flex;align-items:center;justify-content:center">‹</a>
       <div class="avatar">▣</div><div class="who">Puerta</div>
     </div>
-    <div class="live" id="live"><span class="dot"></span><span id="live-text">En vivo</span></div>
+    <div class="row" style="gap:9px">
+      <button class="ent-btn" id="btn-ent"><b id="ent-num">0</b><span>entradas</span></button>
+      <div class="live" id="live"><span class="dot"></span><span id="live-text">En vivo</span></div>
+    </div>
   </div>
   <div id="cam-wrap">
     <video id="cam" muted playsinline></video>
     <div id="cam-frame"></div>
     <div id="cam-status">Apunta la cámara al código QR</div>
     <div id="result"></div>
+  </div>
+
+  <!-- Quiénes ya entraron. Se abre desde el contador de arriba y se cierra tocando
+       fuera: en la puerta no hay tiempo de buscar una "x". -->
+  <div id="entradas" class="hidden">
+    <div class="ent-caja">
+      <div class="ent-top">
+        <div>
+          <div class="label" style="margin:0">Ya entraron</div>
+          <div class="muted" id="ent-sub" style="font-size:11px;margin-top:3px"></div>
+        </div>
+        <button class="volver" id="ent-cerrar">Cerrar</button>
+      </div>
+      <div class="search mt12">
+        <span class="ico">⌕</span>
+        <input id="ent-q" placeholder="Buscar por nombre…" autocomplete="off">
+      </div>
+      <div id="ent-lista"></div>
+    </div>
   </div>
 </div>
 

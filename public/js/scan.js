@@ -15,26 +15,50 @@ function tokenDePuerta() {
 function mostrarGate(msj) {
   document.getElementById('view-gate').classList.remove('hidden');
   document.getElementById('view-scan').style.display = 'none';
+  GATE_PIN = ''; document.getElementById('gate-code').value = ''; pintarGate();
   if (msj) document.getElementById('gate-err').textContent = msj;
   stopCam();
+  setTimeout(enfocarGate, 300);
+}
+
+let GATE_PIN = '';
+function pintarGate() {
+  const cajas = document.querySelectorAll('#gate-row .pinbox');
+  cajas.forEach((b, i) => {
+    b.textContent = GATE_PIN[i] || '•';
+    b.classList.toggle('filled', i < GATE_PIN.length);
+  });
+}
+function enfocarGate() {
+  document.getElementById('gate-code').focus({ preventScroll: true });
 }
 
 async function entrarConClave() {
-  const code = document.getElementById('gate-code').value.trim();
+  const code = GATE_PIN;
   document.getElementById('gate-err').textContent = '';
-  if (code.length < 6) { document.getElementById('gate-err').textContent = 'Escribe la clave de 6 dígitos'; return; }
+  if (code.length < 6) {
+    document.getElementById('gate-err').textContent = 'Escribe la clave de 6 dígitos';
+    enfocarGate();
+    return;
+  }
   try {
     const res = await fetch('/api/scan-login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
     });
     const r = await res.json();
-    if (!res.ok) { document.getElementById('gate-err').textContent = r.error || 'Clave incorrecta'; return; }
+    if (!res.ok) {
+      document.getElementById('gate-err').textContent = r.error || 'Clave incorrecta';
+      GATE_PIN = ''; document.getElementById('gate-code').value = ''; pintarGate();
+      enfocarGate();
+      return;
+    }
     SCAN_TOKEN = r.token;
     localStorage.setItem('onfire_scan_token', r.token);
     document.getElementById('view-gate').classList.add('hidden');
     document.getElementById('view-scan').style.display = '';
     ensureCamera();
+    cargarEntradas();
   } catch (e) {
     document.getElementById('gate-err').textContent = 'Sin conexión, intenta de nuevo';
   }
@@ -80,6 +104,7 @@ async function validate(code) {
   try {
     const r = await call(code);
     render(r);
+    if (r.result === 'valido') cargarEntradas();   // el contador y la lista al día
     if (navigator.vibrate) navigator.vibrate(r.result === 'valido' ? 90 : [70, 60, 70]);
   } catch (e) {
     render({ result: 'error', message: navigator.onLine === false
@@ -207,6 +232,46 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
+/* ---------- quiénes ya entraron ----------
+   El staff necesita contestar "¿ya pasó fulano?" sin llamar al organizador, y saber
+   cuántos van adentro. Se refresca al abrir y después de cada ingreso. */
+let ENTRADAS = [];
+
+async function cargarEntradas() {
+  try {
+    const res = await fetch('/api/scan/recent',
+      { headers: { 'Authorization': 'Bearer ' + tokenDePuerta() } });
+    if (!res.ok) return;
+    const r = await res.json();
+    ENTRADAS = r.entradas || [];
+    document.getElementById('ent-num').textContent = r.total || 0;
+    pintarEntradas();
+  } catch (_) { /* la puerta no se cae por esto */ }
+}
+
+function pintarEntradas() {
+  const q = (document.getElementById('ent-q').value || '').trim().toLowerCase();
+  const vis = q ? ENTRADAS.filter(e => (e.buyer_name || '').toLowerCase().includes(q)) : ENTRADAS;
+  document.getElementById('ent-sub').textContent = q
+    ? `${vis.length} coincidencia(s)`
+    : `Los ${vis.length} más recientes`;
+  document.getElementById('ent-lista').innerHTML = vis.length ? vis.map(e => `
+    <div class="ent-fila">
+      <div class="e-n">${esc(e.buyer_name || '')}</div>
+      ${e.type_is_vip ? '<div class="e-vip">★ VIP</div>' : ''}
+      <div class="e-t">${(e.used_at || '').slice(11, 16)}</div>
+    </div>`).join('')
+    : `<div class="muted" style="text-align:center;padding:26px 0">${
+        q ? 'Esa persona no ha entrado' : 'Todavía no entra nadie'}</div>`;
+}
+
+function abrirEntradas() {
+  document.getElementById('ent-q').value = '';
+  document.getElementById('entradas').classList.remove('hidden');
+  cargarEntradas();
+}
+function cerrarEntradas() { document.getElementById('entradas').classList.add('hidden'); }
+
 function stopCam() {
   scanning = false;
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
@@ -214,10 +279,23 @@ function stopCam() {
 
 /* ---------- arranque ---------- */
 updateNet();
+fetch('/api/event').then(r => r.json()).then(e => {
+  if (e.event_name) document.getElementById('gate-evento').textContent = e.event_name;
+}).catch(() => {});
+document.getElementById('btn-ent').addEventListener('click', abrirEntradas);
+document.getElementById('ent-cerrar').addEventListener('click', cerrarEntradas);
+document.getElementById('ent-q').addEventListener('input', pintarEntradas);
+document.getElementById('entradas').addEventListener('click', e => {
+  if (e.target.id === 'entradas') cerrarEntradas();   // tocar fuera cierra
+});
 document.getElementById('btn-gate').addEventListener('click', entrarConClave);
+document.getElementById('gate-row').addEventListener('click', enfocarGate);
 document.getElementById('gate-code').addEventListener('input', e => {
-  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
-  if (e.target.value.length === 6) entrarConClave();
+  GATE_PIN = e.target.value.replace(/\D/g, '').slice(0, 6);
+  e.target.value = GATE_PIN;
+  pintarGate();
+  document.getElementById('gate-err').textContent = '';
+  if (GATE_PIN.length === 6) entrarConClave();
 });
 // ¿Con qué permiso arrancamos? Se prueba contra el servidor con un escaneo vacío:
 // si responde 401, al candado; cualquier otra cosa significa que hay permiso.
@@ -226,5 +304,6 @@ document.getElementById('gate-code').addEventListener('input', e => {
   try {
     await call('');          // 'no_existe' si hay permiso; lanza si es 401
     startCamera();
+    cargarEntradas();
   } catch (_) { /* call() ya mandó al candado */ }
 })();

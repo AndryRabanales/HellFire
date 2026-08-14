@@ -313,6 +313,9 @@ DEFAULT_SETTINGS = {
     "folio_start": "1",              # número del primer folio (no revela lo vendido)
     "session_minutes": "480",
     "admin_session_minutes": "480",
+    # La puerta aguanta toda la noche. Con las 8 h de los demás, quien abriera el
+    # escáner a las 8 PM se quedaba fuera a las 4 AM, con gente formada enfrente.
+    "scanner_session_minutes": "1080",   # 18 horas
     # Flyers por tipo de boleto: UADY, Externo, VIP, Grupo de 5 y Grupo de 10. Cada uno
     # con su imagen (base64 en la BD), posición y zoom. "gen" es el flyer "General" de
     # antes del cambio y sigue de respaldo (UADY/Externo caían ahí); las claves sin
@@ -873,7 +876,8 @@ def guest_knock_ok(ip):
         return True
 
 def create_session(db, role, user_id):
-    minutes = int(setting(db, "admin_session_minutes" if role == "admin" else "session_minutes"))
+    minutes = int(setting(db, {"admin": "admin_session_minutes",
+                              "scanner": "scanner_session_minutes"}.get(role, "session_minutes")))
     token = secrets.token_urlsafe(24)
     exp = (now_dt() + timedelta(minutes=minutes)).strftime("%Y-%m-%d %H:%M:%S")
     db.execute("INSERT INTO sessions(token, role, user_id, created_at, expires_at) VALUES(?,?,?,?,?)",
@@ -1326,6 +1330,22 @@ def get_ticket(tid):
     return jsonify(ticket=ticket_public(t))
 
 # ---------------------------------------------------------------- API: escaneo en la puerta
+
+@app.get("/api/scan/recent")
+def scan_recent():
+    """Los últimos que entraron. Lo pide el propio escáner para que el staff pueda
+    contestar "¿ya pasó fulano?" sin llamar al organizador, y para saber cuántos van
+    adentro. Solo nombre, tipo y hora: nada de precios ni de quién lo vendió."""
+    if not require_scanner():
+        return jsonify(error="clave requerida"), 401
+    db = get_db()
+    filas = db.execute(
+        f"""SELECT buyer_name, type_name, type_is_vip, used_at FROM tickets
+            WHERE status='used' AND {NOT_GUEST}
+            ORDER BY used_at DESC LIMIT 60""").fetchall()
+    total = db.execute(
+        f"SELECT COUNT(*) c FROM tickets WHERE status='used' AND {NOT_GUEST}").fetchone()["c"]
+    return jsonify(total=total, entradas=[dict(r) for r in filas])
 
 @app.post("/api/scan-login")
 def scan_login():

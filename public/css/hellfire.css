@@ -261,6 +261,12 @@ select.input option{background:#160603;color:var(--cream)}
 .pinbox.filled{background:rgba(255,110,30,.08);border-color:var(--ember);
   box-shadow:0 0 16px rgba(255,110,30,.4),inset 0 0 12px rgba(255,110,30,.15);color:var(--ember-soft)}
 
+/* Seis dígitos no caben con el ancho de cuatro: se aprietan para que quepan en el
+   teléfono más angosto sin deslizar. */
+.pinrow.gate6{gap:7px}
+.pinrow.gate6 .pinbox{width:46px;height:58px;font-size:26px;border-radius:12px}
+@media (max-width:360px){ .pinrow.gate6 .pinbox{width:42px;height:54px;font-size:23px} }
+
 /* selector tipo de boleto */
 /* Tres en fila: son los tres tipos que se venden siempre. Si algún día se habilita
    un cuarto (Ultra VIP), baja solo a un cuadro largo debajo — se lee como lo que es,
