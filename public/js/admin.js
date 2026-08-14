@@ -1423,9 +1423,49 @@ function pintaVentas(cerradas) {
   };
 }
 
+/* Clave del escáner de la puerta. Apagada, solo los admins pueden escanear; el día
+   del evento se genera y se reparte al staff. Rotarla saca a quien tenga la vieja. */
+function pintaPuerta(clave) {
+  const hay = !!clave;
+  $('#dc-estado').innerHTML = hay
+    ? '<b style="color:var(--ok)">ENCENDIDA</b> \u00b7 el staff entra a /scan con esta clave'
+    : '<b style="color:var(--cream-60)">APAGADA</b> \u00b7 solo t\u00fa puedes escanear (abre Esc\u00e1ner arriba)';
+  $('#dc-clave').style.display = hay ? '' : 'none';
+  if (hay) $('#dc-num').textContent = clave;
+  $('#btn-dc-gen').textContent = hay ? 'Generar una clave nueva' : 'Generar clave para el staff';
+  $('#btn-dc-off').style.display = hay ? '' : 'none';
+  $('#btn-dc-gen').onclick = async () => {
+    if (hay) {
+      const ok = await confirmModal({
+        title: 'Generar una clave nueva',
+        body: 'La clave anterior deja de servir y el staff que la tenga queda fuera hasta que le pases la nueva.',
+        okLabel: 'Generar', danger: true,
+      });
+      if (!ok) return;
+    }
+    try {
+      const r = await API.post('/api/admin/door-code', { accion: 'generar' });
+      pintaPuerta(r.door_code); toast('Clave lista: ' + r.door_code);
+    } catch (e) { if (!guard(e)) toast(e.message); }
+  };
+  $('#btn-dc-off').onclick = async () => {
+    const ok = await confirmModal({
+      title: 'Apagar el esc\u00e1ner del staff',
+      body: 'Las sesiones de puerta se cierran al instante. T\u00fa sigues pudiendo escanear con tu cuenta.',
+      okLabel: 'Apagar', danger: true,
+    });
+    if (!ok) return;
+    try {
+      const r = await API.post('/api/admin/door-code', { accion: 'apagar' });
+      pintaPuerta(''); toast('Esc\u00e1ner del staff apagado');
+    } catch (e) { if (!guard(e)) toast(e.message); }
+  };
+}
+
 async function loadSettings() {
   const s = await API.get('/api/admin/settings');
   pintaVentas(s.ventas_cerradas);
+  pintaPuerta(s.door_code);
   $('#st-name').value = s.event_name;
   $('#st-subtitle').value = s.event_subtitle;
   $('#st-folio').value = s.folio_start || '1';

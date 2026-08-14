@@ -1,8 +1,44 @@
-/* OnFire — escáner de puerta PÚBLICO, en tiempo real, escaneo continuo.
-   No requiere login: abres /scan y estás listo. Escanea → muestra resultado
-   compacto abajo → apunta al siguiente QR y se actualiza solo. */
+/* OnFire — escáner de puerta, en tiempo real, escaneo continuo.
+
+   Ya no es público: escanea un admin con su propia sesión (al abrirlo desde el
+   panel entra directo), o el staff con la clave de 6 dígitos que el organizador
+   genera el día del evento. Sin permiso, la cámara ni se enciende. */
 
 let stream = null, scanning = false, busy = false, lastCode = '', lastAt = 0;
+let SCAN_TOKEN = localStorage.getItem('onfire_scan_token') || '';
+
+function tokenDePuerta() {
+  // la sesión de admin (misma página, mismo navegador) también autoriza
+  return SCAN_TOKEN || localStorage.getItem('onfire_admin_token') || '';
+}
+
+function mostrarGate(msj) {
+  document.getElementById('view-gate').classList.remove('hidden');
+  document.getElementById('view-scan').style.display = 'none';
+  if (msj) document.getElementById('gate-err').textContent = msj;
+  stopCam();
+}
+
+async function entrarConClave() {
+  const code = document.getElementById('gate-code').value.trim();
+  document.getElementById('gate-err').textContent = '';
+  if (code.length < 6) { document.getElementById('gate-err').textContent = 'Escribe la clave de 6 dígitos'; return; }
+  try {
+    const res = await fetch('/api/scan-login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const r = await res.json();
+    if (!res.ok) { document.getElementById('gate-err').textContent = r.error || 'Clave incorrecta'; return; }
+    SCAN_TOKEN = r.token;
+    localStorage.setItem('onfire_scan_token', r.token);
+    document.getElementById('view-gate').classList.add('hidden');
+    document.getElementById('view-scan').style.display = '';
+    ensureCamera();
+  } catch (e) {
+    document.getElementById('gate-err').textContent = 'Sin conexión, intenta de nuevo';
+  }
+}
 
 // Cuánto se queda el resultado en pantalla antes de limpiarse solo. Si se quedara
 // fijo (como antes), el staff podría estar viendo un "ENTRA" viejo mientras la
@@ -12,9 +48,19 @@ let hideTimer = null;
 
 async function call(code) {
   const res = await fetch('/api/scan', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json',
+               'Authorization': 'Bearer ' + tokenDePuerta() },
     body: JSON.stringify({ code }),
   });
+  if (res.status === 401) {
+    // la clave se rotó o la sesión venció: de vuelta al candado, sin perder gente
+    // en la fila con un error mudo
+    SCAN_TOKEN = '';
+    localStorage.removeItem('onfire_scan_token');
+    mostrarGate('La clave cambió. Pide la nueva al organizador.');
+    throw new Error('sin permiso');
+  }
   return res.json();
 }
 
@@ -98,6 +144,9 @@ async function startCamera() {
    error, pero ya no leía un solo QR. Esto la reanuda (o la reabre si se cortó). */
 let recuperando = false;
 async function ensureCamera() {
+  // con el candado en pantalla no hay nada que reanudar (y encender la cámara
+  // detrás del candado asustaría a cualquiera)
+  if (!document.getElementById('view-gate').classList.contains('hidden')) return;
   if (recuperando) return;
   recuperando = true;
   try {
@@ -158,6 +207,24 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
-/* ---------- arranque (directo, sin login) ---------- */
+function stopCam() {
+  scanning = false;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+}
+
+/* ---------- arranque ---------- */
 updateNet();
-startCamera();
+document.getElementById('btn-gate').addEventListener('click', entrarConClave);
+document.getElementById('gate-code').addEventListener('input', e => {
+  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+  if (e.target.value.length === 6) entrarConClave();
+});
+// ¿Con qué permiso arrancamos? Se prueba contra el servidor con un escaneo vacío:
+// si responde 401, al candado; cualquier otra cosa significa que hay permiso.
+(async () => {
+  if (!tokenDePuerta()) { mostrarGate(); return; }
+  try {
+    await call('');          // 'no_existe' si hay permiso; lanza si es 401
+    startCamera();
+  } catch (_) { /* call() ya mandó al candado */ }
+})();

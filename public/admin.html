@@ -221,6 +221,18 @@
       <div class="muted" style="margin-bottom:10px">Una imagen por tipo. Al que no tenga la suya se le pone la de Externo. Ultra VIP está oculto: es solo para ver el diseño.</div>
       <div id="flyer-editors" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px"></div>
     </div>
+    <div class="card mt12" id="dc-card">
+      <div class="label">Escáner de la puerta</div>
+      <div class="muted" id="dc-estado" style="margin:6px 0 10px"></div>
+      <div id="dc-clave" style="display:none;text-align:center;margin:12px 0">
+        <span class="codechip" id="dc-num" style="font-size:26px;padding:10px 18px;letter-spacing:.3em"></span>
+        <div class="muted" style="font-size:10.5px;margin-top:8px">Pásala al staff el día del evento. Tú puedes escanear siempre, sin clave.</div>
+      </div>
+      <div class="row" style="gap:8px">
+        <button class="btn sm grow" id="btn-dc-gen"></button>
+        <button class="btn sm danger" id="btn-dc-off" style="display:none">Apagar</button>
+      </div>
+    </div>
     <!-- Cierre de ventas: se usa una vez, la noche de la fiesta, pero cuando se
          necesita hay prisa. Por eso va con su propio bloque y no escondido. -->
     <div class="card mt12" id="vt-card">

@@ -307,6 +307,9 @@ DEFAULT_SETTINGS = {
     # cuentas con los vendedores sabiendo que el número ya no se mueve. El ESCÁNER y
     # el panel de admin siguen funcionando: la puerta no puede depender de esto.
     "ventas_cerradas": "0",
+    # Clave del escáner de la puerta. Vacía = el escáner solo funciona con sesión de
+    # admin. El día del evento se genera una clave de 6 dígitos y se reparte al staff.
+    "door_code": "",
     "folio_start": "1",              # número del primer folio (no revela lo vendido)
     "session_minutes": "480",
     "admin_session_minutes": "480",
@@ -877,6 +880,13 @@ def create_session(db, role, user_id):
                (token, role, user_id, now_iso(), exp))
     return token
 
+def client_ip():
+    """La IP real del cliente. Detrás del proxy de Railway, remote_addr es la IP del
+    PROXY —la misma para todo el mundo—, así que usarla para el candado de intentos
+    convertía 8 códigos mal tecleados por cualquiera en un bloqueo para todos."""
+    return (request.headers.get("X-Forwarded-For", request.remote_addr or "?")
+            .split(",")[0].strip())
+
 def current_session():
     token = (request.headers.get("Authorization") or "").replace("Bearer ", "").strip()
     if not token:
@@ -893,6 +903,10 @@ def current_session():
             db.commit()
             return None
         return {"role": "seller", "seller": seller, "token": token}
+    if s["role"] == "scanner":
+        # sesión de puerta: no apunta a ningún usuario, solo autoriza escanear.
+        # Si el admin apagó o rotó la clave, la sesión ya se borró y no llega aquí.
+        return {"role": "scanner", "token": token}
     admin = db.execute("SELECT * FROM admins WHERE id=?", (s["user_id"],)).fetchone()
     if not admin:
         return None
@@ -937,7 +951,7 @@ def public_event():
 @app.post("/api/login-code")
 def login_code():
     db = get_db()
-    ip = request.remote_addr or "?"
+    ip = client_ip()
     key = f"code:{ip}"
     if rate_limited(db, key):
         return jsonify(error="Demasiados intentos. Espera unos minutos."), 429
@@ -969,7 +983,7 @@ def login_code():
 @app.post("/api/admin/login")
 def admin_login():
     db = get_db()
-    ip = request.remote_addr or "?"
+    ip = client_ip()
     body = request.json or {}
     username = str(body.get("username", "")).strip()
     key = f"admin:{ip}"
@@ -1313,12 +1327,40 @@ def get_ticket(tid):
 
 # ---------------------------------------------------------------- API: escaneo en la puerta
 
+@app.post("/api/scan-login")
+def scan_login():
+    """Entrada del staff de la puerta: la clave de 6 dígitos que el organizador
+    genera el día del evento. Con el mismo candado de intentos que los demás logins."""
+    db = get_db()
+    ip = client_ip()
+    if rate_limited(db, "door:" + ip):
+        return jsonify(error="Demasiados intentos. Espera unos minutos."), 429
+    codigo = str((request.json or {}).get("code", "")).strip()
+    puerta = setting(db, "door_code")
+    if not puerta or codigo != puerta:
+        db.execute("INSERT INTO login_attempts(key, ts) VALUES(?,?)", ("door:" + ip, time.time()))
+        db.commit()
+        return jsonify(error="Clave incorrecta"), 401
+    token = create_session(db, "scanner", 0)
+    db.commit()
+    return jsonify(token=token)
+
+def require_scanner():
+    """Puede escanear: un admin (siempre) o una sesión de puerta (con la clave)."""
+    s = current_session()
+    return s if s and s["role"] in ("admin", "scanner") else None
+
 @app.post("/api/scan")
 def scan():
     """Valida un boleto en tiempo real y lo marca como INGRESÓ en el primer escaneo.
     Cierra el boleto: cualquier copia o falso sale en rojo.
-    PÚBLICO: el staff de la puerta no necesita cuenta; se valida con el token del QR
-    (imposible de adivinar), así que sin un boleto real no se puede hacer nada."""
+
+    YA NO es público. Lo era —"sin un boleto real no se puede hacer nada"— pero eso
+    ignoraba dos cosas: acepta FOLIOS, que son consecutivos y adivinables, y hasta con
+    puros tokens cualquiera con la URL podía quemar el boleto de otra persona con una
+    foto. Ahora escanea el admin siempre, y el staff con la clave del día del evento."""
+    if not require_scanner():
+        return jsonify(error="clave requerida"), 401
     db = get_db()
     ident = folio_from_scan((request.json or {}).get("code", ""))
     if not ident:
@@ -2310,8 +2352,37 @@ def get_settings():
                                        "folio_start"]}
     out["ventas_cerradas"] = ventas_cerradas(db)
     out["seller_commission_pct"] = comision_general(db)
+    out["door_code"] = setting(db, "door_code")
     out.update(flyer_info(db))
     return jsonify(out)
+
+@app.post("/api/admin/door-code")
+def door_code():
+    """Genera o apaga la clave del escáner de la puerta.
+
+    Generar una nueva (o apagarla) TAMBIÉN cierra las sesiones de escáner abiertas:
+    rotar la clave debe sacar al staff viejo, o rotarla no protege nada."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    accion = str((request.json or {}).get("accion", "")).strip()
+    if accion == "generar":
+        clave = f"{secrets.randbelow(1000000):06d}"
+        set_setting(db, "door_code", clave)
+        db.execute("DELETE FROM sessions WHERE role='scanner'")
+        audit(db, s["admin"]["username"], "ajustes",
+              "Generó una clave nueva para el escáner de la puerta")
+        db.commit()
+        return jsonify(ok=True, door_code=clave)
+    if accion == "apagar":
+        set_setting(db, "door_code", "")
+        db.execute("DELETE FROM sessions WHERE role='scanner'")
+        audit(db, s["admin"]["username"], "ajustes",
+              "Apagó la clave del escáner: solo los admins pueden escanear")
+        db.commit()
+        return jsonify(ok=True, door_code="")
+    return jsonify(error="accion inválida"), 400
 
 @app.post("/api/admin/ventas")
 def toggle_ventas():
