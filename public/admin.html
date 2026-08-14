@@ -251,6 +251,21 @@
       <div class="label">Respaldo y Excel</div>
       <div class="muted">Cada venta se sincroniza sola a <b>data/boletos.xlsx</b> y se respalda cada 10 minutos en <b>data/backups/</b>. La exportación con filtros está en la pestaña Boletos.</div>
     </div>
+    <!-- Borrar todo: plegado y hasta el fondo. Es la única acción del panel que no
+         se puede deshacer, así que no debe estar donde se toca por accidente. -->
+    <details class="card mt12" id="rs-box" style="border-color:rgba(232,112,106,.3)">
+      <summary class="label" style="margin:0;color:var(--danger)">Borrar todo el sistema</summary>
+      <div class="muted mt8" style="margin-bottom:10px">Deja el sistema como nuevo: se van los
+        boletos, los vendedores, los grupos, los gastos, las fases y los movimientos.
+        <b style="color:var(--cream)">Se conservan</b> tus flyers, los precios, las facultades y tu
+        código de invitados. <b style="color:var(--danger)">No se puede deshacer.</b></div>
+      <div class="label mt12">Para confirmar, escribe: BORRAR TODO</div>
+      <input class="input" id="rs-word" placeholder="BORRAR TODO" autocomplete="off"
+             style="letter-spacing:.1em">
+      <div class="err mt8" id="rs-err"></div>
+      <button class="btn danger mt12" id="btn-rs-go">Borrar todo</button>
+    </details>
+
     <!-- Administradores: plegado, porque hoy solo hay uno. Se abre si algún día
          se vuelve a repartir el panel. -->
     <details class="card mt12" id="ad-box">

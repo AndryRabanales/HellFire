@@ -1520,6 +1520,35 @@ function pintaPuerta(clave) {
   };
 }
 
+/* Borrar todo desde el panel. La palabra escrita a mano es el candado: un "¿estás
+   seguro?" se contesta que sí sin leer, escribir BORRAR TODO no. */
+$('#btn-rs-go').addEventListener('click', async () => {
+  const w = $('#rs-word').value.trim().toUpperCase();
+  $('#rs-err').textContent = '';
+  if (w !== 'BORRAR TODO') { $('#rs-err').textContent = 'Escribe exactamente: BORRAR TODO'; return; }
+  const ok = await confirmModal({
+    title: 'Borrar TODO el sistema',
+    body: `Se van los boletos, los vendedores, los grupos, los gastos, las fases y los
+           movimientos. <b style="color:var(--ok)">Se quedan</b> tus flyers, los precios, las
+           facultades y tu código de invitados.<br><br>
+           <b style="color:var(--danger)">Esto no se puede deshacer.</b>`,
+    okLabel: 'Sí, borrar todo', danger: true,
+  });
+  if (!ok) return;
+  try {
+    const r = await API.post('/api/admin/reset', { confirmar: 'BORRAR TODO' });
+    $('#rs-word').value = '';
+    modal(`<div class="h1" style="font-size:18px">Sistema borrado</div>
+      <div class="muted mt12" style="font-size:13px;line-height:1.6">
+        Se borraron <b style="color:var(--cream)">${r.boletos}</b> boleto(s) y
+        <b style="color:var(--cream)">${r.vendedores}</b> vendedor(es).<br><br>
+        Se cerraron todas las sesiones —también la tuya—, así que vas a entrar otra vez.
+        Después revisa los <b>precios</b> en Catálogos y vuelve a cargar las <b>fases</b>:
+        el borrado no las repone.</div>
+      <button class="btn mt16" onclick="closeModal();location.reload()">Entendido</button>`);
+  } catch (e) { if (!guard(e)) $('#rs-err').textContent = e.message; }
+});
+
 async function loadSettings() {
   const s = await API.get('/api/admin/settings');
   pintaVentas(s.ventas_cerradas);

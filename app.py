@@ -421,6 +421,20 @@ def _schema_for_backend():
         s = s.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
     return s
 
+def borrar_todo(db, admin_principal, motivo):
+    """Deja la base como recién estrenada. BORRA boletos, grupos, vendedores, gastos,
+    fases, movimientos, sesiones y los demás admins (quien tenga sesión abierta
+    pierde el acceso al instante). CONSERVA los flyers y ajustes (viven en settings),
+    los precios, las facultades y el vendedor de invitados, que se recrea al arrancar
+    desde GUEST_SELLER_CODE."""
+    for table in ("tickets", "groups", "sellers", "price_phases",
+                  "expenses", "audit_log", "login_attempts", "sessions"):
+        db.execute(f"DELETE FROM {table}")
+    db.execute("DELETE FROM admins WHERE username != ?", (admin_principal,))
+    db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
+               ("sistema", "inicializacion", motivo, now_iso()))
+    db.commit()
+
 def init_db():
     # espera a que la base esté disponible (Railway puede tardar unos segundos al arrancar)
     db = None
@@ -617,18 +631,7 @@ def init_db():
         print(f"[OnFire] RESET de lanzamiento: solo admin '{init_user}', precios en 0.")
 
     def limpiar_todo(motivo):
-        """Deja la base como recién estrenada. BORRA boletos, grupos, vendedores,
-        gastos, fases, movimientos, sesiones y los demás admins (quien tenga sesión
-        abierta pierde el acceso al instante). CONSERVA los flyers y ajustes (viven
-        en settings), los precios, las facultades y el vendedor de invitados (se
-        recrea más abajo desde GUEST_SELLER_CODE)."""
-        for table in ("tickets", "groups", "sellers", "price_phases",
-                      "expenses", "audit_log", "login_attempts", "sessions"):
-            db.execute(f"DELETE FROM {table}")
-        db.execute("DELETE FROM admins WHERE username != ?", (init_user,))
-        db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
-                   ("sistema", "inicializacion", motivo, now_iso()))
-        db.commit()
+        borrar_todo(db, init_user, motivo)
 
     # RESET v3 — el borrón de una sola vez que se pidió antes del lanzamiento.
     if setting(db, "event_reset_v3") != "1":
@@ -2445,6 +2448,39 @@ def get_settings():
     out["door_code"] = setting(db, "door_code")
     out.update(flyer_info(db))
     return jsonify(out)
+
+@app.post("/api/admin/reset")
+def admin_reset():
+    """Borra todo desde el panel. Existe porque resetear el propio evento no debería
+    obligar a entrar a Railway y editar variables de servidor: eso ya falló dos veces
+    en la práctica y deja al organizador atorado con datos de prueba a la vista.
+
+    El candado no es un "¿seguro?" —a eso se le da que sí sin leer—: hay que escribir
+    la palabra exacta. Y hay que ser el admin PRINCIPAL (el de la variable de
+    entorno): un segundo admin invitado no puede borrarle el evento a nadie."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    principal = (os.environ.get("ADMIN_USER") or "admin").strip()
+    if s["admin"]["username"] != principal:
+        return jsonify(error=f"Solo {principal} puede borrar el sistema"), 403
+    if str((request.json or {}).get("confirmar", "")).strip().upper() != "BORRAR TODO":
+        return jsonify(error='Escribe exactamente: BORRAR TODO'), 400
+    db = get_db()
+    # el MISMO criterio del Resumen (sin invitados y sin anulados): si el panel dice
+    # 55 boletos, el aviso de borrado no puede decir 62
+    antes = db.execute(
+        f"SELECT COUNT(*) c FROM tickets WHERE status!='void' AND {NOT_GUEST}").fetchone()["c"]
+    vend = db.execute("SELECT COUNT(*) c FROM sellers WHERE hidden=0 AND deleted=0").fetchone()["c"]
+    borrar_todo(db, principal, f"Sistema borrado desde el panel por {principal}")
+    # el vendedor de invitados se recrea aquí mismo: si se esperara al próximo
+    # arranque, los boletos de cortesía ya entregados dejarían de escanear
+    guest = (os.environ.get("GUEST_SELLER_CODE") or "").strip()
+    if guest and re.fullmatch(r"\d{4,6}", guest):
+        db.execute("INSERT INTO sellers(name, code, active, hidden, created_at) "
+                   "VALUES(?,?,1,1,?)", ("Invitados", guest, now_iso()))
+        db.commit()
+    return jsonify(ok=True, boletos=antes, vendedores=vend)
 
 @app.post("/api/admin/door-code")
 def door_code():
