@@ -36,7 +36,10 @@
 <div id="view-form" class="wrap hidden">
   <div class="topbar">
     <div class="row"><div class="avatar" id="av-1">H</div><div class="who" id="hello-1">Hola</div></div>
-    <button class="linkout" id="btn-logout-1"><span style="font-size:13px">⏻</span>Salir</button>
+    <div class="row" style="gap:8px">
+      <button class="ayuda" id="btn-ayuda" title="Cómo funciona">?</button>
+      <button class="linkout" id="btn-logout-1"><span style="font-size:13px">⏻</span>Salir</button>
+    </div>
   </div>
   <!-- El cronómetro va ARRIBA: es lo primero que el vendedor le enseña al comprador
        ("cómpralo hoy, mañana sube"). Abajo del formulario nadie lo veía. -->
@@ -165,6 +168,9 @@
   </div>
   <div id="h-list" style="display:flex;flex-direction:column;gap:8px;padding-bottom:20px"></div>
 </div>
+
+<!-- modal (guía de uso) -->
+<div id="modal-bg" class="modal-bg hidden"><div class="modal" id="modal"></div></div>
 
 <script src="/js/qrcode.min.js"></script>
 <script src="/js/common.js"></script>

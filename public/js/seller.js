@@ -628,3 +628,47 @@ $('#h-search').addEventListener('input', () => {
   } catch (_) { API.setToken(null); }
   show('login');
 })();
+
+/* ---------------- guía de uso ----------------
+   El vendedor entra una vez, le enseñan en dos minutos y luego está solo en una
+   fiesta con el celular en la mano. Esto es para ese momento: pasos numerados en
+   el mismo orden en que se hacen, y respuestas a lo que de verdad preguntan. */
+function modal(html) {
+  $('#modal').innerHTML = html;
+  $('#modal-bg').classList.remove('hidden');
+}
+function closeModal() { $('#modal-bg').classList.add('hidden'); }
+$('#modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') closeModal(); });
+
+function paso(n, titulo, texto) {
+  return `<div class="g-item"><div class="g-n">${n}</div>
+    <div><div class="g-tit">${titulo}</div><div class="g-txt">${texto}</div></div></div>`;
+}
+
+function mostrarAyuda() {
+  // La guía se arma con el catálogo REAL, no con nombres inventados: si mañana se
+  // quita un tipo o cambia un precio, la explicación cambia sola. Y solo se habla de
+  // la facultad si de verdad hay algún tipo que la pida.
+  const tipos = (CATALOG && CATALOG.types || []);
+  const conFac = tipos.filter(t => t.needs_faculty).map(t => esc(t.name));
+  const lista = tipos.map(t => `${esc(t.name)} $${(t.price_cents / 100).toFixed(0)}`).join(' · ');
+  const notaFac = conFac.length
+    ? ` Si eliges <b>${conFac.join(' o ')}</b> te va a pedir también la facultad.` : '';
+  modal(`<div class="h1" style="font-size:19px">Cómo vender</div>
+    <div class="muted mt8" style="font-size:12px">De arriba hacia abajo, en el orden en que se hace.</div>
+    <div class="guia mt16">
+      ${paso(1, 'Escribe el nombre', 'El nombre completo de quien te compra. Es el que va impreso en el boleto, así que escríbelo bien: en la puerta le pueden pedir identificación.')}
+      ${paso(2, 'Elige el tipo', `Toca el recuadro del boleto que te pidieron${lista ? ' — ahorita: ' + lista : ''}.${notaFac}`)}
+      ${paso(3, 'GENERAR BOLETO', 'El botón naranja de abajo. El boleto se descarga solo a tu teléfono y aparece una tira abajo del formulario diciendo cuál fue el último. Si no lo encuentras en tus fotos, toca <b>Descargar</b> en esa tira.')}
+      ${paso(4, 'Mándaselo por WhatsApp', 'Búscalo en tus fotos y envíaselo. Esa imagen ES su boleto: trae un QR que se escanea en la entrada. Sin esa imagen no entra.')}
+      <div class="g-sep"></div>
+      ${paso('★', 'El contador de arriba', 'Dice cuántos días faltan para que suban los precios y a cuánto van a quedar. Es tu mejor argumento: <b>"cómpralo hoy, que el martes sube"</b>. Enséñaselo.')}
+      ${paso('10', 'Armar grupo de 10', 'Si son diez personas juntas, usa ese botón en vez de hacerlos uno por uno: escribes los diez nombres de un jalón y marcas con la ★ quién es el representante. A esa persona le va <b>botella gratis</b>.')}
+      ${paso('≡', 'Ver mi historial', 'Todos los boletos que has hecho. Puedes buscar por nombre y volver a descargar cualquiera — sirve cuando alguien te dice <b>"se me borró el boleto"</b>.')}
+      <div class="g-sep"></div>
+      ${paso('$', 'Tu dinero', 'Tú cobras el boleto completo. En el corte le entregas a tu admin y ahí se te descuenta tu comisión. Todo queda guardado con fecha, así que en cualquier momento se puede revisar cuánto llevas y cuánto entregaste.')}
+      ${paso('!', 'Si se cae el internet', 'Vuelve a darle a GENERAR sin miedo: el sistema reconoce que es la misma venta y <b>no lo duplica</b>. Nunca le vas a cobrar dos veces a nadie por un error de señal.')}
+    </div>
+    <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
+}
+$('#btn-ayuda').addEventListener('click', mostrarAyuda);

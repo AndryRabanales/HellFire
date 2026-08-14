@@ -135,6 +135,25 @@ select.input option{background:#160603;color:var(--cream)}
 .ultimo .u-dl:active{transform:scale(.95);background:rgba(255,110,30,.18)}
 .ultimo .u-dl:disabled{opacity:.5}
 
+/* El "?" de la guía. Chico y discreto: está para cuando hace falta, no para
+   competir con lo que se usa a diario. */
+.ayuda{flex:none;width:28px;height:28px;border-radius:50%;cursor:pointer;
+  border:1px solid rgba(255,120,40,.4);background:rgba(255,110,30,.09);
+  font:800 13px Manrope;color:var(--ember-soft);
+  transition:transform .1s ease,background .14s}
+.ayuda:active{transform:scale(.9);background:rgba(255,110,30,.2)}
+
+/* Guía: cada paso numerado y su explicación en una línea. */
+.guia{display:flex;flex-direction:column;gap:13px;margin-top:4px}
+.guia .g-item{display:flex;gap:11px;align-items:flex-start}
+.guia .g-n{flex:none;width:23px;height:23px;border-radius:7px;display:flex;
+  align-items:center;justify-content:center;font:800 11px "Space Grotesk";
+  background:rgba(255,110,30,.14);border:1px solid rgba(255,120,40,.35);color:var(--ember-soft)}
+.guia .g-tit{font:700 13px Manrope;color:var(--cream)}
+.guia .g-txt{font:500 12px Manrope;color:var(--cream-60);line-height:1.5;margin-top:2px}
+.guia .g-sep{height:1px;background:rgba(255,120,40,.15);margin:3px 0}
+.guia .g-tit b{color:var(--ember-soft)}
+
 /* tarjetas */
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
 .card.hot{background:rgba(255,110,30,.1);border-color:rgba(255,120,40,.28)}
