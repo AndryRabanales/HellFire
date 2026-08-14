@@ -698,8 +698,6 @@ const TOUR = [
   { sel: '#btn-generate', txt: 'Le das aquí y <b>el boleto se descarga solo</b>. Mándaselo por WhatsApp: esa imagen es su boleto.' },
   { sel: '#btn-group-10', txt: 'Si son <b>10 juntos</b>, por aquí. Al representante le va botella gratis.' },
   { sel: '#f-phase-timer',txt: 'Este reloj dice cuándo <b>suben los precios</b>. Enséñaselo para cerrar la venta.' },
-  { sel: '#btn-history',  txt: 'Aquí están <b>todos tus boletos</b>, por si alguien pierde el suyo.' },
-  { sel: '#btn-ayuda',    txt: 'Y si algo se te olvida, <b>aquí sale todo otra vez</b>.' },
 ];
 
 function cerrarTour(marcar) {
@@ -763,4 +761,28 @@ function mostrarTour(i = 0) {
   $('#tr-skip').onclick = () => cerrarTour(true);
 }
 
-function mostrarTutorial() { setTimeout(() => mostrarTour(0), 400); }
+/* Bienvenida antes del recorrido. Un vendedor que entra por primera vez no sabe
+   siquiera dónde está parado: primero se le dice qué es esto y de qué evento, y ya
+   después se le señalan los botones. */
+function mostrarBienvenida() {
+  const evento = (CATALOG && CATALOG.event_name) || 'HELLFIRE';
+  const sub = (CATALOG && CATALOG.event_subtitle) || '';
+  const c = document.createElement('div');
+  c.id = 'tour';
+  c.className = 'bienvenida';   // sin foco que oscurezca, el fondo lo pone la clase
+  c.innerHTML = `<div class="tr-bien">
+      <div class="tb-marca">${esc(evento)}</div>
+      ${sub ? `<div class="tb-sub">${esc(sub)}</div>` : ''}
+      <div class="tb-t">¡Bienvenido a las ventas!</div>
+      <div class="tb-x">Desde aquí generas los boletos y se los mandas a quien te compre.
+        Te enseño la pantalla en menos de un minuto.</div>
+      <button class="btn mt16" id="tb-go">Enséñame cómo</button>
+      <button class="tr-skip" id="tb-skip" style="width:100%;margin-top:4px">Ya sé usarlo, saltar</button>
+    </div>`;
+  document.body.appendChild(c);
+  document.body.style.overflow = 'hidden';
+  $('#tb-go').onclick = () => { c.remove(); mostrarTour(0); };
+  $('#tb-skip').onclick = () => cerrarTour(true);
+}
+
+function mostrarTutorial() { setTimeout(mostrarBienvenida, 400); }

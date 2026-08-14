@@ -157,6 +157,9 @@ select.input option{background:#160603;color:var(--cream)}
    ENORME alrededor: eso oscurece toda la pantalla menos el botón del que se habla,
    sin recortar máscaras ni duplicar elementos. */
 #tour{position:fixed;inset:0;z-index:80}
+/* En el recorrido el fondo lo oscurece la sombra del foco. En la bienvenida no hay
+   foco, así que el velo va aquí — si estuviera siempre, taparía el agujero. */
+#tour.bienvenida{background:rgba(0,0,0,.82);backdrop-filter:blur(2px)}
 #tour .tr-foco{position:fixed;border-radius:15px;pointer-events:none;
   box-shadow:0 0 0 9999px rgba(0,0,0,.8),0 0 0 2px var(--ember),0 0 30px rgba(255,110,30,.6);
   transition:top .28s cubic-bezier(.4,0,.2,1),left .28s cubic-bezier(.4,0,.2,1),
@@ -166,6 +169,20 @@ select.input option{background:#160603;color:var(--cream)}
   0%,100%{box-shadow:0 0 0 9999px rgba(0,0,0,.8),0 0 0 2px var(--ember),0 0 30px rgba(255,110,30,.6)}
   50%    {box-shadow:0 0 0 9999px rgba(0,0,0,.8),0 0 0 2px var(--ember),0 0 44px rgba(255,110,30,.9)}
 }
+
+/* Bienvenida: ocupa el centro, con el nombre del evento arriba para que sepa
+   exactamente en qué está entrando. */
+#tour .tr-bien{position:fixed;left:16px;right:16px;top:50%;transform:translateY(-50%);
+  padding:26px 20px 18px;border-radius:20px;text-align:center;
+  background:linear-gradient(160deg,#2c1309,#150703);
+  border:1px solid rgba(255,122,46,.45);
+  box-shadow:0 18px 50px rgba(0,0,0,.7);animation:pop .25s ease}
+#tour .tb-marca{font:800 30px Cinzel,serif;color:var(--ember);
+  text-shadow:0 0 26px rgba(255,110,30,.55);letter-spacing:.02em}
+#tour .tb-sub{font:600 10px "Space Grotesk";letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ember-dim);margin-top:5px}
+#tour .tb-t{font:800 17px Manrope;color:var(--cream);margin-top:18px}
+#tour .tb-x{font:500 13px Manrope;color:var(--cream-60);line-height:1.55;margin-top:8px}
 
 #tour .tr-globo{position:fixed;left:14px;right:14px;padding:15px 16px 14px;
   border-radius:16px;background:linear-gradient(160deg,#2a1209,#160704);
