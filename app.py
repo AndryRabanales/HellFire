@@ -193,6 +193,7 @@ CREATE TABLE IF NOT EXISTS sellers (
   paid_cents INTEGER NOT NULL DEFAULT 0,  -- dinero que el vendedor ya entregó a su admin
   hidden INTEGER NOT NULL DEFAULT 0,      -- vendedor de INVITADOS: sus boletos no cuentan como venta
   commission_pct REAL,             -- su comisión propia (NULL = la general, 0 = ninguna)
+  tutorial_seen INTEGER NOT NULL DEFAULT 0,  -- ya vio el tutorial de bienvenida
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ticket_types (
@@ -430,7 +431,8 @@ def init_db():
         for col in ("owner_admin_id INTEGER", "owner_admin_name TEXT",
                     "paid_cents INTEGER NOT NULL DEFAULT 0",
                     "hidden INTEGER NOT NULL DEFAULT 0",
-                    "commission_pct REAL"):
+                    "commission_pct REAL",
+                    "tutorial_seen INTEGER NOT NULL DEFAULT 0"):
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
                    "needs_faculty INTEGER NOT NULL DEFAULT 1")
@@ -455,6 +457,8 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN paid_cents INTEGER NOT NULL DEFAULT 0")
         if "commission_pct" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN commission_pct REAL")
+        if "tutorial_seen" not in scols:
+            db.execute("ALTER TABLE sellers ADD COLUMN tutorial_seen INTEGER NOT NULL DEFAULT 0")
         if "hidden" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
         ttcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
@@ -956,7 +960,11 @@ def login_code():
     clear_attempts(db, key)
     token = create_session(db, "seller", seller["id"])
     db.commit()
-    return jsonify(token=token, name=seller["name"])
+    # La primera vez que entra se le enseña el tutorial. Se guarda en el SERVIDOR y no
+    # en el teléfono: si cambia de celular o borra los datos del navegador ya lo vio,
+    # y volvérselo a poner sería tratarlo como si no supiera vender.
+    primera = not seller["tutorial_seen"] and not seller["hidden"]
+    return jsonify(token=token, name=seller["name"], first_time=primera)
 
 @app.post("/api/admin/login")
 def admin_login():
@@ -1034,8 +1042,17 @@ def catalog():
                       "normal_price_cents": externo["price_cents"],
                       "group_price_cents": group_price,
                       "savings_cents": externo["price_cents"] - group_price}
+    # ¿le falta el tutorial? Va aquí y no solo en la respuesta del login: si el
+    # vendedor recarga la página a media guía, con la sesión ya guardada no vuelve a
+    # pasar por el login y se quedaría sin verla nunca.
+    pendiente = False
+    if s.get("seller"):
+        r = db.execute("SELECT tutorial_seen, hidden FROM sellers WHERE id=?",
+                       (s["seller"]["id"],)).fetchone()
+        pendiente = bool(r and not r["tutorial_seen"] and not r["hidden"])
     return jsonify(types=types, faculties=facs, group=group_info,
                    ventas_cerradas=ventas_cerradas(db),
+                   tutorial_pendiente=pendiente,
                    event_name=setting(db, "event_name"),
                    event_subtitle=setting(db, "event_subtitle"),
                    event_date_text=setting(db, "event_date_text"),
@@ -1103,6 +1120,17 @@ def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
         else:
             return None
     return db.execute("SELECT * FROM tickets WHERE id=?", (cur.lastrowid,)).fetchone()
+
+@app.post("/api/tutorial-visto")
+def tutorial_visto():
+    """El vendedor terminó el tutorial de bienvenida. No se vuelve a mostrar."""
+    s = require_seller()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    db.execute("UPDATE sellers SET tutorial_seen=1 WHERE id=?", (s["seller"]["id"],))
+    db.commit()
+    return jsonify(ok=True)
 
 @app.post("/api/tickets")
 def create_ticket():

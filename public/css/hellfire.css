@@ -153,6 +153,48 @@ select.input option{background:#160603;color:var(--cream)}
 .guia .g-tit{font:500 13.5px Manrope;color:var(--cream-60);line-height:1.35}
 .guia .g-tit b{color:var(--cream);font-weight:700}
 
+/* Recorrido de bienvenida. El foco es un recuadro transparente con una sombra
+   ENORME alrededor: eso oscurece toda la pantalla menos el botón del que se habla,
+   sin recortar máscaras ni duplicar elementos. */
+#tour{position:fixed;inset:0;z-index:80}
+#tour .tr-foco{position:fixed;border-radius:15px;pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.8),0 0 0 2px var(--ember),0 0 30px rgba(255,110,30,.6);
+  transition:top .28s cubic-bezier(.4,0,.2,1),left .28s cubic-bezier(.4,0,.2,1),
+             width .28s cubic-bezier(.4,0,.2,1),height .28s cubic-bezier(.4,0,.2,1);
+  animation:latido 2.2s ease-in-out infinite}
+@keyframes latido{
+  0%,100%{box-shadow:0 0 0 9999px rgba(0,0,0,.8),0 0 0 2px var(--ember),0 0 30px rgba(255,110,30,.6)}
+  50%    {box-shadow:0 0 0 9999px rgba(0,0,0,.8),0 0 0 2px var(--ember),0 0 44px rgba(255,110,30,.9)}
+}
+
+#tour .tr-globo{position:fixed;left:14px;right:14px;padding:15px 16px 14px;
+  border-radius:16px;background:linear-gradient(160deg,#2a1209,#160704);
+  border:1px solid rgba(255,122,46,.45);
+  box-shadow:0 14px 40px rgba(0,0,0,.7);animation:pop .22s ease}
+/* el pico que apunta al elemento iluminado */
+#tour .tr-globo::before{content:"";position:absolute;left:var(--pico,50%);
+  width:0;height:0;margin-left:-9px;
+  border-left:9px solid transparent;border-right:9px solid transparent}
+#tour .tr-globo.abajo::before{top:-9px;border-bottom:9px solid #2a1209}
+#tour .tr-globo.arriba::before{bottom:-9px;border-top:9px solid #160704}
+
+#tour .tr-num{font:700 9.5px "Space Grotesk";letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ember-dim);margin-bottom:7px}
+#tour .tr-txt{font:500 14.5px Manrope;color:var(--cream);line-height:1.5}
+#tour .tr-txt b{color:var(--ember-soft);font-weight:800}
+#tour .tr-pie{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:15px}
+#tour .tr-skip{background:none;border:none;cursor:pointer;padding:9px 6px;
+  font:600 12px Manrope;color:var(--cream-45);text-decoration:underline;
+  text-decoration-color:rgba(246,241,231,.2);text-underline-offset:3px}
+
+/* Pie del tutorial: en qué pantalla va y el botón para avanzar. Los puntos le dicen
+   que son tres y que ya casi acaba — sin eso, un "Siguiente" a ciegas cansa. */
+.tuto-pie{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.tp-dots{display:flex;gap:6px}
+.tp-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,120,40,.25);
+  transition:background .2s,transform .2s}
+.tp-dot.on{background:var(--ember);transform:scale(1.25)}
+
 /* Dudas: plegadas. Quien tiene una la abre; quien no, no carga con el texto. */
 .faq{border-bottom:1px solid rgba(255,120,40,.13)}
 .faq > summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;

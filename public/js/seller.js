@@ -87,6 +87,9 @@ async function enterApp() {
   // que ser lo último que se aplica o el vendedor vería la boletera igual que siempre.
   aplicarCierre();
   show('form');
+  // el catálogo dice si le falta el tutorial: así también le sale al que recarga la
+  // página con la sesión ya iniciada, no solo al que acaba de meter su código
+  if (CATALOG.tutorial_pendiente) mostrarTutorial();
 }
 
 /* Con las ventas cerradas se retira el formulario entero: campos, tipos, grupo y el
@@ -680,3 +683,84 @@ function mostrarAyuda() {
     <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
 }
 $('#btn-ayuda').addEventListener('click', mostrarAyuda);
+
+/* ---------------- tutorial de bienvenida (una sola vez) ----------------
+   No es un texto que describe la pantalla: es la pantalla misma. Se oscurece todo,
+   se ilumina EL botón del que se está hablando y al lado sale una frase corta. El
+   vendedor no tiene que traducir "el botón naranja de abajo" a nada — lo está
+   viendo señalado.
+
+   Se marca como visto en el SERVIDOR al terminarlo, así que cambiar de celular no
+   se lo vuelve a poner, y cerrar la app a medias sí. */
+const TOUR = [
+  { sel: '#f-buyer',      txt: 'Aquí escribes el <b>nombre</b> de quien te compra.' },
+  { sel: '#f-types',      txt: 'Aquí eliges el <b>tipo</b> de boleto.' },
+  { sel: '#btn-generate', txt: 'Le das aquí y <b>el boleto se descarga solo</b>. Mándaselo por WhatsApp: esa imagen es su boleto.' },
+  { sel: '#btn-group-10', txt: 'Si son <b>10 juntos</b>, por aquí. Al representante le va botella gratis.' },
+  { sel: '#f-phase-timer',txt: 'Este reloj dice cuándo <b>suben los precios</b>. Enséñaselo para cerrar la venta.' },
+  { sel: '#btn-history',  txt: 'Aquí están <b>todos tus boletos</b>, por si alguien pierde el suyo.' },
+  { sel: '#btn-ayuda',    txt: 'Y si algo se te olvida, <b>aquí sale todo otra vez</b>.' },
+];
+
+function cerrarTour(marcar) {
+  const c = $('#tour');
+  if (c) c.remove();
+  document.body.style.overflow = '';
+  if (marcar) API.post('/api/tutorial-visto').catch(() => {});
+}
+
+function mostrarTour(i = 0) {
+  // se saltan los que no estén en pantalla (ej. el grupo con las ventas cerradas)
+  while (i < TOUR.length) {
+    const e = $(TOUR[i].sel);
+    if (e && e.offsetParent !== null) break;
+    i++;
+  }
+  if (i >= TOUR.length) return cerrarTour(true);
+
+  const paso = TOUR[i], el = $(paso.sel);
+  el.scrollIntoView({ block: 'center', behavior: 'instant' });
+
+  let c = $('#tour');
+  if (!c) {
+    c = document.createElement('div');
+    c.id = 'tour';
+    c.innerHTML = '<div class="tr-foco"></div><div class="tr-globo"></div>';
+    document.body.appendChild(c);
+    document.body.style.overflow = 'hidden';
+  }
+  const r = el.getBoundingClientRect(), pad = 7;
+  const foco = c.querySelector('.tr-foco');
+  foco.style.cssText = `top:${r.top - pad}px;left:${r.left - pad}px;` +
+    `width:${r.width + pad * 2}px;height:${r.height + pad * 2}px`;
+
+  const total = TOUR.filter(x => { const e = $(x.sel); return e && e.offsetParent !== null; }).length;
+  const nEste = TOUR.slice(0, i + 1).filter(x => { const e = $(x.sel); return e && e.offsetParent !== null; }).length;
+  const ultimo = i === TOUR.length - 1 || nEste === total;
+
+  const globo = c.querySelector('.tr-globo');
+  globo.innerHTML = `<div class="tr-num">${nEste} de ${total}</div>
+    <div class="tr-txt">${paso.txt}</div>
+    <div class="tr-pie">
+      <button class="tr-skip" id="tr-skip">Saltar</button>
+      <button class="btn sm" id="tr-next" style="width:auto;padding:11px 20px">
+        ${ultimo ? 'Listo' : 'Siguiente ›'}</button>
+    </div>`;
+
+  // El globo va donde quepa, y el PICO apunta al elemento: sin él, el globo parece
+  // un aviso suelto y no queda claro de qué está hablando.
+  const alto = globo.offsetHeight || 150;
+  const cabeAbajo = r.bottom + 16 + alto < window.innerHeight;
+  globo.className = 'tr-globo ' + (cabeAbajo ? 'abajo' : 'arriba');
+  globo.style.top = cabeAbajo ? (r.bottom + 16) + 'px'
+                              : Math.max(10, r.top - 16 - alto) + 'px';
+  // el pico se alinea con el centro del elemento, sin salirse del globo
+  const g = globo.getBoundingClientRect();
+  const cx = Math.min(Math.max(r.left + r.width / 2, g.left + 22), g.right - 22);
+  globo.style.setProperty('--pico', (cx - g.left) + 'px');
+
+  $('#tr-next').onclick = () => ultimo ? cerrarTour(true) : mostrarTour(i + 1);
+  $('#tr-skip').onclick = () => cerrarTour(true);
+}
+
+function mostrarTutorial() { setTimeout(() => mostrarTour(0), 400); }
