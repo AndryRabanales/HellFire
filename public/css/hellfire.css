@@ -200,9 +200,12 @@ select.input option{background:#160603;color:var(--cream)}
 #tour .tr-txt{font:500 14.5px Manrope;color:var(--cream);line-height:1.5}
 #tour .tr-txt b{color:var(--ember-soft);font-weight:800}
 #tour .tr-pie{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:15px}
-#tour .tr-skip{background:none;border:none;cursor:pointer;padding:9px 6px;
-  font:600 12px Manrope;color:var(--cream-45);text-decoration:underline;
-  text-decoration-color:rgba(246,241,231,.2);text-underline-offset:3px}
+/* Puntos de avance: le dicen cuánto falta. Sin ellos, un "Siguiente" sin fondo a la
+   vista cansa; con ellos se ve que son cinco toques y ya. */
+#tour .tr-dots{display:flex;gap:6px}
+#tour .tr-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,120,40,.22);
+  transition:background .25s}
+#tour .tr-dot.on{background:var(--ember)}
 
 /* Pie del tutorial: en qué pantalla va y el botón para avanzar. Los puntos le dicen
    que son tres y que ya casi acaba — sin eso, un "Siguiente" a ciegas cansa. */

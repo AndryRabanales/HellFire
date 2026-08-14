@@ -740,7 +740,8 @@ function mostrarTour(i = 0) {
   globo.innerHTML = `<div class="tr-num">${nEste} de ${total}</div>
     <div class="tr-txt">${paso.txt}</div>
     <div class="tr-pie">
-      <button class="tr-skip" id="tr-skip">Saltar</button>
+      <div class="tr-dots">${TOUR.map((_, k) =>
+        `<span class="tr-dot${k <= i ? ' on' : ''}"></span>`).join('')}</div>
       <button class="btn sm" id="tr-next" style="width:auto;padding:11px 20px">
         ${ultimo ? 'Listo' : 'Siguiente ›'}</button>
     </div>`;
@@ -758,7 +759,6 @@ function mostrarTour(i = 0) {
   globo.style.setProperty('--pico', (cx - g.left) + 'px');
 
   $('#tr-next').onclick = () => ultimo ? cerrarTour(true) : mostrarTour(i + 1);
-  $('#tr-skip').onclick = () => cerrarTour(true);
 }
 
 /* Bienvenida antes del recorrido. Un vendedor que entra por primera vez no sabe
@@ -775,14 +775,14 @@ function mostrarBienvenida() {
       ${sub ? `<div class="tb-sub">${esc(sub)}</div>` : ''}
       <div class="tb-t">¡Bienvenido a las ventas!</div>
       <div class="tb-x">Desde aquí generas los boletos y se los mandas a quien te compre.
-        Te enseño la pantalla en menos de un minuto.</div>
-      <button class="btn mt16" id="tb-go">Enséñame cómo</button>
-      <button class="tr-skip" id="tb-skip" style="width:100%;margin-top:4px">Ya sé usarlo, saltar</button>
+        Te enseño la pantalla en 5 pasos.</div>
+      <button class="btn mt16" id="tb-go">Empezar</button>
     </div>`;
   document.body.appendChild(c);
   document.body.style.overflow = 'hidden';
+  // Un solo camino: no se le pregunta si quiere el tutorial, se le da. Son cinco
+  // toques y es la única vez que lo va a ver.
   $('#tb-go').onclick = () => { c.remove(); mostrarTour(0); };
-  $('#tb-skip').onclick = () => cerrarTour(true);
 }
 
 function mostrarTutorial() { setTimeout(mostrarBienvenida, 400); }
