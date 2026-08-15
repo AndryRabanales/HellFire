@@ -198,6 +198,42 @@ select.input option{background:#160603;color:var(--cream)}
   transition:background .2s,transform .2s}
 .tp-dot.on{background:var(--ember);transform:scale(1.25)}
 
+/* Mapa de las tres barras: es el concepto que todo lo demás explica, así que va
+   primero y sin adornos. Si esto se entiende en tres segundos, el resto se vende solo. */
+.barras{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin:4px 0 12px}
+.barras .ba{display:flex;flex-direction:column;gap:2px;align-items:center;text-align:center;
+  padding:8px 4px;border-radius:10px;background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,120,40,.16)}
+.barras .ba b{font:700 10px Manrope;color:var(--cream)}
+.barras .ba span{font:500 9px Manrope;color:var(--cream-45)}
+.barras .ba:nth-child(2){border-color:rgba(255,122,46,.35)}
+.barras .ba:nth-child(3){border-color:rgba(243,210,122,.4)}
+.barras .ba:nth-child(3) b{color:#e8c979}
+
+/* Cada nivel de boleto, plegado: en plena venta se abre SOLO el que preguntan. */
+.faq.nivel > summary{justify-content:space-between;padding:10px 2px}
+.faq.nivel .nv-t{flex:1;font:800 13.5px Manrope;color:var(--cream)}
+.faq.nivel .nv-x{font:600 10px Manrope;color:var(--cream-45)}
+.faq.nivel .nv-p{font:800 13px "Space Grotesk";color:var(--ember-soft)}
+/* dos columnas: seis viñetas cortas caben en tres renglones en vez de seis */
+.faq.nivel .nv-l{margin:0 0 10px;padding:0 2px 0 20px;list-style:none;
+  display:grid;grid-template-columns:1fr 1fr;gap:5px 10px}
+.faq.nivel .nv-l li{position:relative;font:500 12px Manrope;color:var(--cream-60);
+  line-height:1.35}
+.faq.nivel .nv-l li::before{content:"✓";position:absolute;left:-13px;
+  color:var(--ember-dim);font-size:10px}
+@media (max-width:340px){ .faq.nivel .nv-l{grid-template-columns:1fr} }
+
+/* Nivel que todavía no se vende: se ve, pero apagado — para que el vendedor lo
+   conozca sin ofrecerlo como si pudiera generarlo hoy. */
+.faq.nivel.proximo .nv-t{color:var(--cream-60)}
+.faq.nivel .nv-soon{font:700 8.5px "Space Grotesk";letter-spacing:.12em;
+  text-transform:uppercase;color:#e8c979;padding:4px 8px;border-radius:20px;
+  background:rgba(243,210,122,.09);border:1px solid rgba(243,210,122,.32);white-space:nowrap}
+.faq.nivel .nv-aviso{font:500 11px Manrope;color:#e8c979;margin:0 2px 10px;
+  padding:8px 10px;border-radius:9px;background:rgba(243,210,122,.06);
+  border:1px solid rgba(243,210,122,.2)}
+
 /* Dudas: plegadas. Quien tiene una la abre; quien no, no carga con el texto. */
 .faq{border-bottom:1px solid rgba(255,120,40,.13)}
 .faq > summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;

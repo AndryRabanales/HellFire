@@ -646,43 +646,55 @@ function modal(html) {
 function closeModal() { $('#modal-bg').classList.add('hidden'); }
 $('#modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') closeModal(); });
 
-function paso(n, texto) {
-  return `<div class="g-item"><div class="g-n">${n}</div><div class="g-tit">${texto}</div></div>`;
+/* El precio SALE DEL CATÁLOGO, no escrito a mano: si mañana entra una fase nueva o
+   cambias un precio, la guía se actualiza sola. Si un tipo no existe todavía (Ultra
+   VIP, por ejemplo), su nivel se muestra sin precio en vez de mentir con uno viejo. */
+function precioDe(incluye, excluye = []) {
+  const hay = (CATALOG && CATALOG.types || []).filter(t => {
+    const n = (t.name || '').toLowerCase().replace(/\s+/g, '');
+    return incluye.some(k => n.includes(k)) && !excluye.some(k => n.includes(k));
+  });
+  if (!hay.length) return '';
+  const p = [...new Set(hay.map(t => '$' + (t.price_cents / 100).toFixed(0)))];
+  return p.join(' · ');
 }
-function duda(preg, resp) {
-  return `<details class="faq"><summary>${preg}</summary><div>${resp}</div></details>`;
+
+/* Un nivel de boleto, plegado. En plena venta se abre SOLO el que preguntan;
+   desplegar los tres de golpe sería el muro de texto que nadie lee. */
+function nivel(titulo, precio, extra, puntos) {
+  // Sin precio = ese tipo todavía no existe en el catálogo, o sea que aún no se
+  // vende. Se marca PRÓXIMAMENTE en vez de dejarlo mudo: así el vendedor sabe que
+  // existe y puede irlo anunciando, pero no lo ofrece como si pudiera generarlo.
+  // En cuanto se cree el tipo en Catálogos, el aviso se cae solo y aparece su precio.
+  const proximo = !precio;
+  return `<details class="faq nivel${proximo ? ' proximo' : ''}">
+    <summary><span class="nv-t">${titulo}</span>
+      ${proximo ? '<span class="nv-soon">Próximamente</span>'
+                : `${extra ? `<span class="nv-x">${extra}</span>` : ''}
+                   <span class="nv-p">${precio}</span>`}</summary>
+    <ul class="nv-l">${puntos.map(x => `<li>${x}</li>`).join('')}</ul>
+    ${proximo ? '<div class="nv-aviso">Todavía no está a la venta. Te avisamos cuando se abra.</div>' : ''}
+  </details>`;
 }
 
 function mostrarAyuda() {
-  // Dos niveles a propósito. Arriba, los cuatro pasos de una venta: se leen en tres
-  // segundos y son el 90% de lo que hace falta. Abajo, las dudas PLEGADAS: quien
-  // tiene una la abre, y quien no, no carga con nueve párrafos que no va a leer
-  // parado en una fiesta con alguien esperando su boleto.
-  const tipos = (CATALOG && CATALOG.types || []);
-  const conFac = tipos.filter(t => t.needs_faculty).map(t => esc(t.name));
-  const lista = tipos.map(t => `${esc(t.name)} $${(t.price_cents / 100).toFixed(0)}`).join(' · ');
-  modal(`<div class="h1" style="font-size:19px">Cómo vender</div>
-    <div class="guia mt16">
-      ${paso(1, 'Escribe el <b>nombre</b> de quien te compra')}
-      ${paso(2, 'Toca el <b>tipo</b> de boleto')}
-      ${paso(3, 'Dale a <b>GENERAR</b> — se descarga solo')}
-      ${paso(4, '<b>Mándaselo por WhatsApp</b>. Esa imagen es su boleto')}
+  // Frases de tres palabras, no renglones. El vendedor abre esto CON EL COMPRADOR
+  // ENFRENTE: si tiene que leer un párrafo, cierra y contesta de memoria —mal—.
+  // Cada nivel dice "+ lo anterior" en la orilla, así no hay que repetir listas.
+  modal(`<div class="h1" style="font-size:19px">Qué incluye cada boleto</div>
+    <div class="barras mt12">
+      <div class="ba"><b>1ª barra</b><span>todos</span></div>
+      <div class="ba"><b>2ª barra</b><span>VIP y Ultra</span></div>
+      <div class="ba"><b>3ª barra</b><span>solo Ultra</span></div>
     </div>
-    ${lista ? `<div class="muted mt12" style="font-size:11px;text-align:center">Precios de hoy: ${lista}</div>` : ''}
-
-    <div class="label mt16">¿Dudas?</div>
-    ${duda('¿Qué es el reloj de arriba?',
-           'Los días que faltan para que <b>suban los precios</b>, y a cuánto van a quedar. Enséñaselo: <i>"cómpralo hoy, que el martes sube"</i>.')}
-    ${conFac.length ? duda('¿Cuándo pido la facultad?',
-           `Solo si eliges <b>${conFac.join(' o ')}</b>. El sistema te la pide solo; si no aparece, no hace falta.`) : ''}
-    ${duda('¿Cómo hago un grupo de 10?',
-           'Con el botón <b>Armar grupo de 10</b>. Escribes los diez nombres de un jalón y marcas con la <b>★</b> al representante: a esa persona le va <b>botella gratis</b>.')}
-    ${duda('Se me borró un boleto',
-           'Entra a <b>Ver mi historial</b>, búscalo por nombre y vuelve a descargarlo. Están todos ahí.')}
-    ${duda('¿Cuándo me pagan?',
-           'Tú cobras el boleto completo. En el corte le entregas a tu admin y ahí se te descuenta tu comisión. Todo queda con fecha.')}
-    ${duda('Se cayó el internet a media venta',
-           'Dale a <b>GENERAR</b> otra vez sin miedo: el sistema sabe que es la misma venta y <b>no la duplica</b>.')}
+    ${nivel('UADY / Externo', precioDe(['uady', 'externo']), '',
+            ['Barra libre toda la noche', 'Aguas locas y shots', 'Sin fichas, sin límite'])}
+    ${nivel('VIP', precioDe(['vip'], ['ultra']), '+ lo anterior',
+            ['No haces fila', 'Segunda barra, solo VIP', 'Botellas exclusivas',
+             'Coca sin límite', 'Shot de bienvenida', 'Pulsera VIP'])}
+    ${nivel('Ultra VIP', precioDe(['ultra']), '+ lo del VIP',
+            ['Zona propia', 'Tercera barra, solo tuya', 'Botellas top',
+             'Margaritas y palomas'])}
     <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
 }
 $('#btn-ayuda').addEventListener('click', mostrarAyuda);
