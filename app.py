@@ -2396,6 +2396,13 @@ def create_admin():
                              (actual,)).fetchone()
             if not sel:
                 return jsonify(error=f"No hay ningún vendedor activo con el código {actual}"), 400
+            # esa ficha ya es la personal de otro colíder: reasignarla lo dejaría a él
+            # con el grupo descabezado y sus ventas contadas como de otro
+            if sel["es_lider"]:
+                dueno = db.execute("SELECT username FROM admins WHERE id=?",
+                                   (sel["owner_admin_id"],)).fetchone()
+                return jsonify(error=f"El código {actual} ya es el del colíder "
+                                     f"{dueno['username'] if dueno else 'otro'}."), 400
             db.execute("UPDATE sellers SET owner_admin_id=?, owner_admin_name=?, es_lider=1 "
                        "WHERE id=?", (nuevo["id"], username, sel["id"]))
             code, reusado = sel["code"], True
@@ -2425,11 +2432,19 @@ def delete_admin(aid):
     target = db.execute("SELECT * FROM admins WHERE id=?", (aid,)).fetchone()
     if not target:
         return jsonify(error="no existe"), 404
-    # su ficha personal de vendedor se va con él, pero SOLO si no vendió nada:
-    # borrar una que ya tiene boletos dejaría dinero cobrado sin dueño.
+    # Su equipo NO se puede quedar apuntando a un admin que ya no existe. Si eso
+    # pasa, owns_seller() le dice que no a todo el mundo y esos vendedores quedan
+    # trabados para siempre: no se les puede cobrar, ni editar, ni anular un boleto
+    # suyo. Pasan a quien lo está borrando, que para eso es el jefe.
+    # Primero su ficha personal, que se va con él pero SOLO si no vendió nada:
+    # borrar una que ya tiene boletos dejaría dinero cobrado sin dueño. (Va antes de
+    # reasignar, mientras es_lider todavía dice cuál es la suya.)
     db.execute("DELETE FROM sellers WHERE owner_admin_id=? AND es_lider=1 "
                "AND id NOT IN (SELECT seller_id FROM tickets WHERE seller_id IS NOT NULL)",
                (aid,))
+    db.execute("UPDATE sellers SET owner_admin_id=?, owner_admin_name=?, es_lider=0 "
+               "WHERE owner_admin_id=?",
+               (s["admin"]["id"], s["admin"]["username"], aid))
     db.execute("DELETE FROM admins WHERE id=?", (aid,))
     db.execute("DELETE FROM sessions WHERE role='admin' AND user_id=?", (aid,))
     audit(db, s["admin"]["username"], "usuarios", f"Eliminó administrador '{target['username']}'")
