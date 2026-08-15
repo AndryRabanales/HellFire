@@ -1384,25 +1384,35 @@ $('#btn-co-create').addEventListener('click', async () => {
   if (!usuario) { $('#co-err').textContent = 'Ponle un usuario'; return; }
   // Se pregunta antes: crear un colíder le abre el panel a alguien de fuera, y eso no
   // debería pasar por darle sin querer a un botón que está junto al de "Crear" admin.
+  const suCodigo = $('#co-code').value.trim();
+  if (suCodigo && !/^\d{5}$/.test(suCodigo)) {
+    $('#co-err').textContent = 'El código son 5 dígitos'; return;
+  }
   const ok = await confirmModal({
     title: 'Crear colíder', okLabel: 'Crear colíder',
     body: `<b style="color:var(--cream)">${esc(usuario)}</b> va a poder entrar a este panel.<br><br>
       Verá <b style="color:var(--cream)">solo lo de su grupo</b> y podrá crear vendedores y
       cobrarles. No podrá anular boletos, dar de baja vendedores, tocar precios ni ajustes,
-      escanear en la puerta, ni borrar el sistema.`,
+      escanear en la puerta, ni borrar el sistema.` +
+      (suCodigo ? `<br><br>Conserva su código <b style="color:var(--cream)">${esc(suCodigo)}</b>
+        y todo lo que ya vendió con él, que pasa a contar como su venta personal.`
+                : `<br><br>Se le abrirá un código de vendedor nuevo.`),
   });
   if (!ok) return;
   try {
     const r = await API.post('/api/admin/admins', {
       username: usuario, password: $('#co-pass').value, role: 'colider',
+      seller_code: suCodigo,
     });
-    $('#co-user').value = ''; $('#co-pass').value = '';
+    $('#co-user').value = ''; $('#co-pass').value = ''; $('#co-code').value = '';
     // su código de vendedor solo se ve aquí, en este momento: hay que copiarlo ya.
     // Va con un solo botón: no hay nada que cancelar, ya está creado.
     modal(`<div class="h1" style="font-size:18px">Colíder creado</div>
       <div class="muted mt8">Ya puede entrar al panel con su usuario y contraseña.</div>
       <div class="label mt16">Su código de vendedor</div>
-      <div class="muted" style="font-size:11.5px">Para lo que venda él en persona. No se vuelve a mostrar: cópialo ahora.</div>
+      <div class="muted" style="font-size:11.5px">${r.reusado
+        ? 'El que ya tenía. Sigue igual: no hay que avisarle nada.'
+        : 'Para lo que venda él en persona. No se vuelve a mostrar: cópialo ahora.'}</div>
       <div style="text-align:center;margin:14px 0"><span class="codechip" style="font-size:26px;padding:10px 18px;letter-spacing:.3em">${r.code}</span></div>
       <button class="btn mt8" onclick="closeModal()">Listo</button>`);
     loadAdmins();

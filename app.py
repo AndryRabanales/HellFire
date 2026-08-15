@@ -1643,7 +1643,10 @@ def void_ticket(tid):
 
 @app.get("/api/admin/ticket-types")
 def list_types():
-    s = require_admin()
+    s = require_panel()   # LEER el catálogo también el colíder: sin esto,
+    # la pestaña Boletos truena al cargar sus filtros y el 401 lo saca
+    # del panel con un "tu sesión terminó" que no explica nada.
+    # Cambiarlo (PUT/POST/DELETE) sigue siendo solo de admins.
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -1853,7 +1856,10 @@ def delete_type(tid):
 
 @app.get("/api/admin/faculties")
 def list_faculties():
-    s = require_admin()
+    s = require_panel()   # LEER el catálogo también el colíder: sin esto,
+    # la pestaña Boletos truena al cargar sus filtros y el 401 lo saca
+    # del panel con un "tu sesión terminó" que no explica nada.
+    # Cambiarlo (PUT/POST/DELETE) sigue siendo solo de admins.
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -2074,6 +2080,10 @@ def export_seller_payments(sid):
     sel = db.execute("SELECT * FROM sellers WHERE id=? AND hidden=0", (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
+    # el mismo candado que en el estado de cuenta en pantalla: si no se pusiera aquí,
+    # bastaba con pedir el Excel por número para leer las cuentas de otro grupo
+    if es_colider(s) and sel["owner_admin_id"] != s["admin"]["id"]:
+        return jsonify(error="no existe"), 404
     c = estado_cuenta(db, sid)
     comision_total = c["sold"] * c["commission_pct"] / 100
     debe_entregar = c["sold"] - comision_total
@@ -2160,7 +2170,10 @@ def create_sellers_bulk():
     copiados a mano. Aquí se pegan los nombres —uno por línea— y salen todos con su
     código listo para repartir. Los repetidos NO frenan la carga: se apartan y se
     reportan, para que 49 altas buenas no se pierdan por un nombre duplicado."""
-    s = require_admin()
+    # El colíder también: pegar 20 nombres es lo mismo que teclear 20 altas, y si
+    # puede lo segundo negarle lo primero no protege nada — solo lo saca del panel,
+    # porque cualquier 401 aquí se lee como "tu sesión terminó".
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -2221,8 +2234,15 @@ def create_seller():
     # equivocada y parece que no ha vendido nada. No se prohíbe (puede haber dos
     # Luis de verdad), pero hay que confirmarlo a propósito.
     if not b.get("force"):
-        igual = db.execute("SELECT code FROM sellers WHERE deleted=0 AND hidden=0 "
-                           "AND LOWER(TRIM(name))=LOWER(TRIM(?))", (name,)).fetchone()
+        # solo se compara contra los vendedores de quien está dando de alta: avisarle
+        # a un colíder que "ya existe un Luis" cuando el Luis es de otro grupo le
+        # confirma vendedores que no tiene por qué conocer
+        ambito = mi_ambito(s)
+        igual = db.execute(
+            "SELECT code FROM sellers WHERE deleted=0 AND hidden=0 "
+            "AND LOWER(TRIM(name))=LOWER(TRIM(?))"
+            + (" AND owner_admin_id=?" if ambito else ""),
+            ((name, ambito) if ambito else (name,))).fetchone()
         if igual:
             return jsonify(error=f"Ya tienes un vendedor llamado «{name}» "
                                  f"(código {igual['code']}).", duplicate=True), 409
@@ -2360,20 +2380,36 @@ def create_admin():
     db.execute("INSERT INTO admins(username, pass_hash, created_at, role) VALUES(?,?,?,?)",
                (username, hash_password(password), now_iso(), rol))
     code = None
+    reusado = False
     if rol == "colider":
-        # El colíder también vende en persona. Se le abre su propia ficha de vendedor,
-        # de su propio grupo, marcada es_lider: así sus ventas personales se cuentan y
-        # se le comisionan aparte de las de su equipo, sin inventar un caso especial.
+        # El colíder también vende en persona, así que necesita ficha de vendedor
+        # marcada es_lider: sus ventas personales se cuentan y comisionan aparte de
+        # las de su equipo, sin inventar un caso especial.
         nuevo = db.execute("SELECT id FROM admins WHERE username=?", (username,)).fetchone()
-        code = gen_seller_code(db)
-        db.execute("INSERT INTO sellers(name, code, owner_admin_id, owner_admin_name, "
-                   "created_at, es_lider) VALUES(?,?,?,?,?,1)",
-                   (username, code, nuevo["id"], username, now_iso()))
+        # Casi siempre el colíder sale de entre los vendedores: ya venía vendiendo y
+        # ya repartió su código. Abrirle uno nuevo lo deja con dos —y con sus ventas
+        # partidas en dos cuentas—, así que si dicen cuál es el suyo, se reaprovecha
+        # ese: conserva su código, su historial y lo que se le debe.
+        actual = str(b.get("seller_code", "")).strip()
+        if actual:
+            sel = db.execute("SELECT * FROM sellers WHERE code=? AND deleted=0 AND hidden=0",
+                             (actual,)).fetchone()
+            if not sel:
+                return jsonify(error=f"No hay ningún vendedor activo con el código {actual}"), 400
+            db.execute("UPDATE sellers SET owner_admin_id=?, owner_admin_name=?, es_lider=1 "
+                       "WHERE id=?", (nuevo["id"], username, sel["id"]))
+            code, reusado = sel["code"], True
+        else:
+            code = gen_seller_code(db)
+            db.execute("INSERT INTO sellers(name, code, owner_admin_id, owner_admin_name, "
+                       "created_at, es_lider) VALUES(?,?,?,?,?,1)",
+                       (username, code, nuevo["id"], username, now_iso()))
     audit(db, s["admin"]["username"], "usuarios",
           f"Creó {'colíder' if rol == 'colider' else 'administrador'} '{username}'"
-          + (f" (su código de vendedor: {code})" if code else ""))
+          + (f" (su código de vendedor: {code})" if code else "")
+          + (" — se le conservó el que ya tenía" if reusado else ""))
     db.commit()
-    return jsonify(ok=True, code=code)
+    return jsonify(ok=True, code=code, reusado=reusado)
 
 @app.delete("/api/admin/admins/<int:aid>")
 def delete_admin(aid):
