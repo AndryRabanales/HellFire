@@ -195,6 +195,7 @@ CREATE TABLE IF NOT EXISTS sellers (
   hidden INTEGER NOT NULL DEFAULT 0,      -- vendedor de INVITADOS: sus boletos no cuentan como venta
   commission_pct REAL,             -- su comisión propia (NULL = la general, 0 = ninguna)
   tutorial_seen INTEGER NOT NULL DEFAULT 0,  -- ya vio el tutorial de bienvenida
+  es_lider INTEGER NOT NULL DEFAULT 0,       -- esta fila ES el colíder vendiendo en persona
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ticket_types (
@@ -458,7 +459,8 @@ def init_db():
                     "paid_cents INTEGER NOT NULL DEFAULT 0",
                     "hidden INTEGER NOT NULL DEFAULT 0",
                     "commission_pct REAL",
-                    "tutorial_seen INTEGER NOT NULL DEFAULT 0"):
+                    "tutorial_seen INTEGER NOT NULL DEFAULT 0",
+                    "es_lider INTEGER NOT NULL DEFAULT 0"):
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
         db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
                    "role TEXT NOT NULL DEFAULT 'admin'")
@@ -490,6 +492,8 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN commission_pct REAL")
         if "tutorial_seen" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN tutorial_seen INTEGER NOT NULL DEFAULT 0")
+        if "es_lider" not in scols:
+            db.execute("ALTER TABLE sellers ADD COLUMN es_lider INTEGER NOT NULL DEFAULT 0")
         if "hidden" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
         ttcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
@@ -1083,6 +1087,19 @@ def me():
     return jsonify(role="admin", name=s["admin"]["username"],
                    admin_id=s["admin"]["id"], **info)
 
+def es_admin_principal(admin):
+    """El dueño del evento: el usuario de la variable de entorno."""
+    return admin["username"] == (os.environ.get("ADMIN_USER") or "admin").strip()
+
+def duenio_es_colider(db, seller_row):
+    """¿Este vendedor pertenece al equipo de un colíder? Entonces sus datos son
+    visibles hacia arriba: el colíder rinde cuentas al admin."""
+    if not seller_row["owner_admin_id"]:
+        return False
+    a = db.execute("SELECT role FROM admins WHERE id=?",
+                   (seller_row["owner_admin_id"],)).fetchone()
+    return bool(a) and (a["role"] or "admin") == "colider"
+
 def owns_seller(admin, seller_row):
     """Un admin es dueño del vendedor si lo creó. Vendedores antiguos sin dueño
     (owner NULL, de versiones previas) pueden gestionarse por cualquier admin."""
@@ -1423,9 +1440,16 @@ def scan_login():
     return jsonify(token=token)
 
 def require_scanner():
-    """Puede escanear: un admin (siempre) o una sesión de puerta (con la clave)."""
+    """Puede escanear: un admin (siempre) o una sesión de puerta (con la clave).
+    El colíder NO por ser colíder: escanear quema el boleto, y eso es irreversible.
+    Si el día del evento se para en la puerta, se le pasa la clave del staff como a
+    cualquier otro."""
     s = current_session()
-    return s if s and s["role"] in ("admin", "scanner") else None
+    if not s or s["role"] not in ("admin", "scanner"):
+        return None
+    if es_colider(s):
+        return None
+    return s
 
 @app.post("/api/scan")
 def scan():
@@ -1470,34 +1494,42 @@ def scan():
 
 @app.get("/api/admin/summary")
 def admin_summary():
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
+    # El colíder ve SOLO lo de su grupo. No es que se le oculte el total: es que para
+    # él ese total no existe, porque nunca recibe una fila que no sea suya.
+    duenio = mi_ambito(s)
+    filtro = (" AND seller_id IN (SELECT id FROM sellers WHERE owner_admin_id=?)"
+              if duenio else "")
+    par = (duenio,) if duenio else ()
     tot = db.execute(f"""SELECT
         SUM(CASE WHEN status!='void' THEN 1 ELSE 0 END) AS n,
         SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS cents,
         SUM(CASE WHEN status='used' THEN 1 ELSE 0 END) AS entered
-        FROM tickets WHERE {NOT_GUEST}""").fetchone()
+        FROM tickets WHERE {NOT_GUEST}{filtro}""", par).fetchone()
     paid = db.execute(
-        "SELECT COALESCE(SUM(paid_cents),0) AS c FROM sellers WHERE hidden=0").fetchone()["c"]
+        "SELECT COALESCE(SUM(paid_cents),0) AS c FROM sellers WHERE hidden=0" +
+        (" AND owner_admin_id=?" if duenio else ""), par).fetchone()["c"]
     # desglose por admin: cuánto han vendido sus vendedores y cuánto ya cobró (todos lo ven)
-    by_admin = db.execute("""
+    by_admin = db.execute(f"""
         SELECT COALESCE(s.owner_admin_name, 'Sin asignar') AS admin_name,
                COALESCE(SUM(s.paid_cents),0) AS paid_cents,
                COALESCE(SUM(tk.sold),0) AS sold_cents
         FROM sellers s
         LEFT JOIN (SELECT seller_id, SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS sold
                    FROM tickets GROUP BY seller_id) tk ON tk.seller_id = s.id
-        WHERE s.deleted=0 AND s.hidden=0
+        WHERE s.deleted=0 AND s.hidden=0{" AND s.owner_admin_id=?" if duenio else ""}
         GROUP BY COALESCE(s.owner_admin_name, 'Sin asignar')
-        ORDER BY sold_cents DESC""").fetchall()
+        ORDER BY sold_cents DESC""", par).fetchall()
     admins = [{"admin": r["admin_name"], "sold": money(r["sold_cents"]),
                "collected": money(r["paid_cents"]),
                "settled": r["sold_cents"] > 0 and r["paid_cents"] >= r["sold_cents"]}
               for r in by_admin]
     return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0),
-                   entered=tot["entered"] or 0, collected=money(paid), by_admin=admins)
+                   entered=tot["entered"] or 0, collected=money(paid), by_admin=admins,
+                   soy_colider=bool(duenio), yo=s["admin"]["username"])
 
 def ticket_filters(prefix=""):
     """WHERE dinámico compartido por la tabla admin y la exportación (RF-93).
@@ -1528,16 +1560,23 @@ def ticket_filters(prefix=""):
 
 @app.get("/api/admin/tickets")
 def admin_tickets():
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
     where, params = ticket_filters("t.")
+    duenio = mi_ambito(s)
+    if duenio:
+        # el colíder ve boletos, pero solo los de su grupo
+        where += (" AND " if where else " WHERE ") + "s.owner_admin_id=?"
+        params = list(params) + [duenio]
     rows = db.execute(
         "SELECT t.*, s.owner_admin_id AS owner_admin_id, s.owner_admin_name AS owner_admin_name "
         "FROM tickets t LEFT JOIN sellers s ON s.id = t.seller_id"
         + where + " ORDER BY t.id DESC", params).fetchall()
     me = s["admin"]
+    colideres = {r["id"] for r in db.execute(
+        "SELECT id FROM admins WHERE role='colider'").fetchall()}
     out = []
     for t in rows:
         tp = ticket_public(t)
@@ -1545,11 +1584,13 @@ def admin_tickets():
         tp["owner_admin_name"] = t["owner_admin_name"]
         # el SERVIDOR decide si este admin puede anular este boleto (única verdad)
         if t["seller_id"] is not None:
-            cv = t["owner_admin_id"] is None or t["owner_admin_id"] == me["id"]
+            cv = (t["owner_admin_id"] is None or t["owner_admin_id"] == me["id"]
+                  or (t["owner_admin_id"] in colideres))
         else:   # boleto generado por un admin → solo ese mismo admin
             creator = (t["seller_name"] or "").replace("Admin: ", "", 1)
             cv = creator == me["username"]
-        tp["can_void"] = cv
+        # anular es de admins. Al colíder ni se le pinta el botón.
+        tp["can_void"] = cv and not es_colider(s)
         out.append(tp)
     return jsonify(tickets=out)
 
@@ -1560,7 +1601,11 @@ def can_void(admin, db, t):
     if t["seller_id"] is not None:
         sel = db.execute("SELECT * FROM sellers WHERE id=?", (t["seller_id"],)).fetchone()
         if sel and sel["owner_admin_id"] is not None and sel["owner_admin_id"] != admin["id"]:
-            return False, sel["owner_admin_name"]
+            # Los del equipo de un colíder son la excepción: él tiene prohibido anular,
+            # así que si el admin tampoco pudiera, esos boletos no los podría cancelar
+            # NADIE. La regla de "cada admin con lo suyo" es entre pares, no hacia abajo.
+            if not duenio_es_colider(db, sel):
+                return False, sel["owner_admin_name"]
         return True, None
     # boleto generado por un admin (seller_name = "Admin: usuario")
     creator = (t["seller_name"] or "").removeprefix("Admin: ")
@@ -1850,7 +1895,7 @@ def edit_faculty(fid):
 
 @app.get("/api/admin/sellers")
 def list_sellers():
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -1861,6 +1906,10 @@ def list_sellers():
         FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id
         WHERE s.hidden=0
         GROUP BY s.id ORDER BY s.deleted, s.id""").fetchall()
+    duenio = mi_ambito(s)
+    if duenio:
+        # el colíder solo ve a los suyos (y a sí mismo)
+        rows = [r for r in rows if r["owner_admin_id"] == duenio]
     out = []
     for r in rows:
         d = dict(r)
@@ -1871,7 +1920,11 @@ def list_sellers():
         # el código de 4 dígitos es la credencial de acceso del vendedor: solo su
         # admin dueño lo ve (el resto sigue viendo nombre/ventas/pagos para
         # transparencia, tal como antes — solo se oculta el código)
-        if not owns_seller(s["admin"], r):
+        # El admin principal sí ve los códigos de los vendedores de un colíder: el
+        # colíder trabaja PARA él, no al lado de él. Entre admins pares se siguen
+        # tapando, que es para lo que se hizo esta regla.
+        if not owns_seller(s["admin"], r) and not (
+                es_admin_principal(s["admin"]) or duenio_es_colider(db, r)):
             d["code"] = None
         out.append(d)
     return jsonify(sellers=out)
@@ -1940,12 +1993,15 @@ def estado_cuenta(db, sid):
 def list_seller_payments(sid):
     """Historial de pagos de un vendedor. Lo ven TODOS los admins (transparencia),
     igual que sus ventas; solo su admin dueño puede registrar o borrar."""
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
     sel = db.execute("SELECT * FROM sellers WHERE id=? AND hidden=0", (sid,)).fetchone()
     if not sel:
+        return jsonify(error="no existe"), 404
+    # un colíder no puede ni ASOMARSE a la cuenta de un vendedor que no es suyo
+    if es_colider(s) and sel["owner_admin_id"] != s["admin"]["id"]:
         return jsonify(error="no existe"), 404
     out = estado_cuenta(db, sid)
     out["seller_name"] = sel["name"]
@@ -1960,7 +2016,7 @@ def add_seller_payment(sid):
     comisión que el vendedor se queda y el efectivo que debe entregar:
         abono $20,000 · comisión 10% = $2,000 · efectivo a recibir $18,000
     Cada pago queda con su fecha, para poder demostrarle después cómo fue pagando."""
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -2011,7 +2067,7 @@ def add_seller_payment(sid):
 def export_seller_payments(sid):
     """Estado de cuenta del vendedor en Excel, para llevar el control o mandárselo
     si pide cuentas. Mismo detalle que la imagen, pero en hoja de cálculo."""
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -2077,7 +2133,7 @@ def export_seller_payments(sid):
 def delete_seller_payment(pid):
     """Borra un pago mal capturado. Queda registrado en Movimientos: el historial
     debe poder corregirse, pero nunca en silencio."""
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -2143,7 +2199,7 @@ def create_sellers_bulk():
 
 @app.post("/api/admin/sellers")
 def create_seller():
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -2284,7 +2340,7 @@ def list_admins():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    rows = db.execute("SELECT id, username, created_at FROM admins ORDER BY id").fetchall()
+    rows = db.execute("SELECT id, username, created_at, role FROM admins ORDER BY id").fetchall()
     return jsonify(admins=[dict(r) for r in rows], me=s["admin"]["id"])
 
 @app.post("/api/admin/admins")
@@ -2300,11 +2356,24 @@ def create_admin():
         return jsonify(error="Usuario mín. 3 caracteres y contraseña mín. 8"), 400
     if db.execute("SELECT 1 FROM admins WHERE username=?", (username,)).fetchone():
         return jsonify(error="Ese usuario ya existe"), 400
-    db.execute("INSERT INTO admins(username, pass_hash, created_at) VALUES(?,?,?)",
-               (username, hash_password(password), now_iso()))
-    audit(db, s["admin"]["username"], "usuarios", f"Creó administrador '{username}'")
+    rol = "colider" if b.get("role") == "colider" else "admin"
+    db.execute("INSERT INTO admins(username, pass_hash, created_at, role) VALUES(?,?,?,?)",
+               (username, hash_password(password), now_iso(), rol))
+    code = None
+    if rol == "colider":
+        # El colíder también vende en persona. Se le abre su propia ficha de vendedor,
+        # de su propio grupo, marcada es_lider: así sus ventas personales se cuentan y
+        # se le comisionan aparte de las de su equipo, sin inventar un caso especial.
+        nuevo = db.execute("SELECT id FROM admins WHERE username=?", (username,)).fetchone()
+        code = gen_seller_code(db)
+        db.execute("INSERT INTO sellers(name, code, owner_admin_id, owner_admin_name, "
+                   "created_at, es_lider) VALUES(?,?,?,?,?,1)",
+                   (username, code, nuevo["id"], username, now_iso()))
+    audit(db, s["admin"]["username"], "usuarios",
+          f"Creó {'colíder' if rol == 'colider' else 'administrador'} '{username}'"
+          + (f" (su código de vendedor: {code})" if code else ""))
     db.commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, code=code)
 
 @app.delete("/api/admin/admins/<int:aid>")
 def delete_admin(aid):
@@ -2320,24 +2389,83 @@ def delete_admin(aid):
     target = db.execute("SELECT * FROM admins WHERE id=?", (aid,)).fetchone()
     if not target:
         return jsonify(error="no existe"), 404
+    # su ficha personal de vendedor se va con él, pero SOLO si no vendió nada:
+    # borrar una que ya tiene boletos dejaría dinero cobrado sin dueño.
+    db.execute("DELETE FROM sellers WHERE owner_admin_id=? AND es_lider=1 "
+               "AND id NOT IN (SELECT seller_id FROM tickets WHERE seller_id IS NOT NULL)",
+               (aid,))
     db.execute("DELETE FROM admins WHERE id=?", (aid,))
     db.execute("DELETE FROM sessions WHERE role='admin' AND user_id=?", (aid,))
     audit(db, s["admin"]["username"], "usuarios", f"Eliminó administrador '{target['username']}'")
     db.commit()
     return jsonify(ok=True)
 
+@app.get("/api/admin/grupos")
+def grupos_colider():
+    """Cada colíder con sus números partidos en dos: lo que vendió ÉL en persona y lo
+    que vendieron SUS vendedores. Sumar todo en un solo número esconde justo lo que se
+    quiere saber —si el colíder trabaja o solo administra—, así que van separados y
+    con el total al lado."""
+    s = require_panel()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    duenio = mi_ambito(s)
+    lideres = db.execute("SELECT id, username FROM admins WHERE role='colider' ORDER BY username").fetchall()
+    if duenio:
+        lideres = [l for l in lideres if l["id"] == duenio]
+    salida = []
+    for l in lideres:
+        filas = db.execute(f"""
+            SELECT s.id, s.name, s.code, s.es_lider, s.deleted, s.paid_cents,
+                   COUNT(t.id) AS n,
+                   COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS cents
+            FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id AND t.status!='void' 
+            WHERE s.hidden=0 AND s.owner_admin_id=?
+            GROUP BY s.id ORDER BY s.es_lider DESC, cents DESC, s.name ASC""",
+            (l["id"],)).fetchall()
+        propio = [r for r in filas if r["es_lider"]]
+        equipo = [r for r in filas if not r["es_lider"]]
+        def suma(rs, campo):
+            return sum(r[campo] or 0 for r in rs)
+        salida.append(dict(
+            id=l["id"], nombre=l["username"],
+            propio=dict(boletos=suma(propio, "n"), monto=money(suma(propio, "cents")),
+                        cobrado=money(suma(propio, "paid_cents")),
+                        code=(propio[0]["code"] if propio else None)),
+            equipo=dict(boletos=suma(equipo, "n"), monto=money(suma(equipo, "cents")),
+                        cobrado=money(suma(equipo, "paid_cents")),
+                        vendedores=len([r for r in equipo if not r["deleted"]])),
+            total=dict(boletos=suma(filas, "n"), monto=money(suma(filas, "cents")),
+                       cobrado=money(suma(filas, "paid_cents"))),
+            miembros=[dict(id=r["id"], name=r["name"], code=r["code"],
+                           es_lider=bool(r["es_lider"]), deleted=bool(r["deleted"]),
+                           boletos=r["n"] or 0, monto=money(r["cents"] or 0),
+                           cobrado=money(r["paid_cents"] or 0)) for r in filas],
+        ))
+    return jsonify(grupos=salida, soy_colider=bool(duenio))
+
 # ---- auditoría, exportación, ajustes
 
 @app.get("/api/admin/audit")
 def get_audit():
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
     # Movimientos = solo acciones de ADMINS. La generación de boletos la hacen los
     # vendedores y ya se refleja en Ventas/Vendedores, así que no se lista aquí.
-    rows = db.execute("SELECT * FROM audit_log WHERE action != 'generacion' "
-                      "ORDER BY id DESC LIMIT 500").fetchall()
+    #
+    # El colíder ve SOLO lo que él mismo hizo. El registro es global —cambios de
+    # precio, anulaciones, cobros de otros grupos— y enseñárselo entero sería darle
+    # por la puerta de atrás justo lo que no debe ver.
+    if es_colider(s):
+        rows = db.execute("SELECT * FROM audit_log WHERE action != 'generacion' "
+                          "AND actor = ? ORDER BY id DESC LIMIT 500",
+                          (s["admin"]["username"],)).fetchall()
+    else:
+        rows = db.execute("SELECT * FROM audit_log WHERE action != 'generacion' "
+                          "ORDER BY id DESC LIMIT 500").fetchall()
     return jsonify(log=[dict(r) for r in rows])
 
 # ---- gastos de la fiesta (local, bebidas, DJ, etc.): cuánto se debe -------------

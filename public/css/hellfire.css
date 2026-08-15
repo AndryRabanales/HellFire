@@ -238,19 +238,23 @@ select.input option{background:#160603;color:var(--cream)}
 .tk.vip .tk-perks span{background:rgba(255,122,46,.12);border-color:rgba(255,122,46,.3);
   color:var(--ember-soft)}
 
-.tk.ultra{border-color:rgba(243,210,122,.42);
-  background:linear-gradient(180deg,rgba(243,210,122,.13),rgba(243,210,122,.03));
-  box-shadow:0 4px 18px rgba(243,210,122,.12)}
-.tk.ultra::before{background:linear-gradient(90deg,#f3d27a,transparent)}
-.tk.ultra .tk-n,.tk.ultra .tk-p{color:#f3d27a}
-.tk.ultra .tk-perks span{background:rgba(243,210,122,.11);border-color:rgba(243,210,122,.3);
-  color:#e8c979}
+/* Ultra VIP en esmeralda. Es el único color de la app que NO es de la familia del
+   fuego, y eso es exactamente lo que se busca: entre tanto naranja, el verde salta
+   solo y se lee como "esto es otra categoría", no como "el naranja pero más". */
+.tk.ultra{border-color:rgba(52,211,153,.45);
+  background:linear-gradient(180deg,rgba(52,211,153,.14),rgba(16,185,129,.03));
+  box-shadow:0 4px 20px rgba(16,185,129,.16)}
+.tk.ultra::before{background:linear-gradient(90deg,#34d399,transparent)}
+.tk.ultra .tk-n,.tk.ultra .tk-p{color:#5eead4}
+.tk.ultra .tk-mas{color:rgba(94,234,212,.55)}
+.tk.ultra .tk-perks span{background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.32);
+  color:#5eead4}
 
 /* Todavía no se vende: se ve, pero sin gritar. */
 .tk.proximo{opacity:.72}
 .tk-soon{font:700 8px "Space Grotesk";letter-spacing:.13em;text-transform:uppercase;
-  color:#e8c979;padding:5px 9px;border-radius:20px;background:rgba(243,210,122,.1);
-  border:1px solid rgba(243,210,122,.35);white-space:nowrap}
+  color:#5eead4;padding:5px 9px;border-radius:20px;background:rgba(52,211,153,.12);
+  border:1px solid rgba(52,211,153,.38);white-space:nowrap}
 
 /* Dudas: plegadas. Quien tiene una la abre; quien no, no carga con el texto. */
 .faq{border-bottom:1px solid rgba(255,120,40,.13)}

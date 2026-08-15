@@ -69,6 +69,7 @@
     <button class="tab" data-tab="boletos">Boletos</button>
     <button class="tab" data-tab="vendedores">Vendedores</button>
     <button class="tab" data-tab="grupos">Grupos</button>
+    <button class="tab" data-tab="colideres">Colíderes</button>
     <button class="tab" data-tab="gastos">Gastos</button>
     <button class="tab" data-tab="catalogos">Catálogos</button>
     <button class="tab" data-tab="ajustes">Ajustes</button>
@@ -83,6 +84,11 @@
       <div class="muted" style="margin-bottom:10px;font-size:11px">Cuánto ha cobrado cada admin a sus propios vendedores. Visible para todos.</div>
       <div id="sum-by-admin"></div>
     </div>
+  </section>
+
+  <!-- ===== Colíderes: cada grupo con lo suyo partido en dos ===== -->
+  <section id="tab-colideres" class="mt16 hidden">
+    <div id="cl-lista"></div>
   </section>
 
   <!-- ===== Boletos (RF-78/79) ===== -->
@@ -274,7 +280,16 @@
       <div class="row" style="flex-wrap:wrap;gap:8px">
         <input class="input grow" id="ad-user" placeholder="Usuario" style="min-width:140px;padding:12px">
         <input class="input grow" id="ad-pass" type="password" placeholder="Contraseña (mín. 8)" style="min-width:160px;padding:12px">
+        <select class="input" id="ad-role" style="max-width:150px;padding:12px">
+          <option value="admin">Administrador</option>
+          <option value="colider">Colíder</option>
+        </select>
         <button class="btn sm" id="btn-ad-create" style="padding:13px 16px">Crear</button>
+      </div>
+      <div class="muted mt8" style="font-size:11px">
+        <b style="color:var(--cream)">Colíder:</b> arma su propio equipo y le cobra, pero
+        solo ve lo de su grupo. No anula boletos, no toca precios ni ajustes, y no ve las
+        ventas generales. Se le abre además su propio código de vendedor, para lo que venda él.
       </div>
       <div class="err mt8" id="ad-err"></div>
       <div id="ad-list" class="mt12" style="display:flex;flex-direction:column;gap:8px"></div>

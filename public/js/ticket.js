@@ -78,9 +78,15 @@ function ticketTypeLabel(ticket) {
 function ticketBadgeSpec(ticket) {
   if (ticket.group_size)
     return { text: 'GRUPO ' + ticket.group_size, grad: ['#ff7a4d', '#c81e3a'], textColor: '#fff3ee' };
-  if (ticket.type_is_vip)   // el nombre real, para que "Ultra VIP" no salga como "VIP"
+  if (ticket.type_is_vip) {
+    // el nombre real, para que "Ultra VIP" no salga como "VIP". Y su color: el Ultra
+    // va en esmeralda igual que en la guía del vendedor — si en el panel se anuncia
+    // verde y el boleto sale dorado, no parece el mismo producto.
+    const esUltra = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '') === 'ultravip';
     return { text: '★ ' + (ticket.type_name || 'VIP').toUpperCase(),
-             grad: ['#f3d27a', '#d9a53a'], textColor: '#3a1e00' };
+             grad: esUltra ? ['#5eead4', '#0f9b74'] : ['#f3d27a', '#d9a53a'],
+             textColor: esUltra ? '#02241a' : '#3a1e00' };
+  }
   return { text: ticketTypeLabel(ticket).toUpperCase(), ghost: true };
 }
 

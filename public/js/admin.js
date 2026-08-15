@@ -44,6 +44,7 @@ async function enter(name) {
 const loaders = {
   resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
   vendedores: loadSellers, grupos: loadGroups, gastos: loadExpenses,
+  colideres: loadColideres,
   catalogos: loadCatalogs, ajustes: loadAjustes,
 };
 
@@ -116,6 +117,7 @@ async function loadSummary(silent) {
   const sig = JSON.stringify(s);
   if (silent && sig === _sigSummary) return;   // nada cambió → no re-dibujar
   _sigSummary = sig;
+  aplicarColider(s.soy_colider);
   $('#sum-stats').innerHTML = `
     <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}</div></div>
     <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
@@ -136,6 +138,87 @@ async function loadSummary(silent) {
       <div class="muted" style="font-size:12px;margin-top:3px">cobró <b style="color:var(--cream)">${fmtMoney(a.collected)}</b> de <b>${fmtMoney(a.sold)}</b></div>
     </div>`;
   }).join('') || '<div class="muted">Sin datos aún</div>';
+}
+
+/* El panel visto por un colíder: se le quitan de encima las pestañas que no le
+   tocan. Esconder botones no es la seguridad —esa está en el servidor, que le
+   responde 401 a todo lo que no le corresponde— pero un panel lleno de puertas
+   cerradas invita a empujarlas. */
+let _coliderAplicado = null;
+function aplicarColider(esCo) {
+  if (_coliderAplicado === !!esCo) return;
+  _coliderAplicado = !!esCo;
+  document.body.classList.toggle('es-colider', !!esCo);
+  // Se ESCONDE, no se borra: si en la misma pestaña entra después un admin, tiene que
+  // recuperar su panel completo sin recargar. Borrar nodos deja el panel mutilado.
+  const VEDADAS = ['grupos', 'gastos', 'catalogos', 'ajustes'];
+  VEDADAS.forEach(t => {
+    const b = document.querySelector(`#tabs .tab[data-tab="${t}"]`);
+    if (b) b.classList.toggle('hidden', esCo);
+  });
+  const mio = document.querySelector('#tabs .tab[data-tab="colideres"]');
+  if (mio) mio.textContent = esCo ? 'Mi grupo' : 'Colíderes';
+  const scan = document.querySelector('a[href="/scan"]');   // escanear quema boletos
+  if (scan) scan.classList.toggle('hidden', esCo);
+  const card = $('#sum-by-admin');
+  if (card && card.closest('.card')) card.closest('.card').classList.toggle('hidden', esCo);
+  if (esCo && VEDADAS.includes(currentTab)) openTab('resumen');
+}
+
+/* ---------------- colíderes: el grupo, partido en dos ----------------
+   Un solo número por grupo no sirve para decidir nada: si un colíder trae 200 mil,
+   importa muchísimo si los vendió él o su equipo. Por eso van las dos mitades
+   siempre visibles y el total abajo, no al revés. */
+function bloqueCL(t, n, monto, extra) {
+  return `<div style="flex:1;min-width:130px;background:rgba(255,255,255,.03);
+      border:1px solid rgba(255,120,40,.13);border-radius:12px;padding:11px 12px">
+    <div class="muted" style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase">${t}</div>
+    <div style="font:800 19px Manrope;color:var(--cream);margin-top:3px">${fmtMoney(monto)}</div>
+    <div class="muted" style="font-size:11.5px;margin-top:2px">${n} boleto${n === 1 ? '' : 's'}${extra ? ' · ' + extra : ''}</div>
+  </div>`;
+}
+
+async function loadColideres() {
+  const r = await API.get('/api/admin/grupos');
+  if (!r.grupos.length) {
+    $('#cl-lista').innerHTML = `<div class="card"><div class="label">Sin colíderes</div>
+      <div class="muted mt8">Todavía no hay ninguno. Se crean desde <b style="color:var(--cream)">Ajustes → Administradores del panel</b>, eligiendo «Colíder».</div></div>`;
+    return;
+  }
+  $('#cl-lista').innerHTML = r.grupos.map(g => `
+    <div class="card mt12" style="max-width:none">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font:800 17px Manrope;color:var(--cream)">${esc(g.nombre)}</div>
+          <div class="muted" style="font-size:11.5px">Colíder · ${g.equipo.vendedores} vendedor${g.equipo.vendedores === 1 ? '' : 'es'} en su equipo</div>
+        </div>
+        <div style="text-align:right">
+          <div class="muted" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em">Total del grupo</div>
+          <div style="font:800 22px Manrope;color:var(--fire)">${fmtMoney(g.total.monto)}</div>
+          <div class="muted" style="font-size:11px">${g.total.boletos} boletos · cobrado ${fmtMoney(g.total.cobrado)}</div>
+        </div>
+      </div>
+      <div class="row mt12" style="gap:10px;flex-wrap:wrap">
+        ${bloqueCL('Vendió él', g.propio.boletos, g.propio.monto, g.propio.code ? 'código ' + g.propio.code : '')}
+        ${bloqueCL('Vendió su equipo', g.equipo.boletos, g.equipo.monto, 'cobrado ' + fmtMoney(g.equipo.cobrado))}
+      </div>
+      <details class="mt12">
+        <summary class="muted" style="cursor:pointer;font-size:12px">Ver uno por uno (${g.miembros.length})</summary>
+        <div class="mt8" style="display:flex;flex-direction:column;gap:6px">
+          ${g.miembros.map(m => `<div class="row" style="justify-content:space-between;gap:8px;
+              padding:7px 0;border-bottom:1px solid rgba(255,120,40,.09)">
+            <div style="min-width:0">
+              <div style="font:700 13px Manrope;color:var(--cream)">${esc(m.name)}${m.es_lider ? ' <span class="badge active">él mismo</span>' : ''}${m.deleted ? ' <span class="muted">(eliminado)</span>' : ''}</div>
+              <div class="muted" style="font-size:11px">código ${esc(m.code)} · ${m.boletos} boletos</div>
+            </div>
+            <div style="text-align:right;white-space:nowrap">
+              <div style="font:700 13px Manrope;color:var(--cream)">${fmtMoney(m.monto)}</div>
+              <div class="muted" style="font-size:11px">cobrado ${fmtMoney(m.cobrado)}</div>
+            </div>
+          </div>`).join('')}
+        </div>
+      </details>
+    </div>`).join('');
 }
 
 /* ---------------- boletos ---------------- */
@@ -947,14 +1030,19 @@ function menuVendedor(s) {
   modal(`<div class="h1" style="font-size:17px">${esc(s.name)}</div>
     <div class="muted mt8" style="font-size:12px">Código ${s.code ? esc(s.code) : 'privado'} \u00b7 ${s.tickets} boleto(s) vendidos</div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      ${_coliderAplicado ? `<div class="muted" style="font-size:12px;line-height:1.5">
+        Cambiar el nombre, quitarle el acceso o eliminarlo lo hace un administrador.
+        Pídeselo y lo resuelve.</div>` : `
       <button class="btn ghost" id="mv-edit">Editar nombre</button>
       <button class="btn ghost" id="mv-toggle">${s.active ? 'Desactivar' : 'Reactivar'} su acceso</button>
-      <button class="btn danger" id="mv-del">Eliminar vendedor</button>
+      <button class="btn danger" id="mv-del">Eliminar vendedor</button>`}
       <button class="btn quiet" onclick="closeModal()">Cancelar</button>
     </div>`);
-  $('#mv-edit').onclick = () => editSeller(s);
-  $('#mv-toggle').onclick = () => toggleSeller(s);
-  $('#mv-del').onclick = () => deleteSeller(s);
+  if (!_coliderAplicado) {
+    $('#mv-edit').onclick = () => editSeller(s);
+    $('#mv-toggle').onclick = () => toggleSeller(s);
+    $('#mv-del').onclick = () => deleteSeller(s);
+  }
 }
 
 async function editSeller(s) {
@@ -1257,7 +1345,8 @@ async function loadAdmins() {
   r.admins.forEach(a => {
     const row = document.createElement('div');
     row.className = 'trow';
-    row.innerHTML = `<div class="tmain"><div class="tbuyer">${esc(a.username)}${a.id === r.me ? ' <span class="muted">(tú)</span>' : ''}</div>
+    const esCo = (a.role || 'admin') === 'colider';
+    row.innerHTML = `<div class="tmain"><div class="tbuyer">${esc(a.username)}${a.id === r.me ? ' <span class="muted">(tú)</span>' : ''}${esCo ? ' <span class="badge used">colíder</span>' : ''}</div>
       <div class="tmeta">creado ${esc(a.created_at)}</div></div>`;
     if (a.id !== r.me) {
       const b = document.createElement('button');
@@ -1280,11 +1369,18 @@ async function loadAdmins() {
 $('#btn-ad-create').addEventListener('click', async () => {
   $('#ad-err').textContent = '';
   try {
-    await API.post('/api/admin/admins', {
-      username: $('#ad-user').value.trim(), password: $('#ad-pass').value,
+    const rol = $('#ad-role').value;
+    const r = await API.post('/api/admin/admins', {
+      username: $('#ad-user').value.trim(), password: $('#ad-pass').value, role: rol,
     });
     $('#ad-user').value = ''; $('#ad-pass').value = '';
-    toast('Administrador creado');
+    if (r.code) {
+      // su código de vendedor solo se ve aquí, en este momento: hay que copiarlo ya
+      await confirmModal({ title: 'Colíder creado', okLabel: 'Listo',
+        body: `Ya puede entrar al panel con su usuario y contraseña.<br><br>
+          Y este es <b style="color:var(--cream)">su código de vendedor</b>, para lo que venda él en persona:
+          <div style="text-align:center;margin:14px 0"><span class="codechip" style="font-size:26px;padding:10px 18px;letter-spacing:.3em">${r.code}</span></div>` });
+    } else toast('Administrador creado');
     loadAdmins();
   } catch (e) { if (!guard(e)) $('#ad-err').textContent = e.message; }
 });
