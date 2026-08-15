@@ -648,7 +648,7 @@ $('#modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') 
 
 /* El precio SALE DEL CATÁLOGO, no escrito a mano: si mañana entra una fase nueva o
    cambias un precio, la guía se actualiza sola. Si un tipo no existe todavía (Ultra
-   VIP, por ejemplo), su nivel se marca PRÓXIMAMENTE en vez de mentir con uno viejo. */
+   VIP, por ejemplo), su tarjeta se marca PRÓXIMAMENTE en vez de mentir con uno viejo. */
 function precioDe(incluye, excluye = []) {
   const hay = (CATALOG && CATALOG.types || []).filter(t => {
     const n = (t.name || '').toLowerCase().replace(/\s+/g, '');
@@ -658,25 +658,23 @@ function precioDe(incluye, excluye = []) {
   return [...new Set(hay.map(t => '$' + (t.price_cents / 100).toFixed(0)))].join(' · ');
 }
 
-/* Un nivel de boleto en DOS renglones: nombre con precio, y lo que trae separado
-   por puntos. Antes era una viñeta por línea y seis viñetas ocupaban media
-   pantalla; lo mismo dicho de corrido se lee de un vistazo. */
-function nivel(titulo, precio, mas) {
+/* Cada nivel es una TARJETA con su propio color: gris el general, ámbar el VIP,
+   oro el Ultra. Los beneficios van en pastillas, no en párrafo: el ojo los cuenta
+   sin leerlos, y de un vistazo se ve que el VIP trae el doble que el de abajo.
+   Eso es lo que vende — una lista corrida de puntos no deja ver la diferencia. */
+function tarjeta(clase, titulo, precio, arrastra, perks) {
   const proximo = !precio;
-  return `<div class="niv${proximo ? ' proximo' : ''}">
-    <div class="nv-top">
-      <span class="nv-t">${titulo}</span>
-      ${proximo ? '<span class="nv-soon">Próximamente</span>'
-                : `<span class="nv-p">${precio}</span>`}
+  return `<div class="tk ${clase}${proximo ? ' proximo' : ''}">
+    <div class="tk-top">
+      <div class="tk-n">${titulo}</div>
+      ${proximo ? '<div class="tk-soon">Próximamente</div>'
+                : `<div class="tk-p">${precio}</div>`}
     </div>
-    <div class="nv-d">${mas}</div>
+    ${arrastra ? `<div class="tk-mas">${arrastra}</div>` : ''}
+    <div class="tk-perks">${perks.map(x => `<span>${x}</span>`).join('')}</div>
   </div>`;
 }
 
-function bloque(titulo, dentro, abierto) {
-  return `<details class="seccion"${abierto ? ' open' : ''}>
-    <summary>${titulo}</summary><div class="sec-in">${dentro}</div></details>`;
-}
 function paso(n, texto) {
   return `<div class="g-item"><div class="g-n">${n}</div><div class="g-tit">${texto}</div></div>`;
 }
@@ -684,31 +682,29 @@ function duda(preg, resp) {
   return `<details class="faq"><summary>${preg}</summary><div>${resp}</div></details>`;
 }
 
-function mostrarAyuda() {
-  // Tres secciones plegadas, no un muro. Abre la de los boletos porque es la que se
-  // consulta CON EL COMPRADOR ENFRENTE; las otras dos se abren cuando hacen falta.
+function panelBoletos() {
+  return tarjeta('gen', 'UADY / Externo', precioDe(['uady', 'externo']), '',
+           ['Barra libre toda la noche', 'Aguas locas', 'Shots', 'Sin fichas ni límite']) +
+         tarjeta('vip', 'VIP', precioDe(['vip'], ['ultra']), 'Todo lo anterior, más:',
+           ['Sin fila para entrar', '2ª barra solo VIP', 'Botellas exclusivas',
+            'Coca sin límite', 'Shot de bienvenida', 'Pulsera VIP']) +
+         tarjeta('ultra', 'Ultra VIP', precioDe(['ultra']), 'Todo lo del VIP, más:',
+           ['Zona propia', '3ª barra solo tuya', 'Botellas top', 'Margaritas y palomas']);
+}
+
+function panelVender() {
+  return `<div class="guia">
+    ${paso(1, 'Escribe el <b>nombre</b> de quien te compra')}
+    ${paso(2, 'Toca el <b>tipo</b> de boleto')}
+    ${paso(3, 'Dale a <b>GENERAR</b> — se descarga solo')}
+    ${paso(4, '<b>Mándaselo por WhatsApp</b>. Esa imagen es su boleto')}
+  </div>`;
+}
+
+function panelDudas() {
   const conFac = (CATALOG && CATALOG.types || [])
     .filter(t => t.needs_faculty).map(t => esc(t.name));
-
-  const boletos =
-    nivel('UADY / Externo', precioDe(['uady', 'externo']),
-          'Barra libre toda la noche · aguas locas · shots') +
-    nivel('VIP', precioDe(['vip'], ['ultra']),
-          'Todo lo anterior <b>+ no haces fila</b> · segunda barra solo VIP · ' +
-          'botellas exclusivas · Coca sin límite · shot de bienvenida · pulsera') +
-    nivel('Ultra VIP', precioDe(['ultra']),
-          'Todo lo del VIP <b>+ zona propia</b> · tercera barra solo tuya · ' +
-          'botellas top · margaritas y palomas');
-
-  const vender = `<div class="guia">
-      ${paso(1, 'Escribe el <b>nombre</b> de quien te compra')}
-      ${paso(2, 'Toca el <b>tipo</b> de boleto')}
-      ${paso(3, 'Dale a <b>GENERAR</b> — se descarga solo')}
-      ${paso(4, '<b>Mándaselo por WhatsApp</b>. Esa imagen es su boleto')}
-    </div>`;
-
-  const dudas =
-    duda('¿Qué es el reloj de arriba?',
+  return duda('¿Qué es el reloj de arriba?',
          'Los días que faltan para que <b>suban los precios</b>. Enséñaselo: <i>"cómpralo hoy, que el martes sube"</i>.') +
     (conFac.length ? duda('¿Cuándo pido la facultad?',
          `Solo con <b>${conFac.join(' o ')}</b>. El sistema te la pide solo.`) : '') +
@@ -720,14 +716,35 @@ function mostrarAyuda() {
          'Cobras el boleto completo. En el corte entregas y ahí se te descuenta tu comisión. Todo queda con fecha.') +
     duda('Se cayó el internet a media venta',
          'Dale a <b>GENERAR</b> otra vez sin miedo: el sistema sabe que es la misma venta y <b>no la duplica</b>.');
+}
 
+/* Pestañas en vez de acordeones apilados: se ve TODO lo disponible de un golpe y
+   se llega a cualquier cosa en un toque. Un acordeón esconde lo que tiene y obliga
+   a abrir y cerrar hasta encontrar. */
+const GUIA_TABS = [
+  { id: 'bol', t: 'Boletos', fn: panelBoletos },
+  { id: 'ven', t: 'Vender',  fn: panelVender },
+  { id: 'dud', t: 'Dudas',   fn: panelDudas },
+];
+
+function pintaGuia(sel) {
+  $('#gu-body').innerHTML = (GUIA_TABS.find(x => x.id === sel) || GUIA_TABS[0]).fn();
+  $$('#gu-tabs .gu-tab').forEach(b => b.classList.toggle('on', b.dataset.g === sel));
+}
+
+function mostrarAyuda() {
   modal(`<div class="h1" style="font-size:19px">Guía rápida</div>
-    <div class="mt12">
-      ${bloque('Qué incluye cada boleto', boletos, true)}
-      ${bloque('Cómo vender', vender)}
-      ${bloque('Dudas', dudas)}
+    <div class="gu-tabs mt12" id="gu-tabs">
+      ${GUIA_TABS.map((x, i) =>
+        `<button class="gu-tab${i ? '' : ' on'}" data-g="${x.id}">${x.t}</button>`).join('')}
     </div>
+    <div id="gu-body" class="mt12"></div>
     <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
+  $('#gu-tabs').addEventListener('click', e => {
+    const b = e.target.closest('.gu-tab');
+    if (b) pintaGuia(b.dataset.g);
+  });
+  pintaGuia('bol');
 }
 $('#btn-ayuda').addEventListener('click', mostrarAyuda);
 
