@@ -678,23 +678,22 @@ function nivel(titulo, precio, extra, puntos) {
 }
 
 function mostrarAyuda() {
-  // Frases de tres palabras, no renglones. El vendedor abre esto CON EL COMPRADOR
-  // ENFRENTE: si tiene que leer un párrafo, cierra y contesta de memoria —mal—.
-  // Cada nivel dice "+ lo anterior" en la orilla, así no hay que repetir listas.
+  // Sin fila de "barras" arriba: era información repetida —las viñetas ya dicen
+  // "segunda barra, solo VIP"— y tres chips diminutos sobre el título ensuciaban
+  // más de lo que explicaban. Una columna con aire, no dos apretadas: cabe igual
+  // porque las frases son cortas, y se lee de un vistazo en vez de descifrarse.
   modal(`<div class="h1" style="font-size:19px">Qué incluye cada boleto</div>
-    <div class="barras mt12">
-      <div class="ba"><b>1ª barra</b><span>todos</span></div>
-      <div class="ba"><b>2ª barra</b><span>VIP y Ultra</span></div>
-      <div class="ba"><b>3ª barra</b><span>solo Ultra</span></div>
+    <div class="muted mt8" style="font-size:12px">Toca el que te pregunten.</div>
+    <div class="mt12">
+      ${nivel('UADY / Externo', precioDe(['uady', 'externo']), '',
+              ['Barra libre toda la noche', 'Aguas locas y shots', 'Sin fichas, sin límite'])}
+      ${nivel('VIP', precioDe(['vip'], ['ultra']), '+ lo anterior',
+              ['No haces fila para entrar', 'Segunda barra, solo VIP', 'Botellas exclusivas',
+               'Coca sin límite', 'Shot de bienvenida', 'Pulsera VIP'])}
+      ${nivel('Ultra VIP', precioDe(['ultra']), '+ lo del VIP',
+              ['Zona propia, aparte de todos', 'Tercera barra, solo tuya', 'Botellas top',
+               'Margaritas y palomas'])}
     </div>
-    ${nivel('UADY / Externo', precioDe(['uady', 'externo']), '',
-            ['Barra libre toda la noche', 'Aguas locas y shots', 'Sin fichas, sin límite'])}
-    ${nivel('VIP', precioDe(['vip'], ['ultra']), '+ lo anterior',
-            ['No haces fila', 'Segunda barra, solo VIP', 'Botellas exclusivas',
-             'Coca sin límite', 'Shot de bienvenida', 'Pulsera VIP'])}
-    ${nivel('Ultra VIP', precioDe(['ultra']), '+ lo del VIP',
-            ['Zona propia', 'Tercera barra, solo tuya', 'Botellas top',
-             'Margaritas y palomas'])}
     <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
 }
 $('#btn-ayuda').addEventListener('click', mostrarAyuda);
