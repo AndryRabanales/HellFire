@@ -280,19 +280,35 @@
       <div class="row" style="flex-wrap:wrap;gap:8px">
         <input class="input grow" id="ad-user" placeholder="Usuario" style="min-width:140px;padding:12px">
         <input class="input grow" id="ad-pass" type="password" placeholder="Contraseña (mín. 8)" style="min-width:160px;padding:12px">
-        <select class="input" id="ad-role" style="max-width:150px;padding:12px">
-          <option value="admin">Administrador</option>
-          <option value="colider">Colíder</option>
-        </select>
         <button class="btn sm" id="btn-ad-create" style="padding:13px 16px">Crear</button>
-      </div>
-      <div class="muted mt8" style="font-size:11px">
-        <b style="color:var(--cream)">Colíder:</b> arma su propio equipo y le cobra, pero
-        solo ve lo de su grupo. No anula boletos, no toca precios ni ajustes, y no ve las
-        ventas generales. Se le abre además su propio código de vendedor, para lo que venda él.
       </div>
       <div class="err mt8" id="ad-err"></div>
       <div id="ad-list" class="mt12" style="display:flex;flex-direction:column;gap:8px"></div>
+    </details>
+
+    <!-- Colíder: su propio bloque, no una opción escondida en el alta de admins.
+         Dar de alta a un colíder es una decisión distinta a dar de alta a un admin
+         —le abres el panel a alguien de fuera— y merece leerse antes de hacerla. -->
+    <details class="card mt12" id="co-box">
+      <summary class="label" style="margin:0">Colíderes</summary>
+      <div class="muted mt8" style="margin-bottom:10px;line-height:1.55">
+        Un colíder arma su propio equipo de vendedores y les cobra, pero
+        <b style="color:var(--cream)">solo ve lo de su grupo</b>: ni tus ventas, ni las de
+        los demás. No anula boletos, no da de baja a nadie, no toca precios, gastos ni
+        ajustes, no escanea en la puerta y <b style="color:var(--cream)">no puede borrar el
+        sistema</b> — eso solo tú. Se le abre además su propio código de vendedor, para lo
+        que venda él en persona.
+      </div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        <input class="input grow" id="co-user" placeholder="Usuario del colíder" style="min-width:150px;padding:12px">
+        <input class="input grow" id="co-pass" type="password" placeholder="Contraseña (mín. 8)" style="min-width:160px;padding:12px">
+        <button class="btn sm" id="btn-co-create" style="padding:13px 16px">Crear colíder</button>
+      </div>
+      <div class="err mt8" id="co-err"></div>
+      <div class="muted mt8" style="font-size:10.5px">
+        Sus números salen en la pestaña <b style="color:var(--cream)">Colíderes</b>, con lo
+        que vendió él y lo que vendió su equipo por separado.
+      </div>
     </details>
   </section>
 </div>

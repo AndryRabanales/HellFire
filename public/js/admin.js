@@ -1369,20 +1369,44 @@ async function loadAdmins() {
 $('#btn-ad-create').addEventListener('click', async () => {
   $('#ad-err').textContent = '';
   try {
-    const rol = $('#ad-role').value;
-    const r = await API.post('/api/admin/admins', {
-      username: $('#ad-user').value.trim(), password: $('#ad-pass').value, role: rol,
+    await API.post('/api/admin/admins', {
+      username: $('#ad-user').value.trim(), password: $('#ad-pass').value,
     });
     $('#ad-user').value = ''; $('#ad-pass').value = '';
-    if (r.code) {
-      // su código de vendedor solo se ve aquí, en este momento: hay que copiarlo ya
-      await confirmModal({ title: 'Colíder creado', okLabel: 'Listo',
-        body: `Ya puede entrar al panel con su usuario y contraseña.<br><br>
-          Y este es <b style="color:var(--cream)">su código de vendedor</b>, para lo que venda él en persona:
-          <div style="text-align:center;margin:14px 0"><span class="codechip" style="font-size:26px;padding:10px 18px;letter-spacing:.3em">${r.code}</span></div>` });
-    } else toast('Administrador creado');
+    toast('Administrador creado');
     loadAdmins();
   } catch (e) { if (!guard(e)) $('#ad-err').textContent = e.message; }
+});
+
+$('#btn-co-create').addEventListener('click', async () => {
+  $('#co-err').textContent = '';
+  const usuario = $('#co-user').value.trim();
+  if (!usuario) { $('#co-err').textContent = 'Ponle un usuario'; return; }
+  // Se pregunta antes: crear un colíder le abre el panel a alguien de fuera, y eso no
+  // debería pasar por darle sin querer a un botón que está junto al de "Crear" admin.
+  const ok = await confirmModal({
+    title: 'Crear colíder', okLabel: 'Crear colíder',
+    body: `<b style="color:var(--cream)">${esc(usuario)}</b> va a poder entrar a este panel.<br><br>
+      Verá <b style="color:var(--cream)">solo lo de su grupo</b> y podrá crear vendedores y
+      cobrarles. No podrá anular boletos, dar de baja vendedores, tocar precios ni ajustes,
+      escanear en la puerta, ni borrar el sistema.`,
+  });
+  if (!ok) return;
+  try {
+    const r = await API.post('/api/admin/admins', {
+      username: usuario, password: $('#co-pass').value, role: 'colider',
+    });
+    $('#co-user').value = ''; $('#co-pass').value = '';
+    // su código de vendedor solo se ve aquí, en este momento: hay que copiarlo ya.
+    // Va con un solo botón: no hay nada que cancelar, ya está creado.
+    modal(`<div class="h1" style="font-size:18px">Colíder creado</div>
+      <div class="muted mt8">Ya puede entrar al panel con su usuario y contraseña.</div>
+      <div class="label mt16">Su código de vendedor</div>
+      <div class="muted" style="font-size:11.5px">Para lo que venda él en persona. No se vuelve a mostrar: cópialo ahora.</div>
+      <div style="text-align:center;margin:14px 0"><span class="codechip" style="font-size:26px;padding:10px 18px;letter-spacing:.3em">${r.code}</span></div>
+      <button class="btn mt8" onclick="closeModal()">Listo</button>`);
+    loadAdmins();
+  } catch (e) { if (!guard(e)) $('#co-err').textContent = e.message; }
 });
 
 /* ---------------- ajustes: un flyer por tipo de boleto ---------------- */
