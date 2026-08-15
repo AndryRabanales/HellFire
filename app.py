@@ -1087,6 +1087,38 @@ def me():
     return jsonify(role="admin", name=s["admin"]["username"],
                    admin_id=s["admin"]["id"], **info)
 
+def puede_gestionar(db, admin, sel):
+    """¿Este admin puede editar / desactivar / eliminar a este vendedor?
+
+    Igual que con anular y con cobrar: "cada admin con lo suyo" vale entre pares,
+    no hacia abajo. Sin esta excepción, el equipo de un colíder —y el colíder
+    mismo— no los podría tocar NADIE: el colíder porque no llega a estas rutas,
+    y el admin porque el dueño figuraba como otro."""
+    return owns_seller(admin, sel) or duenio_es_colider(db, sel)
+
+def puede_cobrar(db, sesion, sel):
+    """¿Quién le registra pagos a este vendedor?
+
+    Dos agujeros que solo se ven poniendo dinero de por medio:
+
+    - La ficha personal del colíder es suya, así que owns_seller() le decía que sí:
+      podía marcarse a sí mismo como pagado y dejar su deuda en cero sin entregar un
+      peso. Su propia cuenta se la cobra un admin, nunca él.
+    - Y al revés: como esa ficha es suya, al admin le decía que no. Nadie podía
+      cobrarle al colíder. La regla de "cada admin con lo suyo" es entre pares; hacia
+      abajo el admin cobra.
+    """
+    admin = sesion["admin"]
+    if es_colider(sesion):
+        if sel["owner_admin_id"] != admin["id"]:
+            return False, "no es de tu grupo"
+        if sel["es_lider"]:
+            return False, "Tu propia cuenta te la cobra un administrador"
+        return True, None
+    if owns_seller(admin, sel) or duenio_es_colider(db, sel):
+        return True, None
+    return False, f"Solo {sel['owner_admin_name']} (su admin) puede registrar pagos de este vendedor"
+
 def es_admin_principal(admin):
     """El dueño del evento: el usuario de la variable de entorno."""
     return admin["username"] == (os.environ.get("ADMIN_USER") or "admin").strip()
@@ -2011,7 +2043,8 @@ def list_seller_payments(sid):
         return jsonify(error="no existe"), 404
     out = estado_cuenta(db, sid)
     out["seller_name"] = sel["name"]
-    out["can_edit"] = owns_seller(s["admin"], sel)
+    # ver su propia cuenta sí (tiene que saber cuánto debe); cobrársela él, no
+    out["can_edit"] = puede_cobrar(db, s, sel)[0]
     return jsonify(**out)
 
 @app.post("/api/admin/sellers/<int:sid>/payments")
@@ -2031,8 +2064,9 @@ def add_seller_payment(sid):
                      (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
-    if not owns_seller(s["admin"], sel):
-        return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede registrar pagos de este vendedor"), 403
+    ok, motivo = puede_cobrar(db, s, sel)
+    if not ok:
+        return jsonify(error=motivo), 403
     b = request.json or {}
     try:
         abono = int(round(float(b.get("amount", 0)) * 100))
@@ -2151,8 +2185,10 @@ def delete_seller_payment(pid):
     if not p:
         return jsonify(error="no existe"), 404
     sel = db.execute("SELECT * FROM sellers WHERE id=?", (p["seller_id"],)).fetchone()
-    if sel is not None and not owns_seller(s["admin"], sel):
-        return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede borrar pagos de este vendedor"), 403
+    if sel is not None:
+        ok, motivo = puede_cobrar(db, s, sel)
+        if not ok:
+            return jsonify(error=motivo.replace("registrar pagos de", "borrar pagos de")), 403
     db.execute("DELETE FROM seller_payments WHERE id=?", (pid,))
     total = sum(x["amount_cents"] for x in pagos_de(db, p["seller_id"]))
     db.execute("UPDATE sellers SET paid_cents=? WHERE id=?", (total, p["seller_id"]))
@@ -2268,7 +2304,7 @@ def edit_seller(sid):
                      (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
-    if not owns_seller(s["admin"], sel):
+    if not puede_gestionar(db, s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede modificar a este vendedor"), 403
     name = str(b.get("name", sel["name"])).strip() or sel["name"]
     code = str(b.get("code", sel["code"])).strip()
@@ -2316,7 +2352,7 @@ def toggle_seller(sid):
                      (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
-    if not owns_seller(s["admin"], sel):
+    if not puede_gestionar(db, s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede modificar a este vendedor"), 403
     new = 0 if sel["active"] else 1
     db.execute("UPDATE sellers SET active=? WHERE id=?", (new, sid))
@@ -2340,7 +2376,7 @@ def delete_seller(sid):
                      (sid,)).fetchone()
     if not sel:
         return jsonify(error="no existe"), 404
-    if not owns_seller(s["admin"], sel):
+    if not puede_gestionar(db, s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede eliminar a este vendedor"), 403
     n = db.execute("SELECT COUNT(*) c FROM tickets WHERE seller_id=?", (sid,)).fetchone()["c"]
     # RF-87: se elimina la cuenta, los boletos se conservan con su nombre

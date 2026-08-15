@@ -1062,10 +1062,19 @@ async function editSeller(s) {
     <label class="row" style="gap:8px;cursor:pointer">
       <input type="checkbox" id="es-com-on" ${propia ? 'checked' : ''}>
       <span style="font:600 13px Manrope;color:var(--cream)">Ponerle un porcentaje distinto</span></label>
-    <div class="row mt8" id="es-com-box" style="gap:8px;align-items:center;${propia ? '' : 'display:none'}">
-      <input class="input" id="es-com" type="number" min="0" max="100" step="0.5"
-        value="${propia ? cta.commission_pct : general}" style="width:110px">
-      <span style="font:700 15px Manrope;color:var(--cream-60)">%</span>
+    <div id="es-com-box" style="${propia ? '' : 'display:none'}">
+      <!-- Los de un toque. Subirle a alguien de 10 a 20 por cumplir su meta no
+           debería obligar a teclear en un campo numérico en el celular, que es
+           donde se hace esto casi siempre. El campo sigue ahí para cualquier otro. -->
+      <div class="row mt8" style="gap:6px;flex-wrap:wrap">
+        ${[0, 10, 15, 20, 25].map(n => `<button class="btn sm ghost es-com-q" data-pct="${n}"
+          style="width:auto;padding:9px 14px;flex:none">${n}%</button>`).join('')}
+      </div>
+      <div class="row mt8" style="gap:8px;align-items:center">
+        <input class="input" id="es-com" type="number" min="0" max="100" step="0.5"
+          value="${propia ? cta.commission_pct : general}" style="width:110px">
+        <span style="font:700 15px Manrope;color:var(--cream-60)">%</span>
+      </div>
     </div>
     <div class="muted mt8" style="font-size:11px" id="es-com-hint"></div>
     <div class="err mt8" id="es-err"></div>
@@ -1077,13 +1086,20 @@ async function editSeller(s) {
     const on = $('#es-com-on').checked;
     $('#es-com-box').style.display = on ? '' : 'none';
     const v = parseFloat($('#es-com').value);
+    // el atajo que está puesto se marca, para ver de un vistazo en cuánto va
+    $$('.es-com-q').forEach(b => b.classList.toggle('sel', on && parseFloat(b.dataset.pct) === v));
     $('#es-com-hint').innerHTML = !on
       ? `Usa la comisi\u00f3n general: <b>${general}%</b>`
-      : (v > 0 ? `De cada $100 que te entregue, se queda <b>$${v.toFixed(2)}</b>`
-               : '<b style="color:var(--danger)">Sin comisi\u00f3n</b>: te entrega todo lo que venda');
+      : (v > 0
+          ? `De cada $100 que te entregue, se queda <b>$${v.toFixed(2)}</b>.
+             Lo que ya le cobraste no cambia: cada pago guard\u00f3 el suyo.`
+          : '<b style="color:var(--danger)">Sin comisi\u00f3n</b>: te entrega todo lo que venda');
   };
   $('#es-com-on').onchange = sincroniza;
   $('#es-com').oninput = sincroniza;
+  $$('.es-com-q').forEach(b => b.onclick = () => {
+    $('#es-com').value = b.dataset.pct; sincroniza();
+  });
   sincroniza();
   $('#es-save').onclick = async () => {
     try {
