@@ -198,33 +198,33 @@ select.input option{background:#160603;color:var(--cream)}
   transition:background .2s,transform .2s}
 .tp-dot.on{background:var(--ember);transform:scale(1.25)}
 
-/* Cada nivel de boleto, plegado: en plena venta se abre SOLO el que preguntan.
-   Una columna con aire, no dos apretadas — las frases son cortas, así que ocupa
-   casi lo mismo y se lee de un vistazo en vez de descifrarse. */
-.faq.nivel{border-bottom:none;margin-bottom:7px;border-radius:12px;
-  border:1px solid rgba(255,120,40,.16);background:rgba(255,255,255,.02);
-  transition:border-color .16s,background .16s}
-.faq.nivel[open]{border-color:rgba(255,122,46,.4);background:rgba(255,122,46,.05)}
-.faq.nivel > summary{justify-content:flex-start;gap:9px;padding:13px 14px}
-.faq.nivel .nv-t{flex:1;font:800 14.5px Manrope;color:var(--cream)}
-.faq.nivel .nv-x{font:600 9.5px Manrope;color:var(--cream-45);white-space:nowrap}
-.faq.nivel .nv-p{font:800 14px "Space Grotesk";color:var(--ember-soft);white-space:nowrap}
-.faq.nivel .nv-l{margin:0;padding:2px 14px 14px 34px;list-style:none;
-  display:flex;flex-direction:column;gap:9px}
-.faq.nivel .nv-l li{position:relative;font:500 13px Manrope;color:var(--cream-60);
-  line-height:1.35}
-.faq.nivel .nv-l li::before{content:"";position:absolute;left:-17px;top:5px;
-  width:5px;height:5px;border-radius:50%;background:var(--ember-dim)}
+/* Secciones de la guía: tres cajones plegados. Abre solo el que hace falta, así
+   nunca se ve como un muro por más contenido que traiga. */
+.seccion{border:1px solid rgba(255,120,40,.18);border-radius:12px;margin-bottom:8px;
+  background:rgba(255,255,255,.02);overflow:hidden}
+.seccion[open]{border-color:rgba(255,122,46,.34)}
+.seccion > summary{display:flex;align-items:center;gap:9px;cursor:pointer;list-style:none;
+  padding:13px 14px;font:800 13.5px Manrope;color:var(--cream)}
+.seccion > summary::-webkit-details-marker{display:none}
+.seccion > summary::before{content:"";flex:none;width:0;height:0;
+  border-left:6px solid var(--ember);border-top:4.5px solid transparent;
+  border-bottom:4.5px solid transparent;transition:transform .18s}
+.seccion[open] > summary::before{transform:rotate(90deg)}
+.sec-in{padding:0 14px 13px}
 
-/* Nivel que todavía no se vende: se ve, pero apagado — para que el vendedor lo
-   conozca sin ofrecerlo como si pudiera generarlo hoy. */
-.faq.nivel.proximo .nv-t{color:var(--cream-60)}
-.faq.nivel .nv-soon{font:700 8.5px "Space Grotesk";letter-spacing:.12em;
-  text-transform:uppercase;color:#e8c979;padding:5px 9px;border-radius:20px;
-  background:rgba(243,210,122,.09);border:1px solid rgba(243,210,122,.32);white-space:nowrap}
-.faq.nivel .nv-aviso{font:500 11.5px Manrope;color:#e8c979;margin:0 14px 14px;
-  padding:9px 11px;border-radius:9px;background:rgba(243,210,122,.06);
-  border:1px solid rgba(243,210,122,.2);line-height:1.4}
+/* Un nivel de boleto: dos renglones. Nombre con su precio, y lo que trae de
+   corrido. Una viñeta por línea hacía que seis ideas ocuparan media pantalla. */
+.niv{padding:10px 0;border-top:1px solid rgba(255,120,40,.12)}
+.niv:first-child{border-top:none;padding-top:2px}
+.niv .nv-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.niv .nv-t{font:800 13.5px Manrope;color:var(--cream)}
+.niv .nv-p{font:800 13.5px "Space Grotesk";color:var(--ember-soft);white-space:nowrap}
+.niv .nv-d{font:500 12px Manrope;color:var(--cream-45);line-height:1.5;margin-top:3px}
+.niv .nv-d b{color:var(--ember-soft);font-weight:700}
+.niv.proximo .nv-t{color:var(--cream-60)}
+.niv .nv-soon{font:700 8px "Space Grotesk";letter-spacing:.12em;text-transform:uppercase;
+  color:#e8c979;padding:4px 8px;border-radius:20px;background:rgba(243,210,122,.09);
+  border:1px solid rgba(243,210,122,.32);white-space:nowrap}
 
 /* Dudas: plegadas. Quien tiene una la abre; quien no, no carga con el texto. */
 .faq{border-bottom:1px solid rgba(255,120,40,.13)}

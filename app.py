@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS admins (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   pass_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'admin',   -- admin | colider (el colíder ve solo su grupo)
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sellers (
@@ -459,6 +460,8 @@ def init_db():
                     "commission_pct REAL",
                     "tutorial_seen INTEGER NOT NULL DEFAULT 0"):
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
+        db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
+                   "role TEXT NOT NULL DEFAULT 'admin'")
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
                    "needs_faculty INTEGER NOT NULL DEFAULT 1")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id INTEGER")
@@ -480,6 +483,9 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN owner_admin_name TEXT")
         if "paid_cents" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN paid_cents INTEGER NOT NULL DEFAULT 0")
+        acols = [r["name"] for r in db.execute("PRAGMA table_info(admins)").fetchall()]
+        if "role" not in acols:
+            db.execute("ALTER TABLE admins ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
         if "commission_pct" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN commission_pct REAL")
         if "tutorial_seen" not in scols:
@@ -948,11 +954,34 @@ def require_seller():
         return None
     return s
 
+def es_colider(s):
+    return bool(s) and s["role"] == "admin" and (s["admin"]["role"] or "admin") == "colider"
+
 def require_admin():
+    """SOLO administradores de verdad. El colíder entra por require_panel().
+
+    Deliberadamente NO se le abre aquí: así, cualquier ruta que exista hoy o que se
+    agregue mañana queda cerrada para el colíder mientras nadie decida lo contrario.
+    Una lista de permisos se olvida; una de prohibiciones se olvida y se filtra."""
+    s = current_session()
+    if not s or s["role"] != "admin":
+        return None
+    if es_colider(s):
+        return None
+    return s
+
+def require_panel():
+    """Admin o colíder. Solo para lo que el colíder SÍ puede: ver su grupo, dar de
+    alta a sus vendedores y cobrarles. Quien la use tiene que filtrar por dueño."""
     s = current_session()
     if not s or s["role"] != "admin":
         return None
     return s
+
+def mi_ambito(s):
+    """El id del dueño cuyos datos puede ver quien está en sesión. None = todo el
+    sistema (admin). Un número = solo lo de ese colíder."""
+    return s["admin"]["id"] if es_colider(s) else None
 
 def rate_limited(db, key):
     max_tries = int(setting(db, "max_login_attempts"))

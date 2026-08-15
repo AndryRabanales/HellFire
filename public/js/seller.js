@@ -648,51 +648,84 @@ $('#modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') 
 
 /* El precio SALE DEL CATÁLOGO, no escrito a mano: si mañana entra una fase nueva o
    cambias un precio, la guía se actualiza sola. Si un tipo no existe todavía (Ultra
-   VIP, por ejemplo), su nivel se muestra sin precio en vez de mentir con uno viejo. */
+   VIP, por ejemplo), su nivel se marca PRÓXIMAMENTE en vez de mentir con uno viejo. */
 function precioDe(incluye, excluye = []) {
   const hay = (CATALOG && CATALOG.types || []).filter(t => {
     const n = (t.name || '').toLowerCase().replace(/\s+/g, '');
     return incluye.some(k => n.includes(k)) && !excluye.some(k => n.includes(k));
   });
   if (!hay.length) return '';
-  const p = [...new Set(hay.map(t => '$' + (t.price_cents / 100).toFixed(0)))];
-  return p.join(' · ');
+  return [...new Set(hay.map(t => '$' + (t.price_cents / 100).toFixed(0)))].join(' · ');
 }
 
-/* Un nivel de boleto, plegado. En plena venta se abre SOLO el que preguntan;
-   desplegar los tres de golpe sería el muro de texto que nadie lee. */
-function nivel(titulo, precio, extra, puntos) {
-  // Sin precio = ese tipo todavía no existe en el catálogo, o sea que aún no se
-  // vende. Se marca PRÓXIMAMENTE en vez de dejarlo mudo: así el vendedor sabe que
-  // existe y puede irlo anunciando, pero no lo ofrece como si pudiera generarlo.
-  // En cuanto se cree el tipo en Catálogos, el aviso se cae solo y aparece su precio.
+/* Un nivel de boleto en DOS renglones: nombre con precio, y lo que trae separado
+   por puntos. Antes era una viñeta por línea y seis viñetas ocupaban media
+   pantalla; lo mismo dicho de corrido se lee de un vistazo. */
+function nivel(titulo, precio, mas) {
   const proximo = !precio;
-  return `<details class="faq nivel${proximo ? ' proximo' : ''}">
-    <summary><span class="nv-t">${titulo}</span>
+  return `<div class="niv${proximo ? ' proximo' : ''}">
+    <div class="nv-top">
+      <span class="nv-t">${titulo}</span>
       ${proximo ? '<span class="nv-soon">Próximamente</span>'
-                : `${extra ? `<span class="nv-x">${extra}</span>` : ''}
-                   <span class="nv-p">${precio}</span>`}</summary>
-    <ul class="nv-l">${puntos.map(x => `<li>${x}</li>`).join('')}</ul>
-    ${proximo ? '<div class="nv-aviso">Todavía no está a la venta. Te avisamos cuando se abra.</div>' : ''}
-  </details>`;
+                : `<span class="nv-p">${precio}</span>`}
+    </div>
+    <div class="nv-d">${mas}</div>
+  </div>`;
+}
+
+function bloque(titulo, dentro, abierto) {
+  return `<details class="seccion"${abierto ? ' open' : ''}>
+    <summary>${titulo}</summary><div class="sec-in">${dentro}</div></details>`;
+}
+function paso(n, texto) {
+  return `<div class="g-item"><div class="g-n">${n}</div><div class="g-tit">${texto}</div></div>`;
+}
+function duda(preg, resp) {
+  return `<details class="faq"><summary>${preg}</summary><div>${resp}</div></details>`;
 }
 
 function mostrarAyuda() {
-  // Sin fila de "barras" arriba: era información repetida —las viñetas ya dicen
-  // "segunda barra, solo VIP"— y tres chips diminutos sobre el título ensuciaban
-  // más de lo que explicaban. Una columna con aire, no dos apretadas: cabe igual
-  // porque las frases son cortas, y se lee de un vistazo en vez de descifrarse.
-  modal(`<div class="h1" style="font-size:19px">Qué incluye cada boleto</div>
-    <div class="muted mt8" style="font-size:12px">Toca el que te pregunten.</div>
+  // Tres secciones plegadas, no un muro. Abre la de los boletos porque es la que se
+  // consulta CON EL COMPRADOR ENFRENTE; las otras dos se abren cuando hacen falta.
+  const conFac = (CATALOG && CATALOG.types || [])
+    .filter(t => t.needs_faculty).map(t => esc(t.name));
+
+  const boletos =
+    nivel('UADY / Externo', precioDe(['uady', 'externo']),
+          'Barra libre toda la noche · aguas locas · shots') +
+    nivel('VIP', precioDe(['vip'], ['ultra']),
+          'Todo lo anterior <b>+ no haces fila</b> · segunda barra solo VIP · ' +
+          'botellas exclusivas · Coca sin límite · shot de bienvenida · pulsera') +
+    nivel('Ultra VIP', precioDe(['ultra']),
+          'Todo lo del VIP <b>+ zona propia</b> · tercera barra solo tuya · ' +
+          'botellas top · margaritas y palomas');
+
+  const vender = `<div class="guia">
+      ${paso(1, 'Escribe el <b>nombre</b> de quien te compra')}
+      ${paso(2, 'Toca el <b>tipo</b> de boleto')}
+      ${paso(3, 'Dale a <b>GENERAR</b> — se descarga solo')}
+      ${paso(4, '<b>Mándaselo por WhatsApp</b>. Esa imagen es su boleto')}
+    </div>`;
+
+  const dudas =
+    duda('¿Qué es el reloj de arriba?',
+         'Los días que faltan para que <b>suban los precios</b>. Enséñaselo: <i>"cómpralo hoy, que el martes sube"</i>.') +
+    (conFac.length ? duda('¿Cuándo pido la facultad?',
+         `Solo con <b>${conFac.join(' o ')}</b>. El sistema te la pide solo.`) : '') +
+    duda('¿Cómo hago un grupo de 10?',
+         'Botón <b>Armar grupo de 10</b>: escribes los diez nombres y marcas con la <b>★</b> al representante, que se lleva <b>botella gratis</b>.') +
+    duda('Se me borró un boleto',
+         'En <b>Ver mi historial</b> están todos. Búscalo por nombre y descárgalo otra vez.') +
+    duda('¿Cuándo me pagan?',
+         'Cobras el boleto completo. En el corte entregas y ahí se te descuenta tu comisión. Todo queda con fecha.') +
+    duda('Se cayó el internet a media venta',
+         'Dale a <b>GENERAR</b> otra vez sin miedo: el sistema sabe que es la misma venta y <b>no la duplica</b>.');
+
+  modal(`<div class="h1" style="font-size:19px">Guía rápida</div>
     <div class="mt12">
-      ${nivel('UADY / Externo', precioDe(['uady', 'externo']), '',
-              ['Barra libre toda la noche', 'Aguas locas y shots', 'Sin fichas, sin límite'])}
-      ${nivel('VIP', precioDe(['vip'], ['ultra']), '+ lo anterior',
-              ['No haces fila para entrar', 'Segunda barra, solo VIP', 'Botellas exclusivas',
-               'Coca sin límite', 'Shot de bienvenida', 'Pulsera VIP'])}
-      ${nivel('Ultra VIP', precioDe(['ultra']), '+ lo del VIP',
-              ['Zona propia, aparte de todos', 'Tercera barra, solo tuya', 'Botellas top',
-               'Margaritas y palomas'])}
+      ${bloque('Qué incluye cada boleto', boletos, true)}
+      ${bloque('Cómo vender', vender)}
+      ${bloque('Dudas', dudas)}
     </div>
     <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
 }
