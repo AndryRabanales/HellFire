@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS sellers (
   commission_pct REAL,             -- su comisión propia (NULL = la general, 0 = ninguna)
   tutorial_seen INTEGER NOT NULL DEFAULT 0,  -- ya vio el tutorial de bienvenida
   es_lider INTEGER NOT NULL DEFAULT 0,       -- esta fila ES el colíder vendiendo en persona
+  ultimo_ingreso TEXT,                       -- última vez que entró a la boletera
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS ticket_types (
@@ -460,7 +461,8 @@ def init_db():
                     "hidden INTEGER NOT NULL DEFAULT 0",
                     "commission_pct REAL",
                     "tutorial_seen INTEGER NOT NULL DEFAULT 0",
-                    "es_lider INTEGER NOT NULL DEFAULT 0"):
+                    "es_lider INTEGER NOT NULL DEFAULT 0",
+                    "ultimo_ingreso TEXT"):
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
         db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
                    "role TEXT NOT NULL DEFAULT 'admin'")
@@ -494,6 +496,8 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN tutorial_seen INTEGER NOT NULL DEFAULT 0")
         if "es_lider" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN es_lider INTEGER NOT NULL DEFAULT 0")
+        if "ultimo_ingreso" not in scols:
+            db.execute("ALTER TABLE sellers ADD COLUMN ultimo_ingreso TEXT")
         if "hidden" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
         ttcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
@@ -1038,6 +1042,10 @@ def login_code():
         return jsonify(error=BAD), 401
     clear_attempts(db, key)
     token = create_session(db, "seller", seller["id"])
+    # Se marca cada entrada. Sirve para lo que no se puede saber de otro modo: quién
+    # de verdad está trabajando y quién nada más quería el boleto. Sin vender no se
+    # distingue "no ha podido" de "ni abrió la app"; con esto sí.
+    db.execute("UPDATE sellers SET ultimo_ingreso=? WHERE id=?", (now_iso(), seller["id"]))
     db.commit()
     # La primera vez que entra se le enseña el tutorial. Se guarda en el SERVIDOR y no
     # en el teléfono: si cambia de celular o borra los datos del navegador ya lo vio,
@@ -1955,6 +1963,11 @@ def list_sellers():
         d["paid"] = money(d.get("paid_cents") or 0)
         d.pop("paid_cents", None)
         d["settled"] = d["total"] > 0 and d["paid"] >= d["total"]   # Completado
+        # El SERVIDOR decide quién puede tocar a este vendedor, misma verdad que en
+        # las rutas: si no, el panel esconde botones que sí funcionan, o al revés.
+        # Se mide con puede_cobrar porque el botón que gobierna es "Cuenta", la
+        # acción del día a día — y así el colíder no ve el suyo sobre su propia ficha.
+        d["can_manage"] = not r["deleted"] and puede_cobrar(db, s, r)[0]
         # el código de 4 dígitos es la credencial de acceso del vendedor: solo su
         # admin dueño lo ve (el resto sigue viendo nombre/ventas/pagos para
         # transparencia, tal como antes — solo se oculta el código)

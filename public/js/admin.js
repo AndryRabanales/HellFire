@@ -571,6 +571,38 @@ async function loadMovements(silent) {
 
 /* ---------------- vendedores ---------------- */
 let _sigSellers = '';
+/* ---------------- quién está trabajando ----------------
+   Tres cubetas, y el orden importa: nunca entró → entró pero no ha vendido → vendiendo.
+   Un vendedor que no ha vendido no dice nada por sí solo; lo que decide es si
+   llegó a abrir la app. Se toca cada cubeta para ver solo a esos. */
+function estadoVendedor(s) {
+  if (!s.ultimo_ingreso && !s.tutorial_seen) return 'nuevo';
+  return s.tickets > 0 ? 'vendiendo' : 'entro';
+}
+
+let _filtroAct = '';
+function pintaActividad(sellers) {
+  const vivos = sellers.filter(s => !s.deleted);
+  const n = e => vivos.filter(s => estadoVendedor(s) === e).length;
+  const cubetas = [
+    { k: 'vendiendo', t: 'Vendiendo', c: 'var(--ok, #34d399)', d: 'ya generaron boletos' },
+    { k: 'entro', t: 'Entraron, sin vender', c: '#f3d27a', d: 'abrieron la app pero no han vendido' },
+    { k: 'nuevo', t: 'Nunca han entrado', c: 'var(--danger)', d: 'jamás abrieron la boletera' },
+  ];
+  $('#sl-activity').innerHTML = cubetas.map(b => `
+    <button class="btn sm ghost sl-act${_filtroAct === b.k ? ' sel' : ''}" data-act="${b.k}" title="${b.d}"
+      style="width:auto;flex:none;padding:9px 13px;text-align:left">
+      <span style="font:800 17px 'Space Grotesk';color:${b.c}">${n(b.k)}</span>
+      <span style="font-size:11px;margin-left:6px">${b.t}</span>
+    </button>`).join('') +
+    `<div class="muted" style="font-size:10.5px;align-self:center;margin-left:2px">
+       de ${vivos.length} · toca para filtrar</div>`;
+  $$('.sl-act').forEach(b => b.onclick = () => {
+    _filtroAct = _filtroAct === b.dataset.act ? '' : b.dataset.act;
+    _sigSellers = ''; loadSellers();
+  });
+}
+
 async function loadSellers(silent) {
   const r = await API.get('/api/admin/sellers');
   populateAdminFilters(r.sellers);
@@ -581,12 +613,14 @@ async function loadSellers(silent) {
   if (silent && sig === _sigSellers) return;
   _sigSellers = sig;
   CACHE.sellers = r.sellers;
+  pintaActividad(r.sellers);
   const body = $('#sl-body');
   body.innerHTML = '';
   // filtro por admin (cliente): "" todos, "__none__" sin asignar, o el nombre
   const shown = r.sellers
     .filter(s => !fa || (fa === '__none__' ? !s.owner_admin_name : s.owner_admin_name === fa))
-    .filter(s => !q || s.name.toLowerCase().includes(q) || (s.code || '').includes(q));
+    .filter(s => !q || s.name.toLowerCase().includes(q) || (s.code || '').includes(q))
+    .filter(s => !_filtroAct || (!s.deleted && estadoVendedor(s) === _filtroAct));
   $('#sl-count').textContent = `${shown.length} vendedor(es)`;
   if (!shown.length) { body.innerHTML = '<tr><td colspan="7" class="muted" style="padding:16px">Ningún vendedor coincide</td></tr>'; return; }
   shown.forEach(s => {
@@ -594,6 +628,12 @@ async function loadSellers(silent) {
     if (s.deleted) tr.style.opacity = '.45';
     // en cada fila: quién es el admin de este vendedor (texto simple, claro)
     const adminLine = `<div class="muted" style="font-size:10px;margin-top:3px">Admin: <b style="color:var(--ember-soft)">${esc(s.owner_admin_name || 'sin asignar')}</b></div>`;
+    const est = estadoVendedor(s);
+    const marca = s.deleted ? '' : (est === 'nuevo'
+      ? '<div style="font-size:9.5px;color:var(--danger);margin-top:2px">● nunca ha entrado</div>'
+      : (est === 'entro'
+          ? `<div style="font-size:9.5px;color:#f3d27a;margin-top:2px" title="Entró ${esc(s.ultimo_ingreso || '')}">● entró, sin vender</div>`
+          : ''));
     // faltante = vendido - pagado. Cuando es 0 (y vendió), COMPLETADO.
     const falta = s.total - s.paid;
     const faltante = s.total <= 0
@@ -602,7 +642,7 @@ async function loadSellers(silent) {
           ? '<span class="badge active">COMPLETADO</span>'
           : `<b style="font-family:'Space Grotesk';color:var(--danger)">${fmtMoney(falta)}</b>`);
     tr.innerHTML = `
-      <td data-label="Vendedor" class="cell-name" style="font-weight:700"><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${adminLine}</td>
+      <td data-label="Vendedor" class="cell-name" style="font-weight:700"><span class="clip" title="${esc(s.name)}">${esc(s.name)}</span>${marca}${adminLine}</td>
       <td data-label="Código">${s.deleted ? '<span class="muted">—</span>'
           : s.code ? `<span class="codechip">${esc(s.code)}</span>`
           : '<span class="muted" style="font-size:10px" title="Solo su admin puede verlo">🔒 privado</span>'}</td>
@@ -614,7 +654,9 @@ async function loadSellers(silent) {
           : '<span class="badge used">Desactivado</span>'}</td>`;
     const td = document.createElement('td');
     td.setAttribute('data-label', '');
-    const mine = s.owner_admin_id == null || s.owner_admin_id === ME_ID;
+    // lo decide el servidor: incluye a los del equipo de un colíder, que son tuyos
+    // hacia abajo aunque figuren con otro dueño
+    const mine = s.can_manage;
     if (!s.deleted && mine) {
       // Con 30 vendedores, cuatro botones por fila es un muro. La acción del día a
       // día es COBRAR; editar, desactivar y eliminar casi no se usan, así que se

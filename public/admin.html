@@ -132,6 +132,10 @@
       <input class="input grow" id="sl-q" placeholder="⌕ Buscar vendedor…" style="padding:10px;font-size:14px">
       <select class="input" id="sl-filter-admin" style="padding:10px;font-size:14px;width:auto"><option value="">Admin: todos</option></select>
     </div>
+    <!-- Quién está trabajando de verdad. Con 42 vendedores, "no ha vendido" no
+         distingue al que batalla del que solo quería su boleto: hay que saber
+         primero si siquiera abrió la app. -->
+    <div class="row mt12" id="sl-activity" style="gap:7px;flex-wrap:wrap"></div>
     <div class="muted mt8" id="sl-count" style="font-size:11px"></div>
     <div class="tablewrap mt8">
       <table class="data"><thead><tr>
