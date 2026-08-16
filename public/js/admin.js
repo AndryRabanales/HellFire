@@ -783,8 +783,11 @@ function pintaCuenta(s, c) {
 
     <div class="card mt12" style="background:rgba(255,110,30,.07)">
       <div class="row" style="justify-content:space-between;align-items:baseline">
-        <div class="muted" style="font-size:12px">Vendi\u00f3 en boletos
-          <b style="color:var(--ember-soft)">${c.sold_tickets || 0}</b> boleto(s)</div>
+        <div class="muted" style="font-size:12px">Boletos vendidos</div>
+        <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${c.sold_tickets || 0}</div>
+      </div>
+      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
+        <div class="muted" style="font-size:12px">Vendi\u00f3 en boletos</div>
         <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${fmtMoney(c.sold)}</div>
       </div>
       <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
@@ -924,7 +927,7 @@ async function descargarEstadoCuenta(s, c) {
   await document.fonts.ready;
   const W = 900, pad = 46;
   const filas = c.payments.length || 1;
-  const H = 470 + filas * 96;
+  const H = 506 + filas * 96;   // 470 + el renglón de "Boletos vendidos" (36)
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const x = cv.getContext('2d');
@@ -947,25 +950,19 @@ async function descargarEstadoCuenta(s, c) {
   const falta = debeEntregar - c.cash_total;
 
   let y = 186;
-  const linea = (etq, val, color, grande, nota) => {
+  const linea = (etq, val, color, grande) => {
     x.fillStyle = 'rgba(246,241,231,.6)'; x.font = '600 15px Manrope, sans-serif';
     x.fillText(etq, pad, y);
-    if (nota) {
-      const wl = x.measureText(etq).width;
-      x.fillStyle = 'rgba(255,150,80,.75)'; x.font = '700 14px "Space Grotesk", monospace';
-      x.fillText(nota, pad + wl + 10, y);
-    }
     x.textAlign = 'right';
     x.fillStyle = color; x.font = `800 ${grande ? 26 : 20}px "Space Grotesk", monospace`;
     x.fillText(val, W - pad, y + (grande ? 3 : 0));
     x.textAlign = 'left';
     y += grande ? 46 : 36;
   };
-  // El número de boletos va junto al monto: es lo que el vendedor lleva en la
-  // cabeza. Si el dinero no le cuadra, lo primero que reclama es el conteo.
-  const nb = c.sold_tickets || 0;
-  linea('Vendió en boletos', fmtMoney(c.sold), '#f6f1e7', false,
-        `${nb} boleto${nb === 1 ? '' : 's'}`);
+  // Su propio renglón, antes del dinero: es el número que el vendedor lleva en la
+  // cabeza, y si el monto no le cuadra es lo primero contra lo que compara.
+  linea('Boletos vendidos', String(c.sold_tickets || 0), '#f6f1e7');
+  linea('Vendió en boletos', fmtMoney(c.sold), '#f6f1e7');
   linea(`Su comisión (${c.commission_pct}%)`, '− ' + fmtMoney(comisionTotal), '#f3d27a');
   x.strokeStyle = 'rgba(255,120,40,.3)'; x.lineWidth = 1;
   x.beginPath(); x.moveTo(pad, y - 22); x.lineTo(W - pad, y - 22); x.stroke();
