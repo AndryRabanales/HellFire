@@ -2010,6 +2010,13 @@ def vendido_cents(db, sid):
     return db.execute("""SELECT COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS c
                          FROM tickets WHERE seller_id=?""", (sid,)).fetchone()["c"]
 
+def boletos_de(db, sid):
+    """Cuántos boletos lleva vendidos, sin contar los anulados. El monto solo no le
+    dice nada al vendedor: "$2,575" no se compara con nada, "17 boletos" sí — es lo
+    que él sabe que hizo y con lo que reclama si no le cuadra."""
+    return db.execute("SELECT COUNT(*) AS n FROM tickets WHERE seller_id=? AND status!='void'",
+                      (sid,)).fetchone()["n"]
+
 def pagos_de(db, sid):
     return db.execute("SELECT * FROM seller_payments WHERE seller_id=? ORDER BY id",
                       (sid,)).fetchall()
@@ -2036,7 +2043,8 @@ def estado_cuenta(db, sid):
         # calcula sobre la lista vieja→nueva y no cambia aunque después se invierta
         historial.append(_pago_publico(p, vendido - abonado, i))
     historial.reverse()          # el más reciente arriba
-    return {"sold": money(vendido), "settled_amount": money(abonado),
+    return {"sold": money(vendido), "sold_tickets": boletos_de(db, sid),
+            "settled_amount": money(abonado),
             "commission_total": money(com), "cash_total": money(efectivo),
             "balance": money(vendido - abonado),
             "settled": vendido > 0 and abonado >= vendido,
@@ -2150,6 +2158,8 @@ def export_seller_payments(sid):
 
     ws["A1"] = f"Estado de cuenta · {sel['name']}"; ws["A1"].font = titulo
     ws["A2"] = "Generado el " + now_dt().strftime("%d/%m/%Y %H:%M")
+    ws.cell(row=3, column=1, value="Boletos vendidos").font = etiqueta
+    ws.cell(row=3, column=2, value=c["sold_tickets"])
     resumen = [
         ("Vendió en boletos", c["sold"]),
         (f"Su comisión ({c['commission_pct']:g}%)", -comision_total),
