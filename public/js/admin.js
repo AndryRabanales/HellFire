@@ -443,7 +443,7 @@ async function loadExpenses(silent) {
     API.get('/api/admin/expenses'),
     API.get('/api/admin/summary').catch(() => null),
   ]);
-  const sig = JSON.stringify([g.total, g.paid, g.pending, g.expenses.map(e => [e.id, e.name, e.amount, e.account, e.status])]);
+  const sig = JSON.stringify([g.total, g.paid, g.pending, g.expenses.map(e => [e.id, e.name, e.amount, e.account, e.status, e.paid])]);
   if (silent && sig === _sigGastos) return;
   _sigGastos = sig;
   // tarjetas: pendiente (lo que se debe) destacado, pagado, total, y ganancia neta
@@ -453,7 +453,8 @@ async function loadExpenses(silent) {
     <div class="stat" style="border-color:rgba(232,112,106,.4)">
       <div class="sk">Se debe (pendiente)</div>
       <div class="sv" style="color:var(--danger)">${fmtMoney(g.pending)}</div></div>
-    <div class="stat"><div class="sk">Ya pagado</div><div class="sv">${fmtMoney(g.paid)}</div></div>
+    <div class="stat"><div class="sk">Ya pagado</div><div class="sv">${fmtMoney(g.paid)}</div>
+      <div class="muted" style="font-size:9px;margin-top:2px">incluye adelantos</div></div>
     <div class="stat"><div class="sk">Total de gastos</div><div class="sv">${fmtMoney(g.total)}</div></div>
     <div class="stat"><div class="sk">Ganancia neta</div>
       <div class="sv" style="color:${neta >= 0 ? 'var(--ok)' : 'var(--danger)'}">${fmtMoney(neta)}</div>
@@ -465,7 +466,7 @@ async function loadExpenses(silent) {
     $('#gx-byaccount').innerHTML = g.by_account.map(a => `
       <div class="row" style="justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,120,40,.1)">
         <div style="font:700 13px Manrope;min-width:100px">${esc(a.account)}</div>
-        <div class="muted" style="font-size:12px">puso <b style="color:var(--cream)">${fmtMoney(a.total)}</b></div>
+        <div class="muted" style="font-size:12px">lleva puesto <b style="color:var(--cream)">${fmtMoney(a.paid)}</b> de ${fmtMoney(a.total)}</div>
         <div>${a.pending > 0 ? `<span class="badge used">debe ${fmtMoney(a.pending)}</span>` : '<span class="badge active">al día</span>'}</div>
       </div>`).join('');
   } else bac.style.display = 'none';
@@ -476,11 +477,20 @@ async function loadExpenses(silent) {
   g.expenses.forEach(e => {
     const tr = document.createElement('tr');
     const pagado = e.status === 'pagado';
+    // el estado deja de ser sí/no: casi todo se va pagando en adelantos, y lo que
+    // hay que ver de un vistazo es cuánto falta, no una etiqueta que diga "pendiente"
+    // igual para el que no se ha tocado que para el que ya lleva el 80%
+    const estado = pagado
+      ? '<span class="badge active">Pagado</span>'
+      : (e.paid > 0
+          ? `<span class="badge used">Falta ${fmtMoney(e.pending)}</span>
+             <div class="muted" style="font-size:9.5px;margin-top:3px">abonado ${fmtMoney(e.paid)} de ${fmtMoney(e.amount)}</div>`
+          : '<span class="badge used">Pendiente</span>');
     tr.innerHTML = `
       <td data-label="Gasto" class="cell-name"><span class="clip" title="${esc(e.name)}">${esc(e.name)}</span></td>
       <td data-label="Monto" style="font-family:'Space Grotesk';font-weight:700">${fmtMoney(e.amount)}</td>
       <td data-label="Cuenta">${e.account ? esc(e.account) : '<span class="muted">—</span>'}</td>
-      <td data-label="Estado">${pagado ? '<span class="badge active">Pagado</span>' : '<span class="badge used">Pendiente</span>'}</td>`;
+      <td data-label="Estado">${estado}</td>`;
     const td = document.createElement('td');
     td.setAttribute('data-label', '');
     const mk = (label, fn, cls) => {
@@ -490,9 +500,9 @@ async function loadExpenses(silent) {
       b.textContent = label; b.onclick = fn;
       td.appendChild(b);
     };
-    mk(pagado ? 'Marcar pendiente' : 'Marcar pagado',
-       () => setExpenseStatus(e, pagado ? 'pendiente' : 'pagado'),
-       pagado ? 'ghost' : '');
+    if (!pagado) mk('Abonar', () => abonarGasto(e), '');
+    mk(pagado ? 'Marcar pendiente' : 'Ya se pagó todo',
+       () => setExpenseStatus(e, pagado ? 'pendiente' : 'pagado'), 'ghost');
     mk('Editar', () => editExpense(e));
     mk('Eliminar', () => deleteExpense(e), 'danger');
     tr.appendChild(td);
@@ -504,6 +514,38 @@ async function setExpenseStatus(e, status) {
   try { await API.put('/api/admin/expenses/' + e.id, { status }); loadExpenses(); }
   catch (err) { if (!guard(err)) toast(err.message); }
 }
+/* Un adelanto. Casi ningún gasto grande se paga de un golpe: del local de $15,000
+   se entregan $3,000 y el resto después. Sin esto había que mentirle al sistema
+   —marcarlo pagado o dejarlo en cero— y la cuenta de cuánto se debe dejaba de
+   servir justo cuando más se ocupa. */
+function abonarGasto(e) {
+  modal(`<div class="h1" style="font-size:18px">Abonar a ${esc(e.name)}</div>
+    <div class="muted mt8">Van <b style="color:var(--cream)">${fmtMoney(e.paid)}</b> de ${fmtMoney(e.amount)}.
+      Falta <b style="color:var(--danger)">${fmtMoney(e.pending)}</b>.</div>
+    <div class="label mt16">¿Cuánto entregaste ahora?</div>
+    <input class="input" id="ab-amount" type="number" min="0" step="0.01" inputmode="decimal"
+           placeholder="$" style="font-size:18px">
+    <div class="row mt8" style="gap:6px;flex-wrap:wrap">
+      <button class="btn sm ghost" id="ab-todo" style="width:auto;flex:none;padding:9px 13px">
+        Todo lo que falta (${fmtMoney(e.pending)})</button>
+    </div>
+    <div class="err mt8" id="ab-err"></div>
+    <div class="row mt16">
+      <button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
+      <button class="btn grow" id="ab-ok">Registrar abono</button>
+    </div>`);
+  $('#ab-todo').onclick = () => { $('#ab-amount').value = e.pending; };
+  $('#ab-amount').focus();
+  $('#ab-ok').onclick = async () => {
+    const v = parseFloat($('#ab-amount').value);
+    if (!(v > 0)) { $('#ab-err').textContent = 'Escribe cuánto entregaste'; return; }
+    try {
+      await API.post(`/api/admin/expenses/${e.id}/abono`, { amount: v });
+      closeModal(); toast(`Abono de ${fmtMoney(v)} registrado`); loadExpenses();
+    } catch (err) { if (!guard(err)) $('#ab-err').textContent = err.message; }
+  };
+}
+
 function editExpense(e) {
   modal(`<div class="h1" style="font-size:18px">Editar gasto</div>
     <div class="label mt12">Nombre</div><input class="input" id="ex-name" value="${esc(e.name)}">

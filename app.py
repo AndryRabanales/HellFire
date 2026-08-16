@@ -295,7 +295,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   name TEXT NOT NULL,             -- ej. Local, Alcohol, DJ, Seguridad
   amount_cents INTEGER NOT NULL DEFAULT 0,
   account TEXT,                   -- quién lo paga (Russel, Osmar, Andry, o libre)
-  status TEXT NOT NULL DEFAULT 'pendiente',   -- pendiente | pagado
+  status TEXT NOT NULL DEFAULT 'pendiente',   -- pendiente | pagado (se deriva de paid_cents)
+  paid_cents INTEGER NOT NULL DEFAULT 0,      -- cuánto se ha abonado (los adelantos)
   created_by TEXT,
   created_at TEXT NOT NULL
 );
@@ -466,6 +467,8 @@ def init_db():
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
         db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
                    "role TEXT NOT NULL DEFAULT 'admin'")
+        db.execute("ALTER TABLE expenses ADD COLUMN IF NOT EXISTS "
+                   "paid_cents INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
                    "needs_faculty INTEGER NOT NULL DEFAULT 1")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id INTEGER")
@@ -498,6 +501,9 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN es_lider INTEGER NOT NULL DEFAULT 0")
         if "ultimo_ingreso" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN ultimo_ingreso TEXT")
+        gcols = [r["name"] for r in db.execute("PRAGMA table_info(expenses)").fetchall()]
+        if "paid_cents" not in gcols:
+            db.execute("ALTER TABLE expenses ADD COLUMN paid_cents INTEGER NOT NULL DEFAULT 0")
         if "hidden" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
         ttcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
@@ -2570,27 +2576,43 @@ def get_audit():
 
 # ---- gastos de la fiesta (local, bebidas, DJ, etc.): cuánto se debe -------------
 
+def sana_gastos(db):
+    """Un gasto marcado 'pagado' de antes tiene que arrancar con su abono completo,
+    o el día que se despliegue esto todos los pagados aparecerían debiendo todo."""
+    db.execute("UPDATE expenses SET paid_cents=amount_cents "
+               "WHERE status='pagado' AND paid_cents<amount_cents")
+    db.execute("UPDATE expenses SET paid_cents=amount_cents WHERE paid_cents>amount_cents")
+
+def estado_gasto(amount, paid):
+    if paid >= amount and amount > 0:
+        return "pagado"
+    return "abonado" if paid > 0 else "pendiente"
+
 def expenses_summary(db):
     rows = db.execute("SELECT * FROM expenses ORDER BY id DESC").fetchall()
     total = paid = pending = 0
     by_account = {}
     for r in rows:
         c = r["amount_cents"] or 0
+        # lo abonado nunca puede pasarse del gasto: si alguien bajó el monto después
+        # de pagar de más, se topa aquí y no se inventa un saldo a favor
+        pc = min(r["paid_cents"] or 0, c)
         total += c
-        if r["status"] == "pagado":
-            paid += c
-        else:
-            pending += c
+        paid += pc
+        pending += c - pc
         acc = (r["account"] or "").strip() or "Sin asignar"
         b = by_account.setdefault(acc, {"total": 0, "paid": 0, "pending": 0})
         b["total"] += c
-        b["paid"] += c if r["status"] == "pagado" else 0
-        b["pending"] += c if r["status"] != "pagado" else 0
+        b["paid"] += pc
+        b["pending"] += c - pc
     accounts = [{"account": k, "total": money(v["total"]), "paid": money(v["paid"]),
                  "pending": money(v["pending"])}
                 for k, v in sorted(by_account.items(), key=lambda kv: -kv[1]["total"])]
     items = [{"id": r["id"], "name": r["name"], "amount": money(r["amount_cents"]),
-              "account": r["account"] or "", "status": r["status"],
+              "account": r["account"] or "",
+              "paid": money(min(r["paid_cents"] or 0, r["amount_cents"] or 0)),
+              "pending": money(max(0, (r["amount_cents"] or 0) - (r["paid_cents"] or 0))),
+              "status": estado_gasto(r["amount_cents"] or 0, r["paid_cents"] or 0),
               "created_at": r["created_at"]} for r in rows]
     return {"expenses": items, "total": money(total), "paid": money(paid),
             "pending": money(pending), "by_account": accounts}
@@ -2600,7 +2622,9 @@ def list_expenses():
     s = require_admin()
     if not s:
         return jsonify(error="sin sesión"), 401
-    return jsonify(**expenses_summary(get_db()))
+    db = get_db()
+    sana_gastos(db); db.commit()
+    return jsonify(**expenses_summary(db))
 
 @app.post("/api/admin/expenses")
 def create_expense():
@@ -2619,10 +2643,11 @@ def create_expense():
         return jsonify(error="El monto no puede ser negativo"), 400
     account = str(b.get("account", "")).strip()
     status = "pagado" if b.get("status") == "pagado" else "pendiente"
+    ya = cents if status == "pagado" else 0
     db = get_db()
-    db.execute("INSERT INTO expenses(name, amount_cents, account, status, created_by, created_at) "
-               "VALUES(?,?,?,?,?,?)",
-               (name, cents, account, status, s["admin"]["username"], now_iso()))
+    db.execute("INSERT INTO expenses(name, amount_cents, account, status, paid_cents, "
+               "created_by, created_at) VALUES(?,?,?,?,?,?,?)",
+               (name, cents, account, status, ya, s["admin"]["username"], now_iso()))
     audit(db, s["admin"]["username"], "gasto",
           f"Agregó gasto '{name}': ${cents/100:,.2f} ({status}{', ' + account if account else ''})")
     db.commit()
@@ -2648,8 +2673,16 @@ def edit_expense(eid):
     account = str(b.get("account", e["account"] or "")).strip()
     status = b.get("status", e["status"])
     status = "pagado" if status == "pagado" else "pendiente"
-    db.execute("UPDATE expenses SET name=?, amount_cents=?, account=?, status=? WHERE id=?",
-               (name, cents, account, status, eid))
+    # "Marcar pagado" salda lo que falte; quitar el pagado NO borra los abonos que
+    # de verdad se entregaron —eso sería perder dinero de la cuenta—, solo deja de
+    # darlo por liquidado. Y si bajan el monto, lo abonado se topa ahí.
+    ya = min(e["paid_cents"] or 0, cents)
+    if status == "pagado":
+        ya = cents
+    elif (e["paid_cents"] or 0) >= (e["amount_cents"] or 0) and e["status"] == "pagado":
+        ya = 0
+    db.execute("UPDATE expenses SET name=?, amount_cents=?, account=?, status=?, paid_cents=? "
+               "WHERE id=?", (name, cents, account, status, ya, eid))
     if status != e["status"]:
         audit(db, s["admin"]["username"], "gasto",
               f"Marcó '{name}' como {status}")
@@ -2657,6 +2690,41 @@ def edit_expense(eid):
         audit(db, s["admin"]["username"], "gasto", f"Editó gasto '{name}'")
     db.commit()
     return jsonify(ok=True)
+
+@app.post("/api/admin/expenses/<int:eid>/abono")
+def abonar_gasto(eid):
+    """Un adelanto: del local de $15,000 se entregaron $3,000. Lo que sigue debiendo
+    sale solo. Cada abono queda en Movimientos con quién y cuánto: es dinero que sale
+    de la bolsa y tiene que poder reconstruirse después."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    e = db.execute("SELECT * FROM expenses WHERE id=?", (eid,)).fetchone()
+    if not e:
+        return jsonify(error="no existe"), 404
+    try:
+        abono = int(round(float((request.json or {}).get("amount", 0)) * 100))
+    except (TypeError, ValueError):
+        return jsonify(error="Monto inválido"), 400
+    if abono == 0:
+        return jsonify(error="El abono no puede ser cero"), 400
+    ya = min(e["paid_cents"] or 0, e["amount_cents"] or 0)
+    nuevo = ya + abono
+    if nuevo < 0:
+        return jsonify(error="No puedes quitar más de lo que se ha abonado"), 400
+    if nuevo > (e["amount_cents"] or 0):
+        falta = ((e["amount_cents"] or 0) - ya) / 100
+        return jsonify(error=f"Se pasa del gasto. Falta ${falta:,.2f} por pagar"), 400
+    estado = "pagado" if nuevo >= (e["amount_cents"] or 0) and e["amount_cents"] else "pendiente"
+    db.execute("UPDATE expenses SET paid_cents=?, status=? WHERE id=?", (nuevo, estado, eid))
+    audit(db, s["admin"]["username"], "gasto",
+          (f"Abonó ${abono/100:,.2f} a '{e['name']}'" if abono > 0
+           else f"Corrigió ${-abono/100:,.2f} de lo abonado a '{e['name']}'")
+          + f" — lleva ${nuevo/100:,.2f} de ${(e['amount_cents'] or 0)/100:,.2f}")
+    db.commit()
+    return jsonify(ok=True, paid=money(nuevo),
+                   pending=money(max(0, (e["amount_cents"] or 0) - nuevo)))
 
 @app.delete("/api/admin/expenses/<int:eid>")
 def delete_expense(eid):
