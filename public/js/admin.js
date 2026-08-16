@@ -1261,13 +1261,32 @@ function renderPhases(types) {
     top.className = 'row'; top.style.justifyContent = 'space-between';
     top.innerHTML = `<div style="font:700 12px Manrope">${esc(g.name)}${vigente ? ' <span style="color:var(--ember-soft);font-size:9px">● VIGENTE</span>' : ''}</div>
       <div class="muted" style="font-size:11px">desde ${esc(g.starts_on)}</div>`;
+    // Editar va PRIMERO y borrar detrás de un "¿seguro?": la ✕ estaba sola y sin
+    // aviso, así que quien quería cambiar un precio terminaba borrando la fase —y no
+    // había forma de deshacerlo salvo teclearla otra vez completa.
+    const ed = document.createElement('button');
+    ed.className = 'btn sm ghost';
+    ed.style.cssText = 'width:auto;flex:none;padding:5px 10px;font-size:11px;margin-left:auto;margin-right:6px';
+    ed.textContent = 'Editar';
+    ed.onclick = () => editarFase(g, types);
+    top.appendChild(ed);
     const del = document.createElement('button');
     del.className = 'iconbtn'; del.style.cssText = 'width:26px;height:26px;font-size:11px';
     del.title = 'Eliminar fase'; del.textContent = '✕';
     del.onclick = async () => {
+      const detalle = types.map(t => g.byType[t.id] != null
+        ? `${esc(t.name)} ${fmtMoney(g.byType[t.id] / 100)}` : null).filter(Boolean).join(' · ');
+      const ok = await confirmModal({
+        title: `Eliminar ${g.name}`, danger: true, okLabel: 'Eliminar la fase',
+        body: `Se borra la fase que arranca el <b style="color:var(--cream)">${esc(g.starts_on)}</b>
+          con todos sus precios:<br><span class="muted">${detalle || 'sin precios'}</span>
+          <br><br>Los boletos ya vendidos no cambian. Si solo quieres corregir un precio,
+          usa <b style="color:var(--cream)">Editar</b>.`,
+      });
+      if (!ok) return;
       try {
         await API.del(`/api/admin/phases-all?name=${encodeURIComponent(g.name)}&starts_on=${encodeURIComponent(g.starts_on)}`);
-        loadCatalogs();
+        toast('Fase eliminada'); loadCatalogs();
       } catch (e) { if (!guard(e)) toast(e.message); }
     };
     top.appendChild(del);
@@ -1308,6 +1327,43 @@ function renderPhases(types) {
         { name: $('#ph-name').value.trim(), starts_on: $('#ph-date').value, prices });
       loadCatalogs();
     } catch (e) { if (!guard(e)) $('#ph-err').textContent = e.message; }
+  };
+}
+
+/* Cambiar una fase que ya existe. El caso real: la fase se creó cuando el Ultra VIP
+   todavía no tenía precio, y ahora hay que ponérselo sin volver a escribir las otras
+   tres. En blanco = ese tipo no entra en la fase y se queda en su precio base. */
+function editarFase(g, types) {
+  modal(`<div class="h1" style="font-size:18px">Editar ${esc(g.name)}</div>
+    <div class="muted mt8" style="font-size:12px">Los boletos ya generados no cambian de precio: cada uno congeló el suyo al venderse.</div>
+    <div class="row mt16" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <label class="grow" style="font:600 11px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:4px;min-width:140px">Nombre
+        <input class="input" id="ef-name" value="${esc(g.name)}"></label>
+      <label style="font:600 11px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:4px">Arranca el
+        <input class="input" id="ef-date" type="date" value="${esc(g.starts_on)}" style="width:165px"></label>
+    </div>
+    <div class="label mt16">Precios de esta fase</div>
+    <div class="muted" style="font-size:11px;margin-bottom:8px">Deja en blanco el tipo que no entre en la fase.</div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      ${types.map(t => `<label style="font:600 11px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:4px;flex:1;min-width:110px">${esc(t.name)}${t.is_vip ? ' ★' : ''}
+        <input class="input ef-p" data-tid="${t.id}" type="number" min="0" step="1" inputmode="decimal"
+          placeholder="—" value="${g.byType[t.id] != null ? g.byType[t.id] / 100 : ''}"></label>`).join('')}
+    </div>
+    <div class="err mt8" id="ef-err"></div>
+    <div class="row mt16">
+      <button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
+      <button class="btn grow" id="ef-save">Guardar cambios</button>
+    </div>`);
+  $('#ef-save').onclick = async () => {
+    const prices = {};
+    $$('.ef-p').forEach(i => { prices[i.dataset.tid] = i.value.trim(); });
+    try {
+      await API.put('/api/admin/phases-all', {
+        orig_name: g.name, orig_starts_on: g.starts_on,
+        name: $('#ef-name').value.trim(), starts_on: $('#ef-date').value, prices,
+      });
+      closeModal(); toast('Fase actualizada'); loadCatalogs();
+    } catch (e) { if (!guard(e)) $('#ef-err').textContent = e.message; }
   };
 }
 

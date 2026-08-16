@@ -1794,6 +1794,81 @@ def create_phase_all():
     db.commit()
     return jsonify(ok=True)
 
+@app.put("/api/admin/phases-all")
+def edit_phase_all():
+    """Cambiar una fase que ya existe: su nombre, su fecha o cualquiera de sus precios.
+
+    Antes solo se podía borrar y volver a escribirla entera. Eso convertía "quiero
+    ponerle precio al Ultra VIP en la Fase 3" en un borrado seguido de teclear cuatro
+    precios de memoria — y bastaba con cerrar la ventana en medio para quedarse sin la
+    fase. Las fases son configuración pura: el boleto ya generado congeló su precio, así
+    que reescribirlas no toca ni un peso de lo vendido."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    b = request.json or {}
+    orig_name = str(b.get("orig_name", "")).strip()
+    orig_date = str(b.get("orig_starts_on", "")).strip()
+    name = str(b.get("name", "")).strip()
+    date = str(b.get("starts_on", "")).strip()
+    prices = b.get("prices") or {}
+    if not orig_name or not orig_date:
+        return jsonify(error="Falta identificar la fase"), 400
+    if not name or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        return jsonify(error="Falta el nombre o la fecha (AAAA-MM-DD) de la fase"), 400
+    db = get_db()
+    if not db.execute("SELECT 1 FROM price_phases WHERE name=? AND starts_on=?",
+                      (orig_name, orig_date)).fetchone():
+        return jsonify(error="Esa fase ya no existe"), 404
+    # si le cambian nombre y fecha, que no aterrice encima de otra fase existente
+    if (name, date) != (orig_name, orig_date) and db.execute(
+            "SELECT 1 FROM price_phases WHERE name=? AND starts_on=?", (name, date)).fetchone():
+        return jsonify(error=f"Ya existe una fase '{name}' que arranca el {date}"), 400
+    types = db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY id").fetchall()
+    parsed = []
+    for t in types:
+        raw = prices.get(str(t["id"]), prices.get(t["id"]))
+        if raw is None or str(raw).strip() == "":
+            continue      # en blanco = ese tipo no entra en la fase (se queda en su base)
+        try:
+            cents = int(round(float(raw) * 100))
+        except (TypeError, ValueError):
+            cents = 0
+        if cents <= 0:
+            return jsonify(error=f"Pon un precio válido para {t['name']}"), 400
+        parsed.append((t["id"], cents))
+    if not parsed:
+        return jsonify(error="Pon al menos un precio para la fase"), 400
+    antes = {r["type_id"]: r["price_cents"] for r in db.execute(
+        "SELECT type_id, price_cents FROM price_phases WHERE name=? AND starts_on=?",
+        (orig_name, orig_date)).fetchall()}
+    db.execute("DELETE FROM price_phases WHERE name=? AND starts_on=?", (orig_name, orig_date))
+    for tid, cents in parsed:
+        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on) "
+                   "VALUES(?,?,?,?)", (tid, name, cents, date))
+    # el movimiento dice QUÉ cambió, no solo que se editó: si mañana un precio no
+    # cuadra, la única forma de reconstruirlo es que quede escrito aquí
+    nombres = {t["id"]: t["name"] for t in types}
+    cambios = []
+    if name != orig_name:
+        cambios.append(f"nombre '{orig_name}' → '{name}'")
+    if date != orig_date:
+        cambios.append(f"fecha {orig_date} → {date}")
+    for tid, cents in parsed:
+        viejo = antes.get(tid)
+        if viejo is None:
+            cambios.append(f"{nombres.get(tid, tid)} ${cents/100:,.2f} (nuevo)")
+        elif viejo != cents:
+            cambios.append(f"{nombres.get(tid, tid)} ${viejo/100:,.2f} → ${cents/100:,.2f}")
+    for tid in antes:
+        if tid not in [x[0] for x in parsed]:
+            cambios.append(f"{nombres.get(tid, tid)} se quitó de la fase")
+    audit(db, s["admin"]["username"], "precio",
+          f"Editó la fase '{orig_name}' ({orig_date}): "
+          + (", ".join(cambios) if cambios else "sin cambios"))
+    db.commit()
+    return jsonify(ok=True)
+
 @app.delete("/api/admin/phases-all")
 def delete_phase_all():
     """Borra una fase global (todas las filas con ese nombre y fecha)."""
