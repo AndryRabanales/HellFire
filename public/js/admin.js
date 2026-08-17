@@ -1791,12 +1791,25 @@ let _fpBusy = {};
 async function renderFlyerPreview(variant) {
   if (_fpBusy[variant]) return;
   _fpBusy[variant] = true;
-  const st = FLY_ED[variant];
-  const ev = { ...EV, ['flyer_focus_' + variant]: st.focus, ['flyer_scale_' + variant]: st.scale };
-  const cv = await renderTicket(FLYER_META[variant].sample, ev, st.img);
-  st.ui.cv.width = cv.width; st.ui.cv.height = cv.height;
-  st.ui.cv.getContext('2d').drawImage(cv, 0, 0);
-  _fpBusy[variant] = false;
+  // El candado TIENE que soltarse pase lo que pase. Sin el finally, un solo error
+  // al dibujar —una fuente que no cargó, una imagen a medias— dejaba la bandera en
+  // true para siempre: a partir de ahí ese flyer ya no se volvía a pintar, y mover
+  // el zoom o cambiar la imagen no hacía nada. Se veía como "el botón no sirve".
+  try {
+    const st = FLY_ED[variant];
+    const ev = { ...EV, ['flyer_focus_' + variant]: st.focus, ['flyer_scale_' + variant]: st.scale };
+    const cv = await renderTicket(FLYER_META[variant].sample, ev, st.img);
+    st.ui.cv.width = cv.width; st.ui.cv.height = cv.height;
+    st.ui.cv.getContext('2d').drawImage(cv, 0, 0);
+  } catch (e) {
+    // y si falla, que se vea: un recuadro en blanco no dice nada
+    const st = FLY_ED[variant];
+    if (st && st.ui && st.ui.none)
+      st.ui.none.textContent = 'No se pudo dibujar la vista previa. Recarga la página.';
+    console.error('flyer', variant, e);
+  } finally {
+    _fpBusy[variant] = false;
+  }
 }
 
 /* Ajustes ya no tiene pestaña de Admins al lado: la lista de administradores vive
@@ -1919,16 +1932,13 @@ async function loadSettings() {
     st.scale = parseFloat(s['flyer_scale_' + v]) || 1;
     st.isNew = false;
     st.sync();
-    if (s['flyer_' + v]) {
-      st.img = await loadImg('/flyer?v=' + v + '&ts=' + Date.now());
-      st.ui.none.textContent = '';
-      st.ui.wrap.style.display = 'block';
-      renderFlyerPreview(v);
-    } else {
-      st.img = null;
-      st.ui.none.textContent = 'Sin imagen aún. Elige un archivo para ver la vista previa.';
-      st.ui.wrap.style.display = 'none';
-    }
+    // Antes, sin imagen propia el bloque entero se escondía: se apretaba la variante
+    // y no aparecía nada, ni el boleto. Ahora siempre se dibuja —con su imagen si la
+    // hay, y si no con el diseño pelón— para poder ver cómo va a salir.
+    st.img = s['flyer_' + v] ? await loadImg('/flyer?v=' + v + '&ts=' + Date.now()) : null;
+    st.ui.none.textContent = st.img ? '' : 'Sin imagen propia todavía: así se ve el boleto sin flyer.';
+    st.ui.wrap.style.display = 'block';
+    renderFlyerPreview(v);
   }
 }
 
