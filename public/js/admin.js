@@ -278,8 +278,11 @@ async function refreshFilterSources() {
   CACHE = { sellers: sl.sellers, types: tt.types, faculties: fc.faculties };
   $('#fl-seller').innerHTML = '<option value="">Vendedor: todos</option>' +
     sl.sellers.map(s => `<option value="${s.id}">${esc(s.name)}${s.deleted ? ' (eliminado)' : ''}</option>`).join('');
+  // "Cortesía" va como un tipo más aunque no lo sea: es como se busca. Solo aparece
+  // aquí, en el panel del dueño — los vendedores nunca ven un boleto de invitado.
   $('#fl-type').innerHTML = '<option value="">Tipo: todos</option>' +
-    tt.types.map(t => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
+    tt.types.map(t => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('') +
+    '<option value="__cortesia__">Cortesía</option>';
   $('#fl-faculty').innerHTML = '<option value="">Facultad: todas</option>' +
     fc.faculties.map(f => `<option value="${esc(f.name)}">${esc(f.name)}</option>`).join('');
   populateAdminFilters(sl.sellers);
@@ -337,8 +340,10 @@ async function loadTicketsTable(silent) {
       <td data-label="Folio" style="font-family:'Space Grotesk';color:var(--ember-soft)">${esc(t.folio)}</td>
       <td data-label="Comprador" class="strike cell-name"><span class="clip" title="${esc(t.buyer_name)}">${esc(t.buyer_name)}</span></td>
       <td data-label="Facultad">${esc(t.faculty_name)}</td>
-      <td data-label="Tipo">${esc(t.type_name)}</td>
-      <td data-label="Precio" class="strike" style="font-family:'Space Grotesk'">${fmtMoney(t.price)}</td>
+      <td data-label="Tipo">${esc(t.type_name)}${t.es_cortesia
+          ? '<div style="font-size:9px;color:#f3d27a;margin-top:2px">★ CORTESÍA</div>' : ''}</td>
+      <td data-label="Precio" class="strike" style="font-family:'Space Grotesk'">${t.es_cortesia
+          ? '<span style="color:#f3d27a">Cortesía</span>' : fmtMoney(t.price)}</td>
       <td data-label="Vendedor">${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
       <td data-label="Fecha" class="muted">${esc(t.created_at)}</td>
       <td data-label="Estado">${estado}</td>`;

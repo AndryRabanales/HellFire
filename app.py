@@ -1611,13 +1611,17 @@ def admin_summary():
                    entered=tot["entered"] or 0, collected=money(paid), by_admin=admins,
                    soy_colider=bool(duenio), yo=s["admin"]["username"])
 
-def ticket_filters(prefix=""):
+def ticket_filters(prefix="", con_cortesias=False):
     """WHERE dinámico compartido por la tabla admin y la exportación (RF-93).
-    prefix: alias de la tabla tickets cuando la consulta usa JOIN (ej. "t.")."""
+    prefix: alias de la tabla tickets cuando la consulta usa JOIN (ej. "t.").
+
+    con_cortesias: los boletos de invitado siguen fuera de todo por defecto —esa
+    regla es la que los hace invisibles—, pero la pestaña Boletos del dueño ahora
+    los muestra a propósito, con "Cortesía" donde va el precio. La exportación NO
+    los lleva: ese archivo es el registro del dinero, y un invitado no pagó."""
     a = request.args
     p = prefix
-    # los boletos de invitados nunca aparecen en el listado ni en la exportación
-    where, params = [f"{p}{NOT_GUEST}"], []
+    where, params = [f"({p}{NOT_GUEST}" + (f" OR {p}es_cortesia=1)" if con_cortesias else ")")], []
     if a.get("admin"):   # boletos de un admin: los de SUS vendedores + los que él generó
         if a["admin"] == "__none__":
             where.append(f"{p}seller_id IN (SELECT id FROM sellers WHERE owner_admin_name IS NULL)")
@@ -1632,7 +1636,13 @@ def ticket_filters(prefix=""):
     if a.get("faculty"):
         where.append(f"{p}faculty_name=?"); params.append(a["faculty"])
     if a.get("type"):
-        where.append(f"{p}type_name=?"); params.append(a["type"])
+        # "Cortesía" no es un tipo de boleto, es una forma de entrar: el invitado
+        # puede ser VIP o Ultra VIP. Pero en el filtro se busca como si lo fuera,
+        # porque es como se piensa al buscarlo: "enséñame las cortesías".
+        if a["type"] == "__cortesia__":
+            where.append(f"{p}es_cortesia=1")
+        else:
+            where.append(f"{p}type_name=? AND {p}es_cortesia=0"); params.append(a["type"])
     if a.get("q"):
         where.append(f"({p}buyer_name {LIKE} ? OR {p}folio {LIKE} ?)")
         params += [f"%{a['q']}%", f"%{a['q']}%"]
@@ -1644,13 +1654,11 @@ def admin_tickets():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    where, params = ticket_filters("t.")
-    # Las cortesías tienen su propia pestaña: aquí estorban. No pagaron, así que
-    # mezcladas con la venta inflan el conteo de boletos y no cuadran con el dinero.
-    where += (" AND " if where else " WHERE ") + "t.es_cortesia=0"
     duenio = mi_ambito(s)
+    where, params = ticket_filters("t.", con_cortesias=not duenio)
     if duenio:
-        # el colíder ve boletos, pero solo los de su grupo
+        # el colíder ve boletos, pero solo los de su grupo — y las cortesías son del
+        # dueño del evento, así que ni de reojo (con_cortesias ya lo dejó fuera)
         where += (" AND " if where else " WHERE ") + "s.owner_admin_id=?"
         params = list(params) + [duenio]
     rows = db.execute(
