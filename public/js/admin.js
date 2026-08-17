@@ -272,10 +272,15 @@ document.addEventListener('click', e => {
 
 /* ---------------- boletos ---------------- */
 async function refreshFilterSources() {
-  const [sl, tt, fc] = await Promise.all([
+  // allSettled y no all: si una de las tres falla, las otras dos igual se llenan.
+  // Con all, un tropiezo en cualquiera dejaba los TRES desplegables vacíos.
+  const res = await Promise.allSettled([
     API.get('/api/admin/sellers'), API.get('/api/admin/ticket-types'), API.get('/api/admin/faculties'),
   ]);
-  CACHE = { sellers: sl.sellers, types: tt.types, faculties: fc.faculties };
+  const dato = (i, llave) => res[i].status === 'fulfilled'
+    ? (res[i].value[llave] || []) : CACHE[llave];   // la que falla conserva lo que ya había
+  CACHE = { sellers: dato(0, 'sellers'), types: dato(1, 'types'), faculties: dato(2, 'faculties') };
+  const sl = { sellers: CACHE.sellers }, tt = { types: CACHE.types }, fc = { faculties: CACHE.faculties };
   $('#fl-seller').innerHTML = '<option value="">Vendedor: todos</option>' +
     sl.sellers.map(s => `<option value="${s.id}">${esc(s.name)}${s.deleted ? ' (eliminado)' : ''}</option>`).join('');
   // "Cortesía" va como un tipo más aunque no lo sea: es como se busca. Solo aparece
@@ -313,7 +318,12 @@ function filterQS() {
 }
 
 async function loadTicketsTab() {
-  if (!CACHE.sellers.length) await refreshFilterSources();
+  // Se llenan SIEMPRE. Antes se saltaba este paso "si ya hay vendedores en CACHE",
+  // pero CACHE también lo llena la pestaña Vendedores —y la actualización en vivo,
+  // sola—. Bastaba con haber pasado por Vendedores una vez para que al abrir Boletos
+  // los tres desplegables se quedaran con una sola opción: "todos". El botón se veía
+  // roto sin estarlo: nunca le habían puesto qué mostrar.
+  await refreshFilterSources();
   await loadTicketsTable();
 }
 
