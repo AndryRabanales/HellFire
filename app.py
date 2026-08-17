@@ -245,6 +245,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   group_id INTEGER,             -- si el boleto es parte de un grupo (5 o 10), su id
   phase_name TEXT,               -- fase de precio vigente al generar (congelada), para el boleto
   group_size INTEGER,            -- 5 o 10 si es de grupo (congelado)
+  es_representante INTEGER NOT NULL DEFAULT 0,  -- su boleto reclama la botella en barra
   normal_price_cents INTEGER,    -- precio individual antes del descuento de grupo (congelado, solo grupos)
   client_ref TEXT                -- id que manda la boletera para no duplicar si reintenta
 );
@@ -474,6 +475,8 @@ def init_db():
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phase_name TEXT")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_size INTEGER")
+        db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS "
+                   "es_representante INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS normal_price_cents INTEGER")
         db.execute("ALTER TABLE price_phases ADD COLUMN IF NOT EXISTS group_pct INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS client_ref TEXT")
@@ -520,6 +523,8 @@ def init_db():
             db.execute("ALTER TABLE tickets ADD COLUMN normal_price_cents INTEGER")
         if "client_ref" not in tkcols:
             db.execute("ALTER TABLE tickets ADD COLUMN client_ref TEXT")
+        if "es_representante" not in tkcols:
+            db.execute("ALTER TABLE tickets ADD COLUMN es_representante INTEGER NOT NULL DEFAULT 0")
         pcols = [r["name"] for r in db.execute("PRAGMA table_info(price_phases)").fetchall()]
         if "group_pct" not in pcols:
             db.execute("ALTER TABLE price_phases ADD COLUMN group_pct INTEGER")
@@ -1208,12 +1213,13 @@ def ticket_public(t):
             "created_at": t["created_at"], "used_at": t["used_at"],
             "seller_name": t["seller_name"], "seller_code": t["seller_code"],
             "phase_name": t["phase_name"], "group_size": t["group_size"],
+            "es_representante": bool(t["es_representante"]),
             "normal_price": money(t["normal_price_cents"]) if t["normal_price_cents"] else None}
 
 def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
                         seller_id, seller_name, seller_code, group_id=None,
                         phase_name=None, group_size=None, normal_price_cents=None,
-                        guest=False, client_ref=None):
+                        guest=False, client_ref=None, representante=False):
     """Inserta un boleto con folio único (reintenta si choca) y devuelve la fila.
     Compartido por la generación individual y la generación de grupos.
 
@@ -1244,12 +1250,12 @@ def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
                     (folio, qr_token, qr_payload, buyer_name, faculty_id, faculty_name,
                      type_id, type_name, type_is_vip, price_cents,
                      seller_id, seller_name, seller_code, status, created_at, group_id,
-                     phase_name, group_size, normal_price_cents, client_ref)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?, ?, ?, ?, ?, ?)""",
+                     phase_name, group_size, normal_price_cents, client_ref, es_representante)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?, ?, ?, ?, ?, ?, ?)""",
                     (folio, token, qr_payload, buyer, fac_id, fac_name, tt["id"], tt["name"],
                      tt["is_vip"], price_cents, seller_id, seller_name,
                      seller_code, now_iso(), group_id, phase_name, group_size,
-                     normal_price_cents, client_ref))
+                     normal_price_cents, client_ref, 1 if representante else 0))
                 db.commit()
                 break
             except IntegrityError:
@@ -1377,10 +1383,14 @@ def create_group():
     gid = gcur.lastrowid
     tickets_out = []
     for name in names:
+        # La marca va en SU boleto, no solo en el registro del grupo: el de la barra
+        # no tiene el panel abierto, tiene un boleto enfrente. Si los diez se ven
+        # iguales, cualquiera puede decir que él es el representante.
         t = _insert_ticket_row(db, name, None, "", tt, group_price,
                                seller_id, seller_name, seller_code, group_id=gid,
                                phase_name=phase_name, group_size=size,
-                               normal_price_cents=price_now)
+                               normal_price_cents=price_now,
+                               representante=(name == representative))
         if not t:
             return jsonify(error="No se pudo generar uno de los folios, intenta de nuevo"), 500
         tickets_out.append(ticket_public(t))

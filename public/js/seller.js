@@ -296,7 +296,7 @@ function renderGroupPriceBar() {
   $('#group-price-bar').innerHTML = `
     <div class="gp-line">Precio por boleto · grupo de ${GROUP_SIZE}</div>
     <div class="gp-price">${fmtMoney(g.group_price_cents / 100)}</div>
-    <div class="gp-save">Total ${fmtMoney(g.group_price_cents * GROUP_SIZE / 100)} · el representante se lleva la botella</div>`;
+    <div class="gp-save">Total ${fmtMoney(g.group_price_cents * GROUP_SIZE / 100)} · marca con ★ quién recoge la botella en la barra</div>`;
 }
 
 // cada integrante va en su propia tarjeta (borde + ficha numerada), para que
@@ -321,7 +321,8 @@ function renderGroupNames() {
     row.appendChild(col);
     if (GROUP_SIZE === 10) {
       const rep = document.createElement('button');
-      rep.className = 'repbtn'; rep.type = 'button'; rep.title = 'Marcar como representante (botella)';
+      rep.className = 'repbtn'; rep.type = 'button';
+      rep.title = 'Este recoge la botella en la barra';
       rep.textContent = '★';
       rep.addEventListener('click', () => {
         GROUP_REP_IDX = (GROUP_REP_IDX === i) ? null : i;
@@ -371,7 +372,7 @@ function showGroupResult(r) {
   $('#group-result-bar').innerHTML = `
     <div class="gp-line">¡Listo! Grupo de ${r.size} generado ✓</div>
     <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
-    <div class="gp-save">No olvides la botella para ${esc(r.representative || 'el representante')}</div>`;
+    <div class="gp-save">El boleto de ${esc(r.representative || 'el representante')} lleva la ★: con ese recoge la botella en la barra</div>`;
   $('#f-hint').textContent = 'Descarga cada boleto abajo';
   $('#btn-generate-group').classList.add('hidden');
   $('#btn-group-back').classList.add('hidden');
@@ -709,7 +710,17 @@ function panelDudas() {
     (conFac.length ? duda('¿Cuándo pido la facultad?',
          `Solo con <b>${conFac.join(' o ')}</b>. El sistema te la pide solo.`) : '') +
     duda('¿Cómo hago un grupo de 10?',
-         'Botón <b>Armar grupo de 10</b>: escribes los diez nombres y marcas con la <b>★</b> al representante, que se lleva <b>botella gratis</b>.') +
+         '<b>1.</b> Toca <b>Armar grupo de 10</b>.<br>' +
+         '<b>2.</b> Escribe los <b>diez nombres</b>, uno por persona.<br>' +
+         '<b>3.</b> Toca la <b>★</b> junto a uno: ese es el representante.<br>' +
+         '<b>4.</b> Genera. Salen los diez boletos de un jalón.') +
+    duda('¿Para qué es la ★ del grupo?',
+         'Marca <b>quién recoge la botella</b>. Su boleto sale con la estrella dorada: ' +
+         'el día de la fiesta él va a la barra, la enseña y ahí se la entregan.<br><br>' +
+         'Los otros nueve boletos no la traen, así que <b>nadie más puede reclamarla</b>. ' +
+         'Por eso el sistema no te deja generar el grupo hasta que marques a uno — y ' +
+         'conviene que sea alguien que <b>sí vaya a ir</b>.<br><br>' +
+         'El grupo <b>no</b> tiene descuento: los diez pagan precio normal y el beneficio es la botella.') +
     duda('Se me borró un boleto',
          'En <b>Ver mi historial</b> están todos. Búscalo por nombre y descárgalo otra vez.') +
     duda('¿Cuándo me pagan?',
@@ -760,7 +771,7 @@ const TOUR = [
   { sel: '#f-buyer',      txt: 'Aquí escribes el <b>nombre</b> de quien te compra.' },
   { sel: '#f-types',      txt: 'Aquí eliges el <b>tipo</b> de boleto.' },
   { sel: '#btn-generate', txt: 'Le das aquí y <b>el boleto se descarga solo</b>. Mándaselo por WhatsApp: esa imagen es su boleto.' },
-  { sel: '#btn-group-10', txt: 'Si son <b>10 juntos</b>, por aquí. Al representante le va botella gratis.' },
+  { sel: '#btn-group-10', txt: 'Si son <b>10 juntos</b>, por aquí. Marcas con <b>★</b> a uno y su boleto sirve para recoger la botella en la barra.' },
   { sel: '#f-phase-timer',txt: 'Este reloj dice cuándo <b>suben los precios</b>. Enséñaselo para cerrar la venta.' },
 ];
 

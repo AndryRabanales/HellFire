@@ -76,8 +76,15 @@ function ticketTypeLabel(ticket) {
 /* insignia del tipo de boleto: grupo y VIP llevan degradado (categorías especiales),
    UADY/Externo llevan un contorno más discreto (categorías regulares) */
 function ticketBadgeSpec(ticket) {
-  if (ticket.group_size)
+  if (ticket.group_size) {
+    // El representante lleva SU marca en el boleto, en dorado de botella. El de la
+    // barra no tiene el panel abierto: tiene un boleto enfrente, y si los diez se
+    // ven iguales cualquiera puede decir que él es.
+    if (ticket.es_representante)
+      return { text: '★ BOTELLA · REPRESENTANTE',
+               grad: ['#f3d27a', '#d9a53a'], textColor: '#3a1e00' };
     return { text: 'GRUPO ' + ticket.group_size, grad: ['#ff7a4d', '#c81e3a'], textColor: '#fff3ee' };
+  }
   if (ticket.type_is_vip) {
     // el nombre real, para que "Ultra VIP" no salga como "VIP". Y su color: el Ultra
     // va en esmeralda igual que en la guía del vendedor — si en el panel se anuncia
