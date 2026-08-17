@@ -57,6 +57,12 @@ function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, Number(v))); }
 /* Un flyer por tipo de boleto: uady, externo, vip, grupo10, ultravip. */
 const _flyerCache = { uady: undefined, externo: undefined, vip: undefined, grupo10: undefined, ultravip: undefined };
 function flyerVariantFor(ticket) {
+  // La cortesía manda sobre todo lo demás: su flyer no dice precio, y ponerle el de
+  // venta a un invitado le enseñaría cuánto "vale" algo que se le regaló.
+  if (ticket.es_cortesia) {
+    const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
+    return t === 'ultravip' ? 'cortesiaultra' : 'cortesiavip';
+  }
   if (ticket.group_size === 10) return 'grupo10';
   // se compara contra el NOMBRE del tipo, para que un tipo nuevo que cree el admin
   // (ej. "Ultra VIP") use su propio flyer en vez de caer en el de VIP o Externo
@@ -76,6 +82,9 @@ function ticketTypeLabel(ticket) {
 /* insignia del tipo de boleto: grupo y VIP llevan degradado (categorías especiales),
    UADY/Externo llevan un contorno más discreto (categorías regulares) */
 function ticketBadgeSpec(ticket) {
+  if (ticket.es_cortesia)
+    return { text: '★ CORTESÍA · ' + (ticket.type_name || 'INVITADO').toUpperCase(),
+             grad: ['#f3d27a', '#d9a53a'], textColor: '#3a1e00' };
   if (ticket.group_size) {
     // El representante lleva SU marca en el boleto, en dorado de botella. El de la
     // barra no tiene el panel abierto: tiene un boleto enfrente, y si los diez se
@@ -158,6 +167,14 @@ function medirNombre(ctx, texto, maxW, fuente) {
    para que el descuento se vea; el comprador es así testigo de lo que se registró. */
 function dibujarPrecio(ctx, ticket, x, y) {
   ctx.textAlign = 'left';
+  // El invitado no pagó: enseñarle el precio convierte un regalo en una factura, y
+  // además delata lo que se cobró afuera. Tampoco lleva fase: no compró en ninguna.
+  if (ticket.es_cortesia) {
+    ctx.font = '800 26px Manrope, sans-serif';
+    ctx.fillStyle = '#f3d27a';
+    ctx.fillText('CORTESÍA', x, y + 3);
+    return;
+  }
   const fase = ticket.phase_name;
   const pintaFase = (px) => {
     if (!fase) return;

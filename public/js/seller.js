@@ -771,7 +771,9 @@ const TOUR = [
   { sel: '#f-buyer',      txt: 'Aquí escribes el <b>nombre</b> de quien te compra.' },
   { sel: '#f-types',      txt: 'Aquí eliges el <b>tipo</b> de boleto.' },
   { sel: '#btn-generate', txt: 'Le das aquí y <b>el boleto se descarga solo</b>. Mándaselo por WhatsApp: esa imagen es su boleto.' },
-  { sel: '#btn-group-10', txt: 'Si son <b>10 juntos</b>, por aquí. Marcas con <b>★</b> a uno y su boleto sirve para recoger la botella en la barra.' },
+  // El tour es de un vistazo, no un manual: dice QUÉ hace el botón y qué hace la
+  // estrella, en un renglón. Lo demás vive en el "?", que se lee cuando hace falta.
+  { sel: '#btn-group-10', txt: '¿Van <b>10 juntos</b>? Aquí. Marca <b>★</b> a uno: ese recoge la botella.' },
   { sel: '#f-phase-timer',txt: 'Este reloj dice cuándo <b>suben los precios</b>. Enséñaselo para cerrar la venta.' },
 ];
 

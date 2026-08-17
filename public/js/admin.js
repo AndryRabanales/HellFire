@@ -44,7 +44,7 @@ async function enter(name) {
 const loaders = {
   resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
   vendedores: loadSellers, grupos: loadGroups, gastos: loadExpenses,
-  colideres: loadColideres,
+  colideres: loadColideres, cortesias: loadCortesias,
   catalogos: loadCatalogs, ajustes: loadAjustes,
 };
 
@@ -67,7 +67,8 @@ $('#tabs').addEventListener('click', e => {
    está activa, para no gastar de más. */
 let liveTimer = null;
 const LIVE = { resumen: loadSummary, boletos: loadTicketsTable,
-               movimientos: loadMovements, vendedores: loadSellers };
+               movimientos: loadMovements, vendedores: loadSellers,
+               cortesias: loadCortesias };   // la noche del evento se mira sola
 function startLive() {
   stopLive();
   const fn = LIVE[currentTab];
@@ -151,7 +152,7 @@ function aplicarColider(esCo) {
   document.body.classList.toggle('es-colider', !!esCo);
   // Se ESCONDE, no se borra: si en la misma pestaña entra después un admin, tiene que
   // recuperar su panel completo sin recargar. Borrar nodos deja el panel mutilado.
-  const VEDADAS = ['grupos', 'gastos', 'catalogos', 'ajustes'];
+  const VEDADAS = ['grupos', 'gastos', 'catalogos', 'ajustes', 'cortesias'];
   VEDADAS.forEach(t => {
     const b = document.querySelector(`#tabs .tab[data-tab="${t}"]`);
     if (b) b.classList.toggle('hidden', esCo);
@@ -220,6 +221,54 @@ async function loadColideres() {
       </details>
     </div>`).join('');
 }
+
+/* ---------------- cortesías: los invitados del día del evento ----------------
+   Aparte de la venta a propósito. Lo que se pregunta aquí no es cuánto entró, sino
+   quién ya llegó — y eso, mezclado entre cientos de boletos vendidos, no se ve. */
+let _ctFiltro = '', _sigCort = '';
+async function loadCortesias(silent) {
+  const r = await API.get('/api/admin/cortesias');
+  const q = (($('#ct-q') && $('#ct-q').value) || '').trim().toLowerCase();
+  const sig = JSON.stringify([_ctFiltro, q, r.cortesias.map(c => [c.id, c.used_at])]);
+  if (silent && sig === _sigCort) return;
+  _sigCort = sig;
+  $('#ct-stats').innerHTML = `
+    <div class="stat"><div class="sk">Invitados</div><div class="sv">${r.total}</div></div>
+    <div class="stat" style="border-color:rgba(126,226,168,.35)">
+      <div class="sk">Ya entraron</div>
+      <div class="sv" style="color:var(--ok,#7ee2a8)">${r.entraron}</div></div>
+    <div class="stat"><div class="sk">Faltan por llegar</div>
+      <div class="sv" style="color:var(--cream)">${r.faltan}</div></div>`;
+  const vistos = r.cortesias
+    .filter(c => !_ctFiltro || (_ctFiltro === 'si' ? c.entro : !c.entro))
+    .filter(c => !q || c.buyer_name.toLowerCase().includes(q));
+  $('#ct-list').innerHTML = vistos.length ? vistos.map(c => `
+    <div class="row" style="justify-content:space-between;align-items:center;gap:10px;
+        padding:11px 13px;border-radius:12px;background:rgba(255,255,255,.03);
+        border:1px solid ${c.entro ? 'rgba(126,226,168,.3)' : 'rgba(255,120,40,.14)'}">
+      <div style="min-width:0">
+        <div style="font:700 14px Manrope;color:var(--cream)">${esc(c.buyer_name)}</div>
+        <div class="muted" style="font-size:11px;margin-top:2px">${esc(c.type_name)} · cortesía</div>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        ${c.entro
+          ? `<span class="badge active">Entró</span>
+             <div class="muted" style="font-size:10.5px;margin-top:3px">${esc((c.used_at || '').slice(0, 16).replace('T', ' '))}</div>`
+          : '<span class="badge used">No ha llegado</span>'}
+      </div>
+    </div>`).join('')
+    : '<div class="muted" style="padding:16px">Ningún invitado coincide. Se generan con el código de invitados desde la boletera.</div>';
+}
+document.addEventListener('input', e => {
+  if (e.target && e.target.id === 'ct-q') { _sigCort = ''; loadCortesias(); }
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('.ct-f');
+  if (!b) return;
+  _ctFiltro = b.dataset.f;
+  $$('.ct-f').forEach(o => o.classList.toggle('sel', o === b));
+  _sigCort = ''; loadCortesias();
+});
 
 /* ---------------- boletos ---------------- */
 async function refreshFilterSources() {
@@ -1604,8 +1653,17 @@ const FLYER_META = {
               sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
                         faculty_name: '', type_name: 'Ultra VIP', type_is_vip: 1,
                         price: 600, phase_name: 'Fase 1' } },
+  cortesiavip: { label: '★ Flyer Cortesía VIP',
+                 sample: { folio: 'INV-0001', qr_payload: 'demo', buyer_name: 'Invitado Especial',
+                           faculty_name: '', type_name: 'VIP', type_is_vip: 1,
+                           price: 0, es_cortesia: true } },
+  cortesiaultra: { label: '★ Flyer Cortesía Ultra VIP',
+                   sample: { folio: 'INV-0001', qr_payload: 'demo', buyer_name: 'Invitado Especial',
+                             faculty_name: '', type_name: 'Ultra VIP', type_is_vip: 1,
+                             price: 0, es_cortesia: true } },
 };
-const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip'];
+const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip',
+                        'cortesiavip', 'cortesiaultra'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
 const FLY_ED = {};
 for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null };

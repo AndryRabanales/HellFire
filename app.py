@@ -246,6 +246,7 @@ CREATE TABLE IF NOT EXISTS tickets (
   phase_name TEXT,               -- fase de precio vigente al generar (congelada), para el boleto
   group_size INTEGER,            -- 5 o 10 si es de grupo (congelado)
   es_representante INTEGER NOT NULL DEFAULT 0,  -- su boleto reclama la botella en barra
+  es_cortesia INTEGER NOT NULL DEFAULT 0,       -- invitado especial: no dice precio, dice CORTESÍA
   normal_price_cents INTEGER,    -- precio individual antes del descuento de grupo (congelado, solo grupos)
   client_ref TEXT                -- id que manda la boletera para no duplicar si reintenta
 );
@@ -334,6 +335,10 @@ DEFAULT_SETTINGS = {
     "flyer_data_grupo10": "", "flyer_mime_grupo10": "", "flyer_focus_grupo10": "", "flyer_scale_grupo10": "",
     # Ultra VIP: en pruebas de diseño, aún no es un tipo de boleto vendible (oculto en las boleteras)
     "flyer_data_ultravip": "", "flyer_mime_ultravip": "", "flyer_focus_ultravip": "", "flyer_scale_ultravip": "",
+    "flyer_data_cortesiavip": "", "flyer_mime_cortesiavip": "",
+    "flyer_focus_cortesiavip": "", "flyer_scale_cortesiavip": "",
+    "flyer_data_cortesiaultra": "", "flyer_mime_cortesiaultra": "",
+    "flyer_focus_cortesiaultra": "", "flyer_scale_cortesiaultra": "",
     "seller_commission_pct": "10",   # % de comisión del vendedor sobre lo que entrega
     "max_login_attempts": "8",
     "lockout_minutes": "10",
@@ -347,13 +352,18 @@ def set_setting(db, key, value):
     db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
-FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip")
+FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip",
+                  "cortesiavip", "cortesiaultra")
 FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
-               "grupo10": "Grupo de 10", "ultravip": "Ultra VIP"}
+               "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
+               "cortesiavip": "Cortesía VIP", "cortesiaultra": "Cortesía Ultra VIP"}
 # cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
 # relacionado antes de caer al flyer legado de una sola imagen
 FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
-                   "ultravip": "vip"}
+                   "ultravip": "vip",
+                   # mientras no suban el suyo, la cortesía usa el flyer del tipo que
+                   # le toca: se ve bien desde el primer invitado, sin configurar nada
+                   "cortesiavip": "vip", "cortesiaultra": "ultravip"}
 # Ultra VIP es solo una prueba de diseño: no hay tipo de boleto que lo use todavía,
 # así que no aparece en las boleteras ni se puede vender aunque tenga flyer subido.
 
@@ -477,6 +487,8 @@ def init_db():
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_size INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS "
                    "es_representante INTEGER NOT NULL DEFAULT 0")
+        db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS "
+                   "es_cortesia INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS normal_price_cents INTEGER")
         db.execute("ALTER TABLE price_phases ADD COLUMN IF NOT EXISTS group_pct INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS client_ref TEXT")
@@ -525,12 +537,18 @@ def init_db():
             db.execute("ALTER TABLE tickets ADD COLUMN client_ref TEXT")
         if "es_representante" not in tkcols:
             db.execute("ALTER TABLE tickets ADD COLUMN es_representante INTEGER NOT NULL DEFAULT 0")
+        if "es_cortesia" not in tkcols:
+            db.execute("ALTER TABLE tickets ADD COLUMN es_cortesia INTEGER NOT NULL DEFAULT 0")
         pcols = [r["name"] for r in db.execute("PRAGMA table_info(price_phases)").fetchall()]
         if "group_pct" not in pcols:
             db.execute("ALTER TABLE price_phases ADD COLUMN group_pct INTEGER")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
+    db.commit()
+
+    # los invitados de antes de la marca se reconocen por su serie de folio (INV-)
+    db.execute("UPDATE tickets SET es_cortesia=1 WHERE es_cortesia=0 AND folio LIKE 'INV-%'")
     db.commit()
 
     # corrección de una sola vez: ningún pago puede exceder lo vendido (datos viejos)
@@ -1214,12 +1232,16 @@ def ticket_public(t):
             "seller_name": t["seller_name"], "seller_code": t["seller_code"],
             "phase_name": t["phase_name"], "group_size": t["group_size"],
             "es_representante": bool(t["es_representante"]),
+            "es_cortesia": bool(t["es_cortesia"]),
             "normal_price": money(t["normal_price_cents"]) if t["normal_price_cents"] else None}
 
 def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
                         seller_id, seller_name, seller_code, group_id=None,
                         phase_name=None, group_size=None, normal_price_cents=None,
                         guest=False, client_ref=None, representante=False):
+    # guest ya venía marcando la serie de folios (INV-); ahora también congela la
+    # cortesía en el boleto, para que el flyer y el precio no dependan de ir a
+    # buscar de qué vendedor salió
     """Inserta un boleto con folio único (reintenta si choca) y devuelve la fila.
     Compartido por la generación individual y la generación de grupos.
 
@@ -1250,12 +1272,14 @@ def _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_cents,
                     (folio, qr_token, qr_payload, buyer_name, faculty_id, faculty_name,
                      type_id, type_name, type_is_vip, price_cents,
                      seller_id, seller_name, seller_code, status, created_at, group_id,
-                     phase_name, group_size, normal_price_cents, client_ref, es_representante)
-                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?, ?, ?, ?, ?, ?, ?)""",
+                     phase_name, group_size, normal_price_cents, client_ref,
+                     es_representante, es_cortesia)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?, 'active', ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (folio, token, qr_payload, buyer, fac_id, fac_name, tt["id"], tt["name"],
                      tt["is_vip"], price_cents, seller_id, seller_name,
                      seller_code, now_iso(), group_id, phase_name, group_size,
-                     normal_price_cents, client_ref, 1 if representante else 0))
+                     normal_price_cents, client_ref,
+                     1 if representante else 0, 1 if guest else 0))
                 db.commit()
                 break
             except IntegrityError:
@@ -1621,6 +1645,9 @@ def admin_tickets():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     where, params = ticket_filters("t.")
+    # Las cortesías tienen su propia pestaña: aquí estorban. No pagaron, así que
+    # mezcladas con la venta inflan el conteo de boletos y no cuadran con el dinero.
+    where += (" AND " if where else " WHERE ") + "t.es_cortesia=0"
     duenio = mi_ambito(s)
     if duenio:
         # el colíder ve boletos, pero solo los de su grupo
@@ -2645,6 +2672,29 @@ def grupos_colider():
                            cobrado=money(r["paid_cents"] or 0)) for r in filas],
         ))
     return jsonify(grupos=salida, soy_colider=bool(duenio))
+
+@app.get("/api/admin/cortesias")
+def listar_cortesias():
+    """Los invitados especiales, aparte de la venta.
+
+    No entran en el resumen ni en la cobranza —no pagaron, no hay dinero que cuadrar—
+    pero el día del evento hacen falta a la vista: quién ya entró, quién no llegó y a
+    qué hora pasó. Eso no se puede saber desde la lista de boletos vendidos, que es
+    donde antes se mezclaban."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    rows = db.execute("SELECT * FROM tickets WHERE es_cortesia=1 AND status!='void' "
+                      "ORDER BY used_at IS NULL DESC, used_at DESC, id DESC").fetchall()
+    out = []
+    for t in rows:
+        d = ticket_public(t)
+        d["entro"] = bool(t["used_at"])
+        out.append(d)
+    return jsonify(cortesias=out, total=len(out),
+                   entraron=sum(1 for x in out if x["entro"]),
+                   faltan=sum(1 for x in out if not x["entro"]))
 
 # ---- auditoría, exportación, ajustes
 
