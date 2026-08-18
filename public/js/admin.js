@@ -238,6 +238,7 @@ async function loadCortesias(silent) {
     ['Invitados', r.total, 'var(--cream)'],
     ['Entraron', r.entraron, 'var(--ok,#7ee2a8)'],
     ['Faltan', r.faltan, 'var(--ember)'],
+    ...(r.anuladas ? [['Anuladas', r.anuladas, 'var(--danger)']] : []),
   ].map(([t, n, c]) => `<div style="flex:1;min-width:88px;padding:8px 11px;border-radius:11px;
       background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.14)">
       <div class="muted" style="font-size:9.5px;letter-spacing:.08em;text-transform:uppercase">${t}</div>
@@ -256,29 +257,67 @@ async function loadCortesias(silent) {
     const fila = document.createElement('div');
     fila.className = 'row';
     fila.style.cssText = 'justify-content:space-between;align-items:center;gap:8px;'
-      + 'padding:8px 11px;border-radius:11px;background:rgba(255,255,255,.03);border:1px solid '
-      + (c.entro ? 'rgba(126,226,168,.28)' : 'rgba(255,120,40,.13)');
+      + 'padding:8px 11px;border-radius:11px;'
+      + (c.anulada
+          ? 'background:rgba(255,255,255,.02);opacity:.62;border:1px dashed rgba(232,112,106,.35)'
+          : 'background:rgba(255,255,255,.03);border:1px solid '
+            + (c.entro ? 'rgba(126,226,168,.28)' : 'rgba(255,120,40,.13)'));
+    const nota = c.anulada
+      ? (c.void_reason ? ' · ' + esc(c.void_reason) : '')
+      : (c.entro ? ' · entró ' + esc((c.used_at || '').slice(11, 16)) + ' h' : '');
     fila.innerHTML = `<div style="min-width:0;flex:1">
-        <div style="font:700 13px Manrope;color:var(--cream)" class="clip">${esc(c.buyer_name)}</div>
-        <div style="font-size:10px;margin-top:1px;color:${tonoDe(c).tinta}">${
-          estrellaDe(c)}${esc(c.type_name)}<span class="muted">${
-          c.entro ? ' · entró ' + esc((c.used_at || '').slice(11, 16)) + ' h' : ''}</span></div>
+        <div class="clip" style="font:700 13px Manrope;color:var(--cream)${
+          c.anulada ? ';text-decoration:line-through' : ''}">${esc(c.buyer_name)}</div>
+        <div style="font-size:10px;margin-top:1px;color:${tonoDe(c).tinta}${
+          c.anulada ? ';text-decoration:line-through' : ''}">${
+          estrellaDe(c)}${esc(c.type_name)}<span class="muted" style="text-decoration:none">${nota}</span></div>
       </div>
-      <span class="badge ${c.entro ? 'active' : 'used'}" style="flex:none">${
-        c.entro ? 'Entró' : 'Falta'}</span>`;
-    // Descargar su boleto desde aquí: es donde están los invitados, y a alguno
-    // siempre hay que reenviárselo porque lo borró o cambió de teléfono.
-    const dl = document.createElement('button');
-    dl.className = 'iconbtn'; dl.style.flex = 'none';
-    dl.title = 'Descargar su boleto'; dl.innerHTML = DL_ICON;
-    dl.onclick = async () => {
-      dl.disabled = true;
-      try { await downloadTicket(c, EV); } catch (e) { toast(e.message); }
-      finally { dl.disabled = false; }
-    };
-    fila.appendChild(dl);
+      <span class="badge ${c.anulada ? 'void' : (c.entro ? 'active' : 'used')}" style="flex:none">${
+        c.anulada ? 'Anulada' : (c.entro ? 'Entró' : 'Falta')}</span>`;
+    // Una cortesía anulada ya no se descarga ni se vuelve a anular: se queda a la
+    // vista, tachada, como constancia de que se le quitó la entrada.
+    if (!c.anulada) {
+      // Descargar su boleto desde aquí: es donde están los invitados, y a alguno
+      // siempre hay que reenviárselo porque lo borró o cambió de teléfono.
+      const dl = document.createElement('button');
+      dl.className = 'iconbtn'; dl.style.flex = 'none';
+      dl.title = 'Descargar su boleto'; dl.innerHTML = DL_ICON;
+      dl.onclick = async () => {
+        dl.disabled = true;
+        try { await downloadTicket(c, EV); } catch (e) { toast(e.message); }
+        finally { dl.disabled = false; }
+      };
+      fila.appendChild(dl);
+      // Quitarle la entrada: con 100 cortesías repartidas, que una se filtre o que
+      // alguien ya no vaya es cuestión de tiempo.
+      const an = document.createElement('button');
+      an.className = 'iconbtn'; an.textContent = '✕'; an.style.flex = 'none';
+      an.title = 'Quitarle la entrada';
+      an.style.color = 'var(--danger)';
+      an.style.borderColor = 'rgba(232,112,106,.5)';
+      an.style.background = 'rgba(232,112,106,.08)';
+      an.onclick = () => anularCortesia(c);
+      fila.appendChild(an);
+    }
     cont.appendChild(fila);
   });
+}
+
+async function anularCortesia(c) {
+  const r = await confirmModal({
+    title: 'Quitarle la entrada', danger: true, okLabel: 'Anular la cortesía',
+    body: `<b style="color:var(--cream)">${esc(c.buyer_name)}</b> · ${esc(c.type_name)}
+           <br><br>Su QR deja de servir en la puerta al instante. Se queda en esta lista
+           <b>tachado</b>, para que conste que se le quitó.${c.entro
+             ? '<br><br><b style="color:var(--danger)">Ojo: esta persona YA entró a la fiesta.</b>' : ''}`,
+    withReason: true,
+  });
+  if (!r) return;
+  try {
+    await API.post(`/api/admin/tickets/${c.id}/void`, { reason: r.reason });
+    toast('Cortesía de ' + c.buyer_name + ' anulada');
+    _sigCort = ''; loadCortesias();
+  } catch (e) { if (!guard(e)) toast(e.message); }
 }
 document.addEventListener('input', e => {
   if (e.target && e.target.id === 'ct-q') { _sigCort = ''; loadCortesias(); }

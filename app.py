@@ -2739,16 +2739,23 @@ def listar_cortesias():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    rows = db.execute("SELECT * FROM tickets WHERE es_cortesia=1 AND status!='void' "
-                      "ORDER BY used_at IS NULL DESC, used_at DESC, id DESC").fetchall()
+    # Las anuladas SÍ salen en la lista, tachadas: si desaparecieran, quien la anuló
+    # no tendría cómo comprobar que lo hizo, y un invitado que llega a reclamar deja
+    # al de la puerta sin nada que enseñarle. Lo que no hacen es contar.
+    rows = db.execute("SELECT * FROM tickets WHERE es_cortesia=1 "
+                      "ORDER BY status='void', used_at IS NULL DESC, used_at DESC, id DESC").fetchall()
     out = []
     for t in rows:
         d = ticket_public(t)
-        d["entro"] = bool(t["used_at"])
+        d["entro"] = bool(t["used_at"]) and t["status"] != "void"
+        d["anulada"] = t["status"] == "void"
+        d["void_reason"] = t["void_reason"] or ""
         out.append(d)
-    return jsonify(cortesias=out, total=len(out),
-                   entraron=sum(1 for x in out if x["entro"]),
-                   faltan=sum(1 for x in out if not x["entro"]))
+    vivas = [x for x in out if not x["anulada"]]
+    return jsonify(cortesias=out, total=len(vivas),
+                   entraron=sum(1 for x in vivas if x["entro"]),
+                   faltan=sum(1 for x in vivas if not x["entro"]),
+                   anuladas=len(out) - len(vivas))
 
 # ---- auditoría, exportación, ajustes
 
