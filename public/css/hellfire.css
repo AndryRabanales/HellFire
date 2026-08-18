@@ -532,8 +532,15 @@ table.data tr.void td.strike{text-decoration:line-through}
   /* los campos de gasto viven dentro de su etiqueta: es ELLA la que debe ocupar
      todo el ancho para que se apilen uno por línea */
   .gx-f{width:100%!important;min-width:100%!important}
-  .gx-check{width:100%;justify-content:center}
-  #btn-gx-create{width:100%}
+  /* En el celular el alta cabe en dos renglones: el nombre arriba, y abajo monto,
+     quién paga, el check y el botón repartidos. Antes eran cinco filas apiladas y
+     la tabla —lo que de verdad se consulta— quedaba fuera de la pantalla. */
+  #gx-name{flex:1 1 100%!important;min-width:0!important}
+  #gx-amount{flex:1 1 22%!important;width:auto!important;min-width:0!important}
+  #gx-account{flex:1 1 28%!important;width:auto!important;min-width:0!important}
+  .gx-check{flex:1 1 24%!important;width:auto!important;justify-content:center;padding:9px 8px!important}
+  .gx-check span{font-size:11px}
+  #btn-gx-create{flex:1 1 18%!important;width:auto!important;padding:10px 8px!important}
 
   /* Los campos y botones traen padding en el atributo style del HTML, que le gana
      a la clase; por eso en el teléfono se veían enormes. Aquí se aprietan todos de

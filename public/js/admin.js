@@ -546,7 +546,7 @@ async function loadExpenses(silent) {
   // desglose por cuenta (quién puso cuánto)
   const bac = $('#gx-byaccount-card');
   if (g.by_account.length) {
-    bac.style.display = '';
+    bac.style.display = 'block';   // es un <details>, no un div
     $('#gx-byaccount').innerHTML = g.by_account.map(a => `
       <div class="row" style="justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,120,40,.1)">
         <div style="font:700 13px Manrope;min-width:100px">${esc(a.account)}</div>
