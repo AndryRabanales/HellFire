@@ -1434,7 +1434,7 @@ function renderPhases(types) {
     pr.style.cssText = 'margin-top:5px;display:flex;gap:12px;flex-wrap:wrap';
     pr.innerHTML = types.map(t => {
       const c = g.byType[t.id];
-      return `<span style="font:600 11px Manrope;color:var(--cream-60)">${esc(t.name)}${t.is_vip ? ' ★' : ''}: <b style="color:var(--ember-soft)">${c != null ? fmtMoney(c / 100) : '—'}</b></span>`;
+      return `<span style="font:600 11px Manrope;color:var(--cream-60)">${esc(t.name)}${estrellaDe({ type_name: t.name, type_is_vip: t.is_vip }) ? ' ★' : ''}: <b style="color:var(--ember-soft)">${c != null ? fmtMoney(c / 100) : '—'}</b></span>`;
     }).join('');
     row.appendChild(pr);
     list.appendChild(row);
@@ -1449,7 +1449,7 @@ function renderPhases(types) {
         <input class="input" id="ph-date" type="date" style="width:150px;padding:9px;font-size:12px"></label>
     </div>
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
-      ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)}${t.is_vip ? ' ★' : ''} — precio nuevo
+      ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)}${estrellaDe({ type_name: t.name, type_is_vip: t.is_vip }) ? ' ★' : ''} — precio nuevo
         <input class="input" type="number" min="1" placeholder="$" data-ph-price="${t.id}" style="width:110px;padding:9px;font-size:12px"></label>`).join('')}
       <button class="btn sm" id="btn-ph-create" style="width:auto">+ Fase</button>
     </div>`;
@@ -1484,7 +1484,7 @@ function editarFase(g, types) {
     <div class="label mt16">Precios de esta fase</div>
     <div class="muted" style="font-size:11px;margin-bottom:8px">Deja en blanco el tipo que no entre en la fase.</div>
     <div class="row" style="gap:8px;flex-wrap:wrap">
-      ${types.map(t => `<label style="font:600 11px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:4px;flex:1;min-width:110px">${esc(t.name)}${t.is_vip ? ' ★' : ''}
+      ${types.map(t => `<label style="font:600 11px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:4px;flex:1;min-width:110px">${esc(t.name)}${estrellaDe({ type_name: t.name, type_is_vip: t.is_vip }) ? ' ★' : ''}
         <input class="input ef-p" data-tid="${t.id}" type="number" min="0" step="1" inputmode="decimal"
           placeholder="—" value="${g.byType[t.id] != null ? g.byType[t.id] / 100 : ''}"></label>`).join('')}
     </div>
@@ -1516,7 +1516,9 @@ async function loadCatalogs() {
     const box = document.createElement('div');
     box.className = 'row';
     box.style.cssText = 'justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,120,40,.1)';
-    box.innerHTML = `<div style="font:700 14px Manrope">${esc(t.name)}${t.is_vip ? ' <span style="color:#f3d27a">★</span>' : ''}
+    const tk = { type_name: t.name, type_is_vip: t.is_vip };
+    box.innerHTML = `<div style="font:700 14px Manrope">${esc(t.name)}${
+      estrellaDe(tk) ? ` <span style="color:${tonoDe(tk).tinta}">★</span>` : ''}
         ${t.active ? '' : ' <span class="muted">(desactivado)</span>'}
         <div class="muted" style="font-size:10px;margin-top:2px">${t.needs_faculty ? 'pide facultad' : 'sin facultad'}${t.sold ? ' \u00b7 ' + t.sold + ' vendidos' : ''}</div></div>
       <div style="font:700 14px 'Space Grotesk'">${fmtMoney(t.current_price_cents / 100)}
@@ -1562,14 +1564,19 @@ async function loadCatalogs() {
 }
 
 function editType(t) {
-  // El nombre y el VIP son fijos, pero la facultad SÍ se puede corregir: solo UADY la
-  // necesita, y un tipo creado con la casilla marcada por error quedaba pidiéndola
-  // para siempre (y sacándola impresa en el boleto) sin forma de arreglarlo.
+  // La facultad y el VIP se pueden corregir después de crear el tipo. El VIP no
+  // estaba: si al crearlo se olvidaba la palomita —pasa, es una casilla chiquita
+  // junto al botón— el tipo se quedaba sin categoría alta para siempre, sin estrella
+  // y con la insignia sosa de un boleto general, cobrando precio de VIP.
   modal(`<div class="h1" style="font-size:18px">Editar · ${esc(t.name)}</div>
     <div class="muted" style="margin-top:4px">${esc(t.name)}${t.is_vip ? ' — VIP ★' : ''} · siempre disponible</div>
     <div class="label mt16">Precio ($)</div>
     <input class="input" id="et-price" type="number" min="1" value="${t.price_cents / 100}">
     <label class="row mt16" style="gap:8px;cursor:pointer">
+      <input type="checkbox" id="et-vip" ${t.is_vip ? 'checked' : ''}>
+      <span style="font:600 13px Manrope;color:var(--cream)">Categoría alta (VIP ★)</span></label>
+    <div class="muted" style="font-size:11px;margin-top:4px">Le pone su estrella y su color en el boleto, en la puerta y en el panel. El Ultra VIP también la lleva.</div>
+    <label class="row mt12" style="gap:8px;cursor:pointer">
       <input type="checkbox" id="et-fac" ${t.needs_faculty ? 'checked' : ''}>
       <span style="font:600 13px Manrope;color:var(--cream)">Pedir facultad al comprador</span></label>
     <div class="muted" style="font-size:11px;margin-top:4px">Solo los boletos UADY la llevan. Si la quitas, deja de preguntarse y deja de salir impresa en el boleto.</div>
@@ -1610,6 +1617,7 @@ function editType(t) {
       // el resto de propiedades quedan intactas en el backend
       await API.put('/api/admin/ticket-types/' + t.id,
                     { price, needs_faculty: $('#et-fac').checked,
+                      is_vip: $('#et-vip').checked,
                       active: $('#et-act').checked });
       closeModal(); toast('Guardado'); loadCatalogs();
     } catch (e) { if (!guard(e)) $('#et-err').textContent = e.message; }

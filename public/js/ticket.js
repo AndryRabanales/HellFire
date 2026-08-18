@@ -95,12 +95,21 @@ const TONO = {
    Se decide aquí una sola vez porque la usan el boleto, la tabla y el apartado de
    cortesías — si cada uno la pone por su cuenta, terminan sin coincidir. */
 function estrellaDe(ticket) {
-  return tonoDe(ticket) === TONO.general ? '' : '★ ';
+  return esCategoriaAlta(ticket) ? '★ ' : '';
 }
 
+function esUltra(ticket) {
+  return (ticket.type_name || '').toLowerCase().replace(/\s+/g, '') === 'ultravip';
+}
+/* Categoría alta = VIP marcado, O llamarse Ultra VIP. Lo segundo hace falta porque
+   el tipo se crea a mano y la casilla "VIP ★" se olvida: sin esto, un Ultra VIP sin
+   palomita salía con la insignia sosa de un boleto general, que es lo contrario de
+   lo que se cobró. */
+function esCategoriaAlta(ticket) {
+  return !!ticket.type_is_vip || esUltra(ticket);
+}
 function tonoDe(ticket) {
-  const n = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
-  if (n === 'ultravip') return TONO.ultra;
+  if (esUltra(ticket)) return TONO.ultra;
   return ticket.type_is_vip ? TONO.vip : TONO.general;
 }
 
@@ -124,7 +133,7 @@ function ticketBadgeSpec(ticket) {
                grad: ['#f3d27a', '#d9a53a'], textColor: '#3a1e00' };
     return { text: 'GRUPO ' + ticket.group_size, grad: ['#ff7a4d', '#c81e3a'], textColor: '#fff3ee' };
   }
-  if (ticket.type_is_vip) {
+  if (esCategoriaAlta(ticket)) {
     // el nombre real, para que "Ultra VIP" no salga como "VIP", y su color propio
     const t = tonoDe(ticket);
     return { text: '★ ' + (ticket.type_name || 'VIP').toUpperCase(),
