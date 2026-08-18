@@ -130,7 +130,14 @@ if IS_PG:
             self._conn = conn
         def execute(self, sql, params=()):
             cur = self._conn.cursor(row_factory=dict_row)
-            cur.execute(sql.replace("?", "%s"), params)
+            # Sin parámetros se ejecuta TAL CUAL. Si se manda una tupla vacía, psycopg
+            # igual busca marcadores y un '%' literal —el de un LIKE 'INV-%'— lo lee
+            # como marcador roto y tira el arranque entero. En SQLite eso no pasa, así
+            # que el error no se ve hasta que ya está en producción.
+            if params:
+                cur.execute(sql.replace("?", "%s"), params)
+            else:
+                cur.execute(sql)
             return _PGCursor(cur, self._conn)
         def executescript(self, script):
             # Se quitan los comentarios ANTES de partir por ";". Sin esto, un simple
@@ -550,7 +557,8 @@ def init_db():
     db.commit()
 
     # los invitados de antes de la marca se reconocen por su serie de folio (INV-)
-    db.execute("UPDATE tickets SET es_cortesia=1 WHERE es_cortesia=0 AND folio LIKE 'INV-%'")
+    db.execute("UPDATE tickets SET es_cortesia=1 WHERE es_cortesia=0 AND folio LIKE ?",
+               ("INV-%",))
     db.commit()
 
     # corrección de una sola vez: ningún pago puede exceder lo vendido (datos viejos)
