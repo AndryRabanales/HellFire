@@ -855,8 +855,18 @@ function pintaCuenta(s, c) {
         <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${fmtMoney(c.sold)}</div>
       </div>
       <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
-        <div class="muted" style="font-size:12px">Se queda de comisi\u00f3n (${c.commission_pct}%)</div>
+        <div class="muted" style="font-size:12px">Se queda de comisi\u00f3n (${c.commission_pct}%)${
+          c.can_edit ? ' <button id="cta-com" class="linkout" style="font-size:10.5px;padding:0">cambiar</button>' : ''}</div>
         <div style="font:700 15px 'Space Grotesk';color:#f3d27a">\u2212 ${fmtMoney(comisionTotal)}</div>
+      </div>
+      <!-- Los porcentajes de un toque, plegados. Se abren solo cuando se van a usar,
+           así la cuenta se sigue leyendo igual de limpia que antes. -->
+      <div id="cta-com-box" class="row" style="display:none;gap:5px;flex-wrap:wrap;margin-top:8px">
+        ${[0, 10, 15, 20, 25].map(n => `<button class="btn sm ghost cta-pct${
+          n === c.commission_pct ? ' sel' : ''}" data-pct="${n}"
+          style="width:auto;flex:none;padding:7px 11px;font-size:11.5px">${n}%</button>`).join('')}
+        <button class="btn sm ghost cta-pct" data-pct="" style="width:auto;flex:none;padding:7px 11px;font-size:11.5px"
+          title="Usar la comisi\u00f3n general">General</button>
       </div>
       <div style="border-top:1px solid rgba(255,120,40,.25);margin:10px 0 8px"></div>
       <div class="row" style="justify-content:space-between;align-items:baseline">
@@ -918,6 +928,25 @@ function pintaCuenta(s, c) {
     <div class="scrolly" style="max-height:34dvh;overflow:auto">${filas}</div>
     <button class="btn ghost mt16" onclick="closeModal()">Cerrar</button>`);
 
+  // cambiar la comisión sin salir de la cuenta: es donde se decide, viendo lo que
+  // lleva vendido. Lo ya cobrado no se recalcula — cada pago guardó su porcentaje.
+  const btnCom = $('#cta-com');
+  if (btnCom) {
+    btnCom.onclick = () => {
+      const box = $('#cta-com-box');
+      box.style.display = box.style.display === 'none' ? 'flex' : 'none';
+    };
+    $$('.cta-pct').forEach(b => b.onclick = async () => {
+      try {
+        await API.put('/api/admin/sellers/' + s.id, { commission_pct: b.dataset.pct });
+        const fresca = await API.get(`/api/admin/sellers/${s.id}/payments`);
+        toast(b.dataset.pct === '' ? 'Vuelve a la comisión general'
+                                   : `Comisión de ${s.name}: ${b.dataset.pct}%`);
+        pintaCuenta(s, fresca);
+        loadSellers();
+      } catch (e) { if (!guard(e)) toast(e.message); }
+    });
+  }
   const amt = $('#pg-amount');
   if (amt) {
     const recalcular = () => {

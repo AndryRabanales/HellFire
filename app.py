@@ -2494,9 +2494,13 @@ def edit_seller(sid):
                       (code, sid)).fetchone():
             return jsonify(error="Ese código ya está en uso"), 400
         db.execute("DELETE FROM sessions WHERE role='seller' AND user_id=?", (sid,))
-    db.execute("UPDATE sellers SET name=?, code=? WHERE id=?", (name, code, sid))
-    audit(db, s["admin"]["username"], "usuarios",
-          f"Editó vendedor '{sel['name']}' → nombre '{name}', código {code}")
+    # Solo se escribe en Movimientos si de verdad cambió algo. Ahora la comisión se
+    # toca desde la cuenta del vendedor sin pasar por este formulario, y anotar
+    # "editó vendedor" en cada ajuste de porcentaje llenaba el historial de ruido.
+    if name != sel["name"] or code != sel["code"]:
+        db.execute("UPDATE sellers SET name=?, code=? WHERE id=?", (name, code, sid))
+        audit(db, s["admin"]["username"], "usuarios",
+              f"Editó vendedor '{sel['name']}' → nombre '{name}', código {code}")
 
     # Comisión propia. Se manda "" (o null) para que vuelva a usar la general, y un
     # número —incluido el 0— para fijarla. Los pagos YA registrados no cambian:
