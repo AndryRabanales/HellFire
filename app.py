@@ -2230,6 +2230,10 @@ def list_seller_payments(sid):
     out["seller_name"] = sel["name"]
     # ver su propia cuenta sí (tiene que saber cuánto debe); cobrársela él, no
     out["can_edit"] = puede_cobrar(db, s, sel)[0]
+    # La comisión la fija un admin, punto. El colíder cobra a su equipo pero no
+    # decide cuánto gana nadie —ni ellos ni él—. Va aparte de can_edit porque él SÍ
+    # cobra: si se mezclaran, o se le quita el cobro o se le regala el sueldo.
+    out["can_commission"] = (not es_colider(s)) and puede_gestionar(db, s["admin"], sel)
     return jsonify(**out)
 
 @app.post("/api/admin/sellers/<int:sid>/payments")

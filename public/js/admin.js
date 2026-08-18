@@ -856,7 +856,7 @@ function pintaCuenta(s, c) {
       </div>
       <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
         <div class="muted" style="font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span>Se queda de comisi\u00f3n</span>${c.can_edit
+          <span>Se queda de comisi\u00f3n</span>${c.can_commission
             ? `<button id="cta-com" class="btn sm ghost" style="width:auto;flex:none;padding:5px 11px;font-size:12px;
                  border-color:rgba(243,210,122,.5);color:#f3d27a">${c.commission_pct}% \u25be</button>`
             : `<b style="color:var(--cream)">${c.commission_pct}%</b>`}</div>
@@ -869,7 +869,15 @@ function pintaCuenta(s, c) {
           n === c.commission_pct ? ' sel' : ''}" data-pct="${n}"
           style="width:auto;flex:none;padding:7px 11px;font-size:11.5px">${n}%</button>`).join('')}
         <button class="btn sm ghost cta-pct" data-pct="" style="width:auto;flex:none;padding:7px 11px;font-size:11.5px"
-          title="Usar la comisi\u00f3n general">General</button>
+          title="Volver a la comisi\u00f3n general del sistema">General</button>
+        <button class="btn sm ghost" id="cta-otro" style="width:auto;flex:none;padding:7px 11px;font-size:11.5px"
+          title="Escribir cualquier porcentaje">Otro…</button>
+      </div>
+      <!-- Para el porcentaje que no está en los atajos: 30, 12.5, el que sea. -->
+      <div id="cta-otro-box" class="row" style="display:none;gap:6px;align-items:center;margin-top:8px">
+        <input class="input" id="cta-otro-val" type="number" min="0" max="100" step="0.5"
+          inputmode="decimal" placeholder="%" style="width:92px;padding:8px;font-size:13px">
+        <button class="btn sm" id="cta-otro-ok" style="width:auto;flex:none;padding:8px 13px;font-size:12px">Aplicar</button>
       </div>
       <div style="border-top:1px solid rgba(255,120,40,.25);margin:10px 0 8px"></div>
       <div class="row" style="justify-content:space-between;align-items:baseline">
@@ -935,20 +943,33 @@ function pintaCuenta(s, c) {
   // lleva vendido. Lo ya cobrado no se recalcula — cada pago guardó su porcentaje.
   const btnCom = $('#cta-com');
   if (btnCom) {
-    btnCom.onclick = () => {
-      const box = $('#cta-com-box');
-      box.style.display = box.style.display === 'none' ? 'flex' : 'none';
-    };
-    $$('.cta-pct').forEach(b => b.onclick = async () => {
+    const aplicaPct = async (valor) => {
       try {
-        await API.put('/api/admin/sellers/' + s.id, { commission_pct: b.dataset.pct });
+        await API.put('/api/admin/sellers/' + s.id, { commission_pct: valor });
         const fresca = await API.get(`/api/admin/sellers/${s.id}/payments`);
-        toast(b.dataset.pct === '' ? 'Vuelve a la comisión general'
-                                   : `Comisión de ${s.name}: ${b.dataset.pct}%`);
+        toast(valor === '' ? `${s.name} vuelve a la comisión general`
+                           : `Comisión de ${s.name}: ${valor}%`);
         pintaCuenta(s, fresca);
         loadSellers();
       } catch (e) { if (!guard(e)) toast(e.message); }
-    });
+    };
+    btnCom.onclick = () => {
+      const box = $('#cta-com-box');
+      box.style.display = box.style.display === 'none' ? 'flex' : 'none';
+      if (box.style.display === 'none') $('#cta-otro-box').style.display = 'none';
+    };
+    $$('.cta-pct').forEach(b => b.onclick = () => aplicaPct(b.dataset.pct));
+    $('#cta-otro').onclick = () => {
+      const caja = $('#cta-otro-box');
+      caja.style.display = caja.style.display === 'none' ? 'flex' : 'none';
+      if (caja.style.display !== 'none') $('#cta-otro-val').focus();
+    };
+    $('#cta-otro-ok').onclick = () => {
+      const v = parseFloat($('#cta-otro-val').value);
+      if (!(v >= 0 && v <= 100)) { toast('Escribe un porcentaje entre 0 y 100'); return; }
+      aplicaPct(String(v));
+    };
+    $('#cta-otro-val').onkeydown = e => { if (e.key === 'Enter') $('#cta-otro-ok').click(); };
   }
   const amt = $('#pg-amount');
   if (amt) {
