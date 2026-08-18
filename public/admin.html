@@ -94,22 +94,21 @@
 
   <!-- ===== Cortesías: los invitados especiales, aparte de la venta ===== -->
   <section id="tab-cortesias" class="mt16 hidden">
-    <div class="stats" id="ct-stats"></div>
-    <div class="card mt16">
-      <div class="muted" style="font-size:11.5px;line-height:1.55">
-        Los invitados que entran con <b style="color:var(--cream)">cortesía</b>. Su boleto
-        no dice precio y no cuenta en el Resumen ni en la cobranza — no pagaron, no hay
-        nada que cobrar. Se generan con el <b style="color:var(--cream)">código de invitados</b>
-        desde la boletera, eligiendo VIP o Ultra VIP.
-      </div>
-      <div class="row mt12" style="gap:7px;flex-wrap:wrap">
-        <input class="input grow" id="ct-q" placeholder="⌕ Buscar invitado…" style="padding:10px;font-size:14px;min-width:150px">
-        <button class="btn sm ghost ct-f sel" data-f="" style="width:auto;flex:none;padding:10px 13px">Todos</button>
-        <button class="btn sm ghost ct-f" data-f="no" style="width:auto;flex:none;padding:10px 13px">No han llegado</button>
-        <button class="btn sm ghost ct-f" data-f="si" style="width:auto;flex:none;padding:10px 13px">Ya entraron</button>
-      </div>
+    <!-- Compacto a propósito: la noche del evento esto se mira en el celular, de pie
+         y con prisa. Cuantas menos veces haya que deslizar para ver quién falta, mejor. -->
+    <div class="row" id="ct-stats" style="gap:7px;flex-wrap:wrap"></div>
+    <input class="input mt8" id="ct-q" placeholder="⌕ Buscar invitado…" style="padding:9px;font-size:14px">
+    <!-- los tres en un solo renglón: si uno se cae abajo se gasta una fila entera
+         de pantalla, que en el celular es lo que menos sobra -->
+    <div class="row" style="gap:6px;margin-top:6px">
+      <button class="btn sm ghost ct-f sel grow" data-f="" style="padding:9px 4px;font-size:12px">Todos</button>
+      <button class="btn sm ghost ct-f grow" data-f="no" style="padding:9px 4px;font-size:12px">Faltan</button>
+      <button class="btn sm ghost ct-f grow" data-f="si" style="padding:9px 4px;font-size:12px">Entraron</button>
     </div>
-    <div id="ct-list" class="mt12" style="display:flex;flex-direction:column;gap:7px"></div>
+    <div class="muted mt8" style="font-size:10.5px;line-height:1.45">
+      No cuentan en el Resumen ni en la cobranza. Se generan con tu código de invitados desde la boletera.
+    </div>
+    <div id="ct-list" class="mt8" style="display:flex;flex-direction:column;gap:5px"></div>
   </section>
 
   <!-- ===== Boletos (RF-78/79) ===== -->

@@ -232,32 +232,52 @@ async function loadCortesias(silent) {
   const sig = JSON.stringify([_ctFiltro, q, r.cortesias.map(c => [c.id, c.used_at])]);
   if (silent && sig === _sigCort) return;
   _sigCort = sig;
-  $('#ct-stats').innerHTML = `
-    <div class="stat"><div class="sk">Invitados</div><div class="sv">${r.total}</div></div>
-    <div class="stat" style="border-color:rgba(126,226,168,.35)">
-      <div class="sk">Ya entraron</div>
-      <div class="sv" style="color:var(--ok,#7ee2a8)">${r.entraron}</div></div>
-    <div class="stat"><div class="sk">Faltan por llegar</div>
-      <div class="sv" style="color:var(--cream)">${r.faltan}</div></div>`;
+  // Tres contadores en una tira, no tres tarjetas: en el celular las tarjetas se
+  // apilan y hay que deslizar antes de ver al primer invitado.
+  $('#ct-stats').innerHTML = [
+    ['Invitados', r.total, 'var(--cream)'],
+    ['Entraron', r.entraron, 'var(--ok,#7ee2a8)'],
+    ['Faltan', r.faltan, 'var(--ember)'],
+  ].map(([t, n, c]) => `<div style="flex:1;min-width:88px;padding:8px 11px;border-radius:11px;
+      background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.14)">
+      <div class="muted" style="font-size:9.5px;letter-spacing:.08em;text-transform:uppercase">${t}</div>
+      <div style="font:800 19px 'Space Grotesk';color:${c};margin-top:1px">${n}</div>
+    </div>`).join('');
   const vistos = r.cortesias
     .filter(c => !_ctFiltro || (_ctFiltro === 'si' ? c.entro : !c.entro))
     .filter(c => !q || c.buyer_name.toLowerCase().includes(q));
-  $('#ct-list').innerHTML = vistos.length ? vistos.map(c => `
-    <div class="row" style="justify-content:space-between;align-items:center;gap:10px;
-        padding:11px 13px;border-radius:12px;background:rgba(255,255,255,.03);
-        border:1px solid ${c.entro ? 'rgba(126,226,168,.3)' : 'rgba(255,120,40,.14)'}">
-      <div style="min-width:0">
-        <div style="font:700 14px Manrope;color:var(--cream)">${esc(c.buyer_name)}</div>
-        <div class="muted" style="font-size:11px;margin-top:2px">${esc(c.type_name)} · cortesía</div>
+  const cont = $('#ct-list');
+  cont.innerHTML = '';
+  if (!vistos.length) {
+    cont.innerHTML = '<div class="muted" style="padding:14px;font-size:12px">Ningún invitado coincide.</div>';
+    return;
+  }
+  vistos.forEach(c => {
+    const fila = document.createElement('div');
+    fila.className = 'row';
+    fila.style.cssText = 'justify-content:space-between;align-items:center;gap:8px;'
+      + 'padding:8px 11px;border-radius:11px;background:rgba(255,255,255,.03);border:1px solid '
+      + (c.entro ? 'rgba(126,226,168,.28)' : 'rgba(255,120,40,.13)');
+    fila.innerHTML = `<div style="min-width:0;flex:1">
+        <div style="font:700 13px Manrope;color:var(--cream)" class="clip">${esc(c.buyer_name)}</div>
+        <div class="muted" style="font-size:10px;margin-top:1px">${esc(c.type_name)}${
+          c.entro ? ' · entró ' + esc((c.used_at || '').slice(11, 16)) + ' h' : ''}</div>
       </div>
-      <div style="text-align:right;white-space:nowrap">
-        ${c.entro
-          ? `<span class="badge active">Entró</span>
-             <div class="muted" style="font-size:10.5px;margin-top:3px">${esc((c.used_at || '').slice(0, 16).replace('T', ' '))}</div>`
-          : '<span class="badge used">No ha llegado</span>'}
-      </div>
-    </div>`).join('')
-    : '<div class="muted" style="padding:16px">Ningún invitado coincide. Se generan con el código de invitados desde la boletera.</div>';
+      <span class="badge ${c.entro ? 'active' : 'used'}" style="flex:none">${
+        c.entro ? 'Entró' : 'Falta'}</span>`;
+    // Descargar su boleto desde aquí: es donde están los invitados, y a alguno
+    // siempre hay que reenviárselo porque lo borró o cambió de teléfono.
+    const dl = document.createElement('button');
+    dl.className = 'iconbtn'; dl.style.flex = 'none';
+    dl.title = 'Descargar su boleto'; dl.innerHTML = DL_ICON;
+    dl.onclick = async () => {
+      dl.disabled = true;
+      try { await downloadTicket(c, EV); } catch (e) { toast(e.message); }
+      finally { dl.disabled = false; }
+    };
+    fila.appendChild(dl);
+    cont.appendChild(fila);
+  });
 }
 document.addEventListener('input', e => {
   if (e.target && e.target.id === 'ct-q') { _sigCort = ''; loadCortesias(); }
