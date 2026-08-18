@@ -91,6 +91,13 @@ const TONO = {
   vip:     { grad: ['#f3d27a', '#d9a53a'], texto: '#3a1e00', tinta: '#f3d27a' },
   ultra:   { grad: ['#bff5ff', '#38bdf8'], texto: '#04283a', tinta: '#9fe8ff' },
 };
+/* La estrella es de las categorías altas: VIP y Ultra VIP la llevan, la general no.
+   Se decide aquí una sola vez porque la usan el boleto, la tabla y el apartado de
+   cortesías — si cada uno la pone por su cuenta, terminan sin coincidir. */
+function estrellaDe(ticket) {
+  return tonoDe(ticket) === TONO.general ? '' : '★ ';
+}
+
 function tonoDe(ticket) {
   const n = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
   if (n === 'ultravip') return TONO.ultra;
@@ -105,8 +112,7 @@ function ticketBadgeSpec(ticket) {
     // barra el color es lo primero que se mira, y así un invitado general parecía
     // VIP. Cada cortesía lleva el color de lo que de verdad da.
     const t = tonoDe(ticket);
-    const estrella = t !== TONO.general ? '★ ' : '';
-    return { text: estrella + 'CORTESÍA · ' + (ticket.type_name || 'INVITADO').toUpperCase(),
+    return { text: estrellaDe(ticket) + 'CORTESÍA · ' + (ticket.type_name || 'INVITADO').toUpperCase(),
              grad: t.grad, textColor: t.texto };
   }
   if (ticket.group_size) {

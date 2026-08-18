@@ -260,8 +260,9 @@ async function loadCortesias(silent) {
       + (c.entro ? 'rgba(126,226,168,.28)' : 'rgba(255,120,40,.13)');
     fila.innerHTML = `<div style="min-width:0;flex:1">
         <div style="font:700 13px Manrope;color:var(--cream)" class="clip">${esc(c.buyer_name)}</div>
-        <div class="muted" style="font-size:10px;margin-top:1px">${esc(c.type_name)}${
-          c.entro ? ' · entró ' + esc((c.used_at || '').slice(11, 16)) + ' h' : ''}</div>
+        <div style="font-size:10px;margin-top:1px;color:${tonoDe(c).tinta}">${
+          estrellaDe(c)}${esc(c.type_name)}<span class="muted">${
+          c.entro ? ' · entró ' + esc((c.used_at || '').slice(11, 16)) + ' h' : ''}</span></div>
       </div>
       <span class="badge ${c.entro ? 'active' : 'used'}" style="flex:none">${
         c.entro ? 'Entró' : 'Falta'}</span>`;
@@ -371,9 +372,10 @@ async function loadTicketsTable(silent) {
       <td data-label="Comprador" class="strike cell-name"><span class="clip" title="${esc(t.buyer_name)}">${esc(t.buyer_name)}</span></td>
       <td data-label="Facultad">${esc(t.faculty_name)}</td>
       <td data-label="Tipo">${esc(t.type_name)}${t.es_cortesia
-          ? '<div style="font-size:9px;color:#f3d27a;margin-top:2px">★ CORTESÍA</div>' : ''}</td>
+          ? `<div style="font-size:9px;color:${tonoDe(t).tinta};margin-top:2px">${
+              estrellaDe(t)}CORTESÍA</div>` : ''}</td>
       <td data-label="Precio" class="strike" style="font-family:'Space Grotesk'">${t.es_cortesia
-          ? '<span style="color:#f3d27a">Cortesía</span>' : fmtMoney(t.price)}</td>
+          ? `<span style="color:${tonoDe(t).tinta}">Cortesía</span>` : fmtMoney(t.price)}</td>
       <td data-label="Vendedor">${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
       <td data-label="Fecha" class="muted">${esc(t.created_at)}</td>
       <td data-label="Estado">${estado}</td>`;
