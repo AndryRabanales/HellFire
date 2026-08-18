@@ -61,7 +61,8 @@ function flyerVariantFor(ticket) {
   // venta a un invitado le enseñaría cuánto "vale" algo que se le regaló.
   if (ticket.es_cortesia) {
     const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
-    return t === 'ultravip' ? 'cortesiaultra' : 'cortesiavip';
+    if (t === 'ultravip') return 'cortesiaultra';
+    return ticket.type_is_vip ? 'cortesiavip' : 'cortesiaexterno';
   }
   if (ticket.group_size === 10) return 'grupo10';
   // se compara contra el NOMBRE del tipo, para que un tipo nuevo que cree el admin

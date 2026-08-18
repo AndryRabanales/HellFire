@@ -335,6 +335,8 @@ DEFAULT_SETTINGS = {
     "flyer_data_grupo10": "", "flyer_mime_grupo10": "", "flyer_focus_grupo10": "", "flyer_scale_grupo10": "",
     # Ultra VIP: en pruebas de diseño, aún no es un tipo de boleto vendible (oculto en las boleteras)
     "flyer_data_ultravip": "", "flyer_mime_ultravip": "", "flyer_focus_ultravip": "", "flyer_scale_ultravip": "",
+    "flyer_data_cortesiaexterno": "", "flyer_mime_cortesiaexterno": "",
+    "flyer_focus_cortesiaexterno": "", "flyer_scale_cortesiaexterno": "",
     "flyer_data_cortesiavip": "", "flyer_mime_cortesiavip": "",
     "flyer_focus_cortesiavip": "", "flyer_scale_cortesiavip": "",
     "flyer_data_cortesiaultra": "", "flyer_mime_cortesiaultra": "",
@@ -353,17 +355,19 @@ def set_setting(db, key, value):
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
 FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip",
-                  "cortesiavip", "cortesiaultra")
+                  "cortesiaexterno", "cortesiavip", "cortesiaultra")
 FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
                "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
-               "cortesiavip": "Cortesía VIP", "cortesiaultra": "Cortesía Ultra VIP"}
+               "cortesiaexterno": "Cortesía Externo", "cortesiavip": "Cortesía VIP",
+               "cortesiaultra": "Cortesía Ultra VIP"}
 # cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
 # relacionado antes de caer al flyer legado de una sola imagen
 FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
                    "ultravip": "vip",
                    # mientras no suban el suyo, la cortesía usa el flyer del tipo que
                    # le toca: se ve bien desde el primer invitado, sin configurar nada
-                   "cortesiavip": "vip", "cortesiaultra": "ultravip"}
+                   "cortesiaexterno": "externo", "cortesiavip": "vip",
+                   "cortesiaultra": "ultravip"}
 # Ultra VIP es solo una prueba de diseño: no hay tipo de boleto que lo use todavía,
 # así que no aparece en las boleteras ni se puede vender aunque tenga flyer subido.
 

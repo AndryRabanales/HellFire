@@ -1668,6 +1668,10 @@ const FLYER_META = {
               sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
                         faculty_name: '', type_name: 'Ultra VIP', type_is_vip: 1,
                         price: 600, phase_name: 'Fase 1' } },
+  cortesiaexterno: { label: 'Flyer Cortesía Externo',
+                     sample: { folio: 'INV-0001', qr_payload: 'demo', buyer_name: 'Invitado Especial',
+                               faculty_name: '', type_name: 'Externo', type_is_vip: 0,
+                               price: 0, es_cortesia: true } },
   cortesiavip: { label: '★ Flyer Cortesía VIP',
                  sample: { folio: 'INV-0001', qr_payload: 'demo', buyer_name: 'Invitado Especial',
                            faculty_name: '', type_name: 'VIP', type_is_vip: 1,
@@ -1678,7 +1682,7 @@ const FLYER_META = {
                              price: 0, es_cortesia: true } },
 };
 const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip',
-                        'cortesiavip', 'cortesiaultra'];
+                        'cortesiaexterno', 'cortesiavip', 'cortesiaultra'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
 const FLY_ED = {};
 for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null };
