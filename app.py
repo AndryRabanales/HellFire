@@ -773,11 +773,35 @@ def init_db():
                     db.commit()
                 print("[OnFire] Vendedor de invitados (oculto) listo.")
             else:
-                db.execute("INSERT INTO sellers(name, code, hidden, created_at) VALUES(?,?,1,?)",
-                           (os.environ.get("GUEST_SELLER_NAME") or "Invitados",
-                            guest_code, now_iso()))
-                db.commit()
-                print("[OnFire] Vendedor de invitados (oculto) creado.")
+                # Cambiar GUEST_SELLER_CODE tiene que APAGAR el código anterior. Antes se
+                # creaba un segundo vendedor de invitados y el viejo seguía funcionando:
+                # el código se cambia justo cuando se filtró, así que dejarlo vivo anula
+                # el motivo del cambio. Se renombra el que ya existe —no se borra, sus
+                # boletos siguen colgando de él— y se cierran sus sesiones abiertas.
+                viejos = db.execute(
+                    "SELECT * FROM sellers WHERE hidden=1 AND deleted=0 ORDER BY id").fetchall()
+                if viejos:
+                    principal = viejos[0]
+                    db.execute("UPDATE sellers SET code=?, active=1 WHERE id=?",
+                               (guest_code, principal["id"]))
+                    db.execute("DELETE FROM sessions WHERE role='seller' AND user_id=?",
+                               (principal["id"],))
+                    for extra in viejos[1:]:
+                        # duplicados de versiones anteriores: sin código no se puede
+                        # entrar con ellos, pero sus boletos se conservan
+                        db.execute("UPDATE sellers SET code=NULL, active=0 WHERE id=?",
+                                   (extra["id"],))
+                        db.execute("DELETE FROM sessions WHERE role='seller' AND user_id=?",
+                                   (extra["id"],))
+                    db.commit()
+                    print(f"[OnFire] Código de invitados actualizado; el anterior quedó "
+                          f"apagado ({len(viejos) - 1} duplicado(s) desactivado(s)).")
+                else:
+                    db.execute("INSERT INTO sellers(name, code, hidden, created_at) VALUES(?,?,1,?)",
+                               (os.environ.get("GUEST_SELLER_NAME") or "Invitados",
+                                guest_code, now_iso()))
+                    db.commit()
+                    print("[OnFire] Vendedor de invitados (oculto) creado.")
 
     db.commit()
     db.close()
