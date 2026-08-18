@@ -855,8 +855,11 @@ function pintaCuenta(s, c) {
         <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${fmtMoney(c.sold)}</div>
       </div>
       <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
-        <div class="muted" style="font-size:12px">Se queda de comisi\u00f3n (${c.commission_pct}%)${
-          c.can_edit ? ' <button id="cta-com" class="linkout" style="font-size:10.5px;padding:0">cambiar</button>' : ''}</div>
+        <div class="muted" style="font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <span>Se queda de comisi\u00f3n</span>${c.can_edit
+            ? `<button id="cta-com" class="btn sm ghost" style="width:auto;flex:none;padding:5px 11px;font-size:12px;
+                 border-color:rgba(243,210,122,.5);color:#f3d27a">${c.commission_pct}% \u25be</button>`
+            : `<b style="color:var(--cream)">${c.commission_pct}%</b>`}</div>
         <div style="font:700 15px 'Space Grotesk';color:#f3d27a">\u2212 ${fmtMoney(comisionTotal)}</div>
       </div>
       <!-- Los porcentajes de un toque, plegados. Se abren solo cuando se van a usar,
