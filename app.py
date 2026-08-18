@@ -333,7 +333,7 @@ DEFAULT_SETTINGS = {
     "flyer_data_uady": "", "flyer_mime_uady": "", "flyer_focus_uady": "", "flyer_scale_uady": "",
     "flyer_data_externo": "", "flyer_mime_externo": "", "flyer_focus_externo": "", "flyer_scale_externo": "",
     "flyer_data_grupo10": "", "flyer_mime_grupo10": "", "flyer_focus_grupo10": "", "flyer_scale_grupo10": "",
-    # Ultra VIP: en pruebas de diseño, aún no es un tipo de boleto vendible (oculto en las boleteras)
+    # Ultra VIP: ya está a la venta como cualquier otro tipo
     "flyer_data_ultravip": "", "flyer_mime_ultravip": "", "flyer_focus_ultravip": "", "flyer_scale_ultravip": "",
     "flyer_data_cortesiaexterno": "", "flyer_mime_cortesiaexterno": "",
     "flyer_focus_cortesiaexterno": "", "flyer_scale_cortesiaexterno": "",
@@ -368,8 +368,6 @@ FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
                    # le toca: se ve bien desde el primer invitado, sin configurar nada
                    "cortesiaexterno": "externo", "cortesiavip": "vip",
                    "cortesiaultra": "ultravip"}
-# Ultra VIP es solo una prueba de diseño: no hay tipo de boleto que lo use todavía,
-# así que no aparece en las boleteras ni se puede vender aunque tenga flyer subido.
 
 def _flyer_chain(v):
     chain = [v]
@@ -1093,10 +1091,11 @@ def login_code():
     if not seller:
         record_attempt(db, key); db.commit()
         return jsonify(error=BAD), 401
-    if is_guest_seller(seller) and not guest_knock_ok(ip):
-        # primer toque del código de invitados: se rechaza como si fuera inválido.
-        # No cuenta como intento fallido, para que el dueño no se autobloquee.
-        return jsonify(error=BAD), 401
+    # El doble toque del código de invitados se quitó. Existía cuando sus boletos eran
+    # invisibles: si alguien adivinaba el código, los boletos gratis no aparecían en
+    # ningún lado. Ahora salen en Boletos, en el filtro Cortesía y en su apartado, y se
+    # pueden anular uno por uno — el problema se ve y se corrige, así que la molestia de
+    # teclearlo dos veces cada vez ya no compra nada.
     clear_attempts(db, key)
     token = create_session(db, "seller", seller["id"])
     # Se marca cada entrada. Sirve para lo que no se puede saber de otro modo: quién
@@ -1742,7 +1741,10 @@ def void_ticket(tid):
     if not reason:
         return jsonify(error="Escribe el motivo de la anulación"), 400
     t = db.execute("SELECT * FROM tickets WHERE id=?", (tid,)).fetchone()
-    if not t or ticket_is_guest(db, t):   # los de invitado no existen para el admin
+    # Las cortesías SÍ se anulan: con 100 repartidas, que una se filtre o que alguien
+    # falle es cuestión de tiempo, y el boleto tiene que poder cancelarse. Los demás
+    # boletos de invitado (los que no son cortesía) siguen sin existir para el admin.
+    if not t or (ticket_is_guest(db, t) and not t["es_cortesia"]):
         return jsonify(error="no existe"), 404
     if t["status"] == "void":
         return jsonify(error="Ya estaba anulado"), 400
