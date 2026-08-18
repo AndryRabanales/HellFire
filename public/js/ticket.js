@@ -80,12 +80,35 @@ function ticketTypeLabel(ticket) {
   return ticket.type_name || 'General';
 }
 
+/* Los tres colores de la casa, uno por categoría. Se declaran UNA vez porque los
+   usan la insignia y el precio: si cada quien elige el suyo, tarde o temprano un
+   boleto sale con la insignia de una categoría y el precio de otra.
+     general (UADY/Externo) → rojo
+     VIP                    → dorado
+     Ultra VIP              → agua, tipo diamante  */
+const TONO = {
+  general: { grad: ['#ff7a4d', '#c81e3a'], texto: '#fff3ee', tinta: '#ff8a5c' },
+  vip:     { grad: ['#f3d27a', '#d9a53a'], texto: '#3a1e00', tinta: '#f3d27a' },
+  ultra:   { grad: ['#bff5ff', '#38bdf8'], texto: '#04283a', tinta: '#9fe8ff' },
+};
+function tonoDe(ticket) {
+  const n = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
+  if (n === 'ultravip') return TONO.ultra;
+  return ticket.type_is_vip ? TONO.vip : TONO.general;
+}
+
 /* insignia del tipo de boleto: grupo y VIP llevan degradado (categorías especiales),
    UADY/Externo llevan un contorno más discreto (categorías regulares) */
 function ticketBadgeSpec(ticket) {
-  if (ticket.es_cortesia)
-    return { text: '★ CORTESÍA · ' + (ticket.type_name || 'INVITADO').toUpperCase(),
-             grad: ['#f3d27a', '#d9a53a'], textColor: '#3a1e00' };
+  if (ticket.es_cortesia) {
+    // Una cortesía de Externo salía DORADA como las de VIP: en la puerta y en la
+    // barra el color es lo primero que se mira, y así un invitado general parecía
+    // VIP. Cada cortesía lleva el color de lo que de verdad da.
+    const t = tonoDe(ticket);
+    const estrella = t !== TONO.general ? '★ ' : '';
+    return { text: estrella + 'CORTESÍA · ' + (ticket.type_name || 'INVITADO').toUpperCase(),
+             grad: t.grad, textColor: t.texto };
+  }
   if (ticket.group_size) {
     // El representante lleva SU marca en el boleto, en dorado de botella. El de la
     // barra no tiene el panel abierto: tiene un boleto enfrente, y si los diez se
@@ -96,13 +119,10 @@ function ticketBadgeSpec(ticket) {
     return { text: 'GRUPO ' + ticket.group_size, grad: ['#ff7a4d', '#c81e3a'], textColor: '#fff3ee' };
   }
   if (ticket.type_is_vip) {
-    // el nombre real, para que "Ultra VIP" no salga como "VIP". Y su color: el Ultra
-    // va en esmeralda igual que en la guía del vendedor — si en el panel se anuncia
-    // verde y el boleto sale dorado, no parece el mismo producto.
-    const esUltra = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '') === 'ultravip';
+    // el nombre real, para que "Ultra VIP" no salga como "VIP", y su color propio
+    const t = tonoDe(ticket);
     return { text: '★ ' + (ticket.type_name || 'VIP').toUpperCase(),
-             grad: esUltra ? ['#5eead4', '#0f9b74'] : ['#f3d27a', '#d9a53a'],
-             textColor: esUltra ? '#02241a' : '#3a1e00' };
+             grad: t.grad, textColor: t.texto };
   }
   return { text: ticketTypeLabel(ticket).toUpperCase(), ghost: true };
 }
@@ -172,7 +192,7 @@ function dibujarPrecio(ctx, ticket, x, y) {
   // además delata lo que se cobró afuera. Tampoco lleva fase: no compró en ninguna.
   if (ticket.es_cortesia) {
     ctx.font = '800 26px Manrope, sans-serif';
-    ctx.fillStyle = '#f3d27a';
+    ctx.fillStyle = tonoDe(ticket).tinta;   // el mismo color que su insignia
     ctx.fillText('CORTESÍA', x, y + 3);
     return;
   }
