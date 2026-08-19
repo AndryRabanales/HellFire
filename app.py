@@ -437,6 +437,32 @@ def effective_price(db, type_row):
         normal = None      # un "flash" más caro que lo normal no tacha nada
     return ph["price_cents"], ph["name"], normal
 
+def avisos_flash(db, parsed, date, tipos):
+    """Un flash que cuesta MÁS que la fase anterior no es una oferta: el que compró
+    ayer pagó menos. El sistema no lo prohíbe —puede haber una razón— pero lo dice,
+    porque en la pantalla los dos números se ven bien y el error solo aparece cuando
+    un comprador reclama."""
+    nombres = {t["id"]: t["name"] for t in tipos}
+    avisos = []
+    for tid, cents in parsed:
+        previa = db.execute("""SELECT price_cents FROM price_phases WHERE type_id=?
+                               AND starts_on<? AND es_flash=0
+                               ORDER BY starts_on DESC, id DESC LIMIT 1""",
+                            (tid, date)).fetchone()
+        base = db.execute("SELECT price_cents FROM ticket_types WHERE id=?", (tid,)).fetchone()
+        antes = previa["price_cents"] if previa else (base["price_cents"] if base else 0)
+        if antes and cents > antes:
+            avisos.append(f"{nombres.get(tid, tid)}: ${cents/100:,.0f} es MÁS caro que "
+                          f"antes del flash (${antes/100:,.0f})")
+        sig = db.execute("""SELECT price_cents FROM price_phases WHERE type_id=?
+                            AND starts_on>? AND es_flash=0
+                            ORDER BY starts_on ASC, id ASC LIMIT 1""",
+                         (tid, date)).fetchone()
+        if sig and cents >= sig["price_cents"]:
+            avisos.append(f"{nombres.get(tid, tid)}: ${cents/100:,.0f} no baja de su fase "
+                          f"(${sig['price_cents']/100:,.0f}), así que el boleto no llevará tachado")
+    return avisos
+
 def next_phase(db, type_row):
     """La próxima fase cuya fecha aún NO llegó (el siguiente cambio de precio).
     Devuelve {name, price_cents, starts_on} o None si no hay más fases futuras."""
@@ -1907,7 +1933,7 @@ def create_phase_all():
     audit(db, s["admin"]["username"], "precio",
           f"Creó la {'VENTA FLASH' if es_flash else 'fase'} '{name}' desde {date} (todos los tipos)")
     db.commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, avisos=avisos_flash(db, parsed, date, types) if es_flash else [])
 
 @app.put("/api/admin/phases-all")
 def edit_phase_all():
@@ -1983,7 +2009,7 @@ def edit_phase_all():
           f"Editó la fase '{orig_name}' ({orig_date}): "
           + (", ".join(cambios) if cambios else "sin cambios"))
     db.commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, avisos=avisos_flash(db, parsed, date, types) if es_flash else [])
 
 @app.delete("/api/admin/phases-all")
 def delete_phase_all():

@@ -1572,9 +1572,17 @@ function renderPhases(types) {
     });
     $('#ph-err').textContent = '';
     try {
-      await API.post('/api/admin/phases-all',
+      const r = await API.post('/api/admin/phases-all',
         { name: $('#ph-name').value.trim(), starts_on: $('#ph-date').value, prices,
           es_flash: $('#ph-flash').checked });
+      // La fase SE CREA igual: el aviso no es un rechazo, es un "revísalo". Bloquearlo
+      // sería decidir por el organizador algo que puede tener su razón.
+      if (r.avisos && r.avisos.length) {
+        await confirmModal({ title: 'Revisa estos precios', okLabel: 'Entendido',
+          body: 'La fase se creó, pero:<br><br>' +
+            r.avisos.map(a => '• ' + esc(a)).join('<br>') +
+            '<br><br>Puedes corregirla con <b>Editar</b>.' });
+      }
       loadCatalogs();
     } catch (e) { if (!guard(e)) $('#ph-err').textContent = e.message; }
   };
@@ -1627,12 +1635,16 @@ function editarFase(g, types) {
     const prices = {};
     $$('.ef-p').forEach(i => { prices[i.dataset.tid] = i.value.trim(); });
     try {
-      await API.put('/api/admin/phases-all', {
+      const r = await API.put('/api/admin/phases-all', {
         orig_name: g.name, orig_starts_on: g.starts_on,
         name: $('#ef-name').value.trim(), starts_on: $('#ef-date').value, prices,
         es_flash: $('#ef-flash').checked,
       });
       closeModal(); toast('Fase actualizada'); loadCatalogs();
+      if (r.avisos && r.avisos.length) {
+        await confirmModal({ title: 'Revisa estos precios', okLabel: 'Entendido',
+          body: 'Se guardó, pero:<br><br>' + r.avisos.map(a => '• ' + esc(a)).join('<br>') });
+      }
     } catch (e) { if (!guard(e)) $('#ef-err').textContent = e.message; }
   };
 }
