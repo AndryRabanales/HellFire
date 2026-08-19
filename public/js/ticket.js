@@ -64,7 +64,12 @@ function flyerVariantFor(ticket) {
     if (t === 'ultravip') return 'cortesiaultra';
     return ticket.type_is_vip ? 'cortesiavip' : 'cortesiaexterno';
   }
-  if (ticket.group_size === 10) return 'grupo10';
+  // El grupo también tiene categoría: un grupo VIP con el flyer del grupo Externo
+  // le enseña al comprador un boleto que no es el que pagó.
+  if (ticket.group_size === 10) {
+    if (esUltra(ticket)) return 'grupo10ultra';
+    return ticket.type_is_vip ? 'grupo10vip' : 'grupo10';
+  }
   // se compara contra el NOMBRE del tipo, para que un tipo nuevo que cree el admin
   // (ej. "Ultra VIP") use su propio flyer en vez de caer en el de VIP o Externo
   const n = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
@@ -125,13 +130,18 @@ function ticketBadgeSpec(ticket) {
              grad: t.grad, textColor: t.texto };
   }
   if (ticket.group_size) {
-    // El representante lleva SU marca en el boleto, en dorado de botella. El de la
-    // barra no tiene el panel abierto: tiene un boleto enfrente, y si los diez se
-    // ven iguales cualquiera puede decir que él es.
+    // El grupo lleva el color de SU categoría, no un rojo de "grupo" para todos: en
+    // la puerta y en la barra el color es lo primero que se mira, y un grupo VIP en
+    // rojo se lee como general aunque el texto diga otra cosa.
+    const t = tonoDe(ticket);
+    // El representante lleva SU marca. El de la barra no tiene el panel abierto:
+    // tiene un boleto enfrente, y si los diez se ven iguales cualquiera puede decir
+    // que él es.
     if (ticket.es_representante)
-      return { text: '★ BOTELLA · REPRESENTANTE',
-               grad: ['#f3d27a', '#d9a53a'], textColor: '#3a1e00' };
-    return { text: 'GRUPO ' + ticket.group_size, grad: ['#ff7a4d', '#c81e3a'], textColor: '#fff3ee' };
+      return { text: '★ BOTELLA · REPRESENTANTE', grad: t.grad, textColor: t.texto };
+    return { text: 'GRUPO ' + ticket.group_size + (esCategoriaAlta(ticket)
+               ? ' · ' + (ticket.type_name || '').toUpperCase() : ''),
+             grad: t.grad, textColor: t.texto };
   }
   if (esCategoriaAlta(ticket)) {
     // el nombre real, para que "Ultra VIP" no salga como "VIP", y su color propio

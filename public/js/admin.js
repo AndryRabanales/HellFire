@@ -1923,6 +1923,16 @@ const FLYER_META = {
              sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
                        faculty_name: '', type_name: 'Externo', type_is_vip: 0,
                        price: 161, normal_price: 175, group_size: 10, phase_name: 'Fase 1' } },
+  grupo10vip: { label: '★ Flyer Grupo de 10 · VIP',
+                sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                          faculty_name: '', type_name: 'VIP', type_is_vip: 1,
+                          price: 300, normal_price: 350, group_size: 10,
+                          es_representante: true, phase_name: 'Venta Flash' } },
+  grupo10ultra: { label: '★ Flyer Grupo de 10 · Ultra VIP',
+                  sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                            faculty_name: '', type_name: 'Ultra vip', type_is_vip: 1,
+                            price: 550, normal_price: 900, group_size: 10,
+                            phase_name: 'Venta Flash' } },
   ultravip: { label: '★ Flyer Ultra VIP',
               sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
                         faculty_name: '', type_name: 'Ultra VIP', type_is_vip: 1,
@@ -1941,6 +1951,7 @@ const FLYER_META = {
                              price: 0, es_cortesia: true } },
 };
 const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip',
+                        'grupo10vip', 'grupo10ultra',
                         'cortesiaexterno', 'cortesiavip', 'cortesiaultra'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
 const FLY_ED = {};

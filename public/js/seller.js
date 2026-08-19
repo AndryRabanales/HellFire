@@ -103,13 +103,18 @@ function aplicarCierre() {
   // OJO: exitGroupMode vuelve a MOSTRAR el formulario, así que va antes de esconderlo.
   if (cerradas) exitGroupMode();
   $('#ventas-cerradas').classList.toggle('hidden', !cerradas);
+  // Estando dentro del grupo NO se vuelve a mostrar el formulario individual:
+  // el grupo es otra pantalla, no algo que se abre debajo. Si se re-mostrara,
+  // quedarían los dos a la vez y el vendedor no sabría en cuál está escribiendo.
+  const enGrupo = !!GROUP_SIZE;
   ['#mode-individual', '#group-switch', '#btn-generate', '#f-phase-timer'].forEach(sel => {
     const el = $(sel);
     if (!el) return;
-    if (cerradas) el.classList.add('hidden');
+    if (cerradas || enGrupo) el.classList.add('hidden');
     else if (sel !== '#f-phase-timer') el.classList.remove('hidden');
   });
-  $('#f-hint').textContent = cerradas ? 'El corte ya se hizo' : '';
+  if (cerradas) $('#f-hint').textContent = 'El corte ya se hizo';
+  else if (!enGrupo) $('#f-hint').textContent = '';
   return cerradas;
 }
 
@@ -277,15 +282,27 @@ function clearForm() {
 let GROUP_SIZE = null;      // null | 5 | 10
 let GROUP_REP_IDX = null;   // índice del representante (solo grupo de 10)
 let GROUP_RESULT = null;    // respuesta de /api/groups una vez generado (hasta tocar "Listo")
+let GROUP_TYPE = null;      // el tipo del grupo: Externo, VIP o Ultra VIP
+
+// El tipo se elige ANTES de escribir los diez nombres. Los grupos se piden en las
+// tres categorías —"vamos 10 en VIP con botella"— y antes salían todos como
+// Externo: se vendía uno y se generaba otro.
+function tiposDeGrupo() {
+  return (CATALOG.group && CATALOG.group.tipos) || [];
+}
 
 function enterGroupMode(size) {
   if (!CATALOG.group) {
     toast('El precio de grupo aún no está configurado. Pídele al admin que lo defina.');
     return;
   }
+  const tipos = tiposDeGrupo();
   GROUP_SIZE = size;
   GROUP_REP_IDX = null;
   GROUP_RESULT = null;
+  // con un solo tipo disponible no hay nada que elegir: se entra directo
+  GROUP_TYPE = GROUP_TYPE && tipos.some(t => t.id === GROUP_TYPE.id)
+    ? GROUP_TYPE : (tipos.length === 1 ? tipos[0] : null);
   $('#mode-individual').classList.add('hidden');
   $('#group-switch').classList.add('hidden');
   $('#mode-group').classList.remove('hidden');
@@ -302,7 +319,7 @@ function enterGroupMode(size) {
 }
 
 function exitGroupMode() {
-  GROUP_SIZE = null; GROUP_REP_IDX = null; GROUP_RESULT = null;
+  GROUP_SIZE = null; GROUP_REP_IDX = null; GROUP_RESULT = null; GROUP_TYPE = null;
   $('#mode-individual').classList.remove('hidden');
   $('#group-switch').classList.remove('hidden');
   $('#mode-group').classList.add('hidden');
@@ -316,12 +333,38 @@ function exitGroupMode() {
 }
 
 function renderGroupPriceBar() {
-  const g = CATALOG.group;
-  // el grupo ya no lleva descuento: van a precio normal y el beneficio es la botella
-  $('#group-price-bar').innerHTML = `
-    <div class="gp-line">Precio por boleto · grupo de ${GROUP_SIZE}</div>
-    <div class="gp-price">${fmtMoney(g.group_price_cents / 100)}</div>
-    <div class="gp-save">Total ${fmtMoney(g.group_price_cents * GROUP_SIZE / 100)} · marca con ★ quién recoge la botella en la barra</div>`;
+  const tipos = tiposDeGrupo();
+  const barra = $('#group-price-bar');
+  // Todavía no eligió el tipo: en vez del precio, los tres botones.
+  if (!GROUP_TYPE) {
+    barra.innerHTML =
+      `<div class="gp-line">¿De qué tipo es el grupo?</div>
+       <div class="gt-ops">${tipos.map(t => {
+         const enFlash = t.normal_cents && t.normal_cents > t.price_cents;
+         return `<button type="button" class="gt-op" data-gt="${t.id}">
+           <span class="gt-n">${esc(t.name)}</span>
+           <span class="gt-p">${enFlash
+             ? `<span class="f-antes">${fmtMoney(t.normal_cents / 100)}</span> ${fmtMoney(t.price_cents / 100)}`
+             : fmtMoney(t.price_cents / 100)}</span></button>`;
+       }).join('')}</div>
+       <div class="gp-save">Los diez llevan el mismo tipo. Uno se lleva la botella.</div>`;
+    $$('.gt-op').forEach(b => b.onclick = () => {
+      GROUP_TYPE = tipos.find(t => String(t.id) === b.dataset.gt);
+      renderGroupPriceBar(); renderGroupNames(); aplicarCierre();
+    });
+    return;
+  }
+  const p = GROUP_TYPE.price_cents;
+  const enFlash = GROUP_TYPE.normal_cents && GROUP_TYPE.normal_cents > p;
+  barra.innerHTML = `
+    <div class="gp-line">Grupo de ${GROUP_SIZE} \u00b7 ${esc(GROUP_TYPE.name)}
+      <button type="button" class="gt-cambiar" id="gt-cambiar">cambiar</button></div>
+    <div class="gp-price">${enFlash
+      ? `<span class="f-antes">${fmtMoney(GROUP_TYPE.normal_cents / 100)}</span> ${fmtMoney(p / 100)}`
+      : fmtMoney(p / 100)} <span class="gp-cu">c/u</span></div>
+    <div class="gp-save">Total ${fmtMoney(p * GROUP_SIZE / 100)} \u00b7 marca con ★ quién recoge la botella en la barra</div>`;
+  const c = $('#gt-cambiar');
+  if (c) c.onclick = () => { GROUP_TYPE = null; renderGroupPriceBar(); renderGroupNames(); aplicarCierre(); };
 }
 
 // cada integrante va en su propia tarjeta (borde + ficha numerada), para que
@@ -330,6 +373,12 @@ function renderGroupPriceBar() {
 function renderGroupNames() {
   const box = $('#group-names');
   box.innerHTML = '';
+  // Sin tipo elegido no se piden nombres: escribir diez y descubrir después que
+  // faltaba elegir sería tirar el trabajo, y el botón de generar no sabría qué
+  // boleto crear.
+  const bg = $('#btn-generate-group');
+  if (!GROUP_TYPE) { if (bg) bg.classList.add('hidden'); return; }
+  if (bg && !(CATALOG && CATALOG.ventas_cerradas)) bg.classList.remove('hidden');
   for (let i = 0; i < GROUP_SIZE; i++) {
     const row = document.createElement('div');
     row.className = 'grouprow';
@@ -422,6 +471,7 @@ async function generateGroup() {
   try {
     const r = await API.post('/api/groups', {
       size: GROUP_SIZE, names,
+      type_id: GROUP_TYPE ? GROUP_TYPE.id : null,
       representative_index: GROUP_SIZE === 10 ? GROUP_REP_IDX : null,
     });
     showGroupResult(r);

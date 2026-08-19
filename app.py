@@ -343,6 +343,10 @@ DEFAULT_SETTINGS = {
     "flyer_data_grupo10": "", "flyer_mime_grupo10": "", "flyer_focus_grupo10": "", "flyer_scale_grupo10": "",
     # Ultra VIP: ya está a la venta como cualquier otro tipo
     "flyer_data_ultravip": "", "flyer_mime_ultravip": "", "flyer_focus_ultravip": "", "flyer_scale_ultravip": "",
+    "flyer_data_grupo10vip": "", "flyer_mime_grupo10vip": "",
+    "flyer_focus_grupo10vip": "", "flyer_scale_grupo10vip": "",
+    "flyer_data_grupo10ultra": "", "flyer_mime_grupo10ultra": "",
+    "flyer_focus_grupo10ultra": "", "flyer_scale_grupo10ultra": "",
     "flyer_data_cortesiaexterno": "", "flyer_mime_cortesiaexterno": "",
     "flyer_focus_cortesiaexterno": "", "flyer_scale_cortesiaexterno": "",
     "flyer_data_cortesiavip": "", "flyer_mime_cortesiavip": "",
@@ -363,15 +367,20 @@ def set_setting(db, key, value):
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
 FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip",
+                  "grupo10vip", "grupo10ultra",
                   "cortesiaexterno", "cortesiavip", "cortesiaultra")
 FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
                "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
+               "grupo10vip": "Grupo de 10 · VIP", "grupo10ultra": "Grupo de 10 · Ultra VIP",
                "cortesiaexterno": "Cortesía Externo", "cortesiavip": "Cortesía VIP",
                "cortesiaultra": "Cortesía Ultra VIP"}
 # cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
 # relacionado antes de caer al flyer legado de una sola imagen
 FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
                    "ultravip": "vip",
+                   # un grupo VIP sin flyer propio usa el de VIP, no el de grupo
+                   # Externo: lo que el comprador reconoce primero es su categoría
+                   "grupo10vip": "vip", "grupo10ultra": "ultravip",
                    # mientras no suban el suyo, la cortesía usa el flyer del tipo que
                    # le toca: se ve bien desde el primer invitado, sin configurar nada
                    "cortesiaexterno": "externo", "cortesiavip": "vip",
@@ -1284,15 +1293,20 @@ def catalog():
     # Plan de grupo (solo de 10, solo boletos Externo). YA NO LLEVA DESCUENTO: el
     # beneficio del grupo es la botella del representante, no el precio. Lo que antes
     # era el descuento ahora se le paga al vendedor como comisión.
-    externo = next((t for t in types if t["name"] == "Externo"), None)
+    # Los tipos que pueden ir en grupo: todos los que no piden facultad. Se manda la
+    # lista completa para que la boletera ofrezca Externo, VIP y Ultra VIP.
+    opciones = [t for t in types if not t["needs_faculty"] and t["price_cents"] > 0]
+    externo = next((t for t in opciones if t["name"] == "Externo"), None)
     group_info = None
-    if externo and externo["price_cents"] > 0:
-        group_pct = 0
-        group_price = externo["price_cents"]
-        group_info = {"type_id": externo["id"], "pct": group_pct,
-                      "normal_price_cents": externo["price_cents"],
-                      "group_price_cents": group_price,
-                      "savings_cents": externo["price_cents"] - group_price}
+    if opciones:
+        base = externo or opciones[0]
+        group_info = {"type_id": base["id"], "pct": 0,
+                      "normal_price_cents": base["price_cents"],
+                      "group_price_cents": base["price_cents"],
+                      "savings_cents": 0,
+                      "tipos": [{"id": t["id"], "name": t["name"], "is_vip": t["is_vip"],
+                                 "price_cents": t["price_cents"],
+                                 "normal_cents": t.get("normal_cents")} for t in opciones]}
     # ¿le falta el tutorial? Va aquí y no solo en la respuesta del login: si el
     # vendedor recarga la página a media guía, con la sesión ya guardada no vuelve a
     # pasar por el login y se quedaría sin verla nunca.
@@ -1452,9 +1466,13 @@ def create_ticket():
 
 @app.post("/api/groups")
 def create_group():
-    """Genera un grupo completo (5 o 10 integrantes): cada uno recibe su propio
-    boleto Externo con el precio de grupo (no editable). No se puede mezclar tipos:
-    un grupo es siempre 100% Externo. El de 10 lleva un representante (botella)."""
+    """Genera un grupo de 10: cada integrante recibe su propio boleto del MISMO tipo,
+    y uno de ellos —el representante— se lleva la botella.
+
+    El tipo lo elige el vendedor (Externo, VIP o Ultra VIP): los grupos se piden en
+    las tres categorías y antes salía siempre Externo, así que un grupo VIP se
+    vendía como VIP y se generaba como general. No se pueden mezclar tipos dentro
+    de un grupo: eso volvería ambiguo qué botella le toca a quién."""
     s = require_seller()
     if not s:
         return jsonify(error="sin sesión"), 401
@@ -1482,12 +1500,22 @@ def create_group():
         if not isinstance(idx, int) or idx < 0 or idx >= 10:
             return jsonify(error="Marca quién es el representante del grupo (recibe la botella)"), 400
         representative = names[idx]
-    tt = db.execute("SELECT * FROM ticket_types WHERE name='Externo' AND active=1").fetchone()
+    # Sin type_id se asume Externo: así los grupos que ya existían siguen igual.
+    tid = b.get("type_id")
+    if tid:
+        tt = db.execute("SELECT * FROM ticket_types WHERE id=? AND active=1", (tid,)).fetchone()
+    else:
+        tt = db.execute("SELECT * FROM ticket_types WHERE name='Externo' AND active=1").fetchone()
     if not tt:
-        return jsonify(error="El tipo Externo no está disponible para armar grupos"), 400
-    price_now, phase_name, _normal = effective_price(db, tt)
+        return jsonify(error="Ese tipo de boleto no está disponible para armar grupos"), 400
+    # La facultad es por persona y aquí solo se piden los diez nombres: un grupo UADY
+    # saldría con la facultad vacía en los diez boletos.
+    if tt["needs_faculty"]:
+        return jsonify(error=f"Los grupos no se pueden armar con {tt['name']}, "
+                             f"porque cada boleto necesita su facultad."), 400
+    price_now, phase_name, normal_now = effective_price(db, tt)
     if price_now <= 0:
-        return jsonify(error="El precio de Externo aún no está configurado"), 400
+        return jsonify(error=f"El precio de {tt['name']} aún no está configurado"), 400
     pct = 0   # el grupo ya no tiene descuento: su beneficio es la botella
     group_price = round(price_now * (100 - pct) / 100)
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
@@ -1505,7 +1533,8 @@ def create_group():
         t = _insert_ticket_row(db, name, None, "", tt, group_price,
                                seller_id, seller_name, seller_code, group_id=gid,
                                phase_name=phase_name, group_size=size,
-                               normal_price_cents=price_now,
+                               # en venta flash el grupo también saca su tachado
+                               normal_price_cents=normal_now,
                                representante=(name == representative))
         if not t:
             return jsonify(error="No se pudo generar uno de los folios, intenta de nuevo"), 500
