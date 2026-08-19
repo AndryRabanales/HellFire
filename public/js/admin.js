@@ -414,7 +414,12 @@ async function loadTicketsTable(silent) {
           ? `<div style="font-size:9px;color:${tonoDe(t).tinta};margin-top:2px">${
               estrellaDe(t)}CORTESÍA</div>` : ''}</td>
       <td data-label="Precio" class="strike" style="font-family:'Space Grotesk'">${t.es_cortesia
-          ? `<span style="color:${tonoDe(t).tinta}">Cortesía</span>` : fmtMoney(t.price)}</td>
+          ? `<span style="color:${tonoDe(t).tinta}">Cortesía</span>`
+          : (t.normal_price > t.price
+              ? `<span style="color:var(--cream-45);text-decoration:line-through;font-size:11px">${
+                  fmtMoney(t.normal_price)}</span> <b>${fmtMoney(t.price)}</b>
+                 <div style="font-size:9px;color:#f3d27a;margin-top:2px">⚡ ${esc(t.phase_name || 'FLASH')}</div>`
+              : fmtMoney(t.price))}</td>
       <td data-label="Vendedor">${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
       <td data-label="Fecha" class="muted">${esc(t.created_at)}</td>
       <td data-label="Estado">${estado}</td>`;

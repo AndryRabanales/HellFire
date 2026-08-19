@@ -119,8 +119,13 @@ function renderTypes() {
   CATALOG.types.forEach(t => {
     const el = document.createElement('div');
     el.className = 'typeopt' + (SELECTED_TYPE === t.id ? ' sel' : '');
+    // En venta flash el botón enseña los DOS números: el vendedor no tiene que
+    // acordarse de cuánto costaba antes para poder decir cuánto se está ahorrando.
+    const enFlash = t.normal_cents && t.normal_cents > t.price_cents;
     const priceLabel = t.price_cents > 0
-      ? fmtMoney(t.price_cents / 100)
+      ? (enFlash
+          ? `<span class="tantes">${fmtMoney(t.normal_cents / 100)}</span> ${fmtMoney(t.price_cents / 100)}`
+          : fmtMoney(t.price_cents / 100))
       : '<span style="color:var(--cream-45);font-size:12px">Por definir</span>';
     el.innerHTML = `<div class="tname">${esc(t.name)}</div><div class="tprice">${priceLabel}</div>`;
     el.addEventListener('click', () => { SELECTED_TYPE = t.id; renderTypes(); });
@@ -159,6 +164,15 @@ function nextGlobalPhase() {
   return { starts_on: soonest, name: phaseName, items };
 }
 
+// ¿Estamos en venta flash? Lo dice el catálogo: si un tipo trae normal_cents es
+// porque su precio de hoy está por debajo del que regiría sin el flash.
+function flashActivo() {
+  const t = (CATALOG.types || []).filter(x => x.normal_cents && x.normal_cents > x.price_cents);
+  if (!t.length) return null;
+  const ahorro = Math.max(...t.map(x => (x.normal_cents - x.price_cents) / 100));
+  return { nombre: t[0].phase || 'Venta flash', ahorroMax: ahorro };
+}
+
 function renderPhaseTimer() {
   const box = $('#f-phase-timer');
   const g = nextGlobalPhase();
@@ -186,14 +200,23 @@ function renderPhaseTimer() {
   const lines = g.items.map(i =>
     `<span>${esc(i.name)}<b>${fmtMoney(i.price_cents / 100)}</b></span>`).join('');
 
+  // En flash el reloj cambia de sentido: no cuenta para que "suban", cuenta para que
+  // se ACABE la oferta. Es el mismo dato pero el argumento de venta es el contrario.
+  const fl = flashActivo();
   box.classList.remove('hidden');
   box.classList.toggle('urge', urge);
+  box.classList.toggle('flash', !!fl);
+  // En flash NO se nombra la fase que viene: al vendedor no le sirve saber que
+  // después entra "Fase 1", le sirve saber que la oferta se acaba. Y los precios de
+  // abajo dejan de ser "los nuevos" para ser "a lo que vuelve".
   box.innerHTML =
-    `<div class="pt-head">
-       <span class="pt-sub">Los precios suben</span>
-       <span class="pt-fase">${esc(g.name)}</span>
+    (fl ? `<div class="pt-flash">⚡ VENTA FLASH · hasta $${fl.ahorroMax.toFixed(0)} de descuento</div>` : '')
+    + `<div class="pt-head">
+       <span class="pt-sub">${fl ? 'La oferta termina en' : 'Los precios suben'}</span>
+       ${fl ? '' : `<span class="pt-fase">${esc(g.name)}</span>`}
      </div>
      <div class="pt-clock">${reloj}</div>
+     ${fl ? '<div class="pt-vuelve">Después vuelve a</div>' : ''}
      <div class="pt-items">${lines}</div>`;
 }
 

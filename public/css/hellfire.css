@@ -629,9 +629,35 @@ table.data tr.void td.strike{text-decoration:line-through}
 /* nombre y precio en la MISMA línea, centrados dentro de su columna: así los tres
    bloques miden lo mismo sin que el cronómetro crezca un renglón */
 .phase-timer .pt-items span{display:flex;align-items:baseline;justify-content:center;gap:5px;
-  font:500 9px "Space Grotesk";letter-spacing:.1em;text-transform:uppercase;color:var(--cream-45)}
+  font:500 9px "Space Grotesk";letter-spacing:.1em;text-transform:uppercase;color:var(--cream-45);
+  /* con cuatro tipos, "ULTRA VIP" se partía en dos renglones y descuadraba la fila */
+  white-space:nowrap;min-width:0}
+.phase-timer .pt-items span:first-child{letter-spacing:.04em}
+/* "Después vuelve a" va en su propio renglón, no dentro de la rejilla de precios:
+   metido como una columna más, apretaba las otras cuatro y los precios se encimaban. */
+.phase-timer .pt-vuelve{margin-top:6px;padding-top:6px;
+  border-top:1px solid rgba(243,210,122,.18);
+  font:700 8px "Space Grotesk";letter-spacing:.14em;text-transform:uppercase;color:#f3d27a}
+.phase-timer.flash .pt-items{margin-top:3px;padding-top:0;border-top:none}
 .phase-timer .pt-items b{font:700 12.5px "Space Grotesk";color:var(--cream-60);margin:0;
   letter-spacing:0;text-transform:none}
+
+/* VENTA FLASH. El cronómetro cambia de color a dorado: es el mismo reloj, pero lo
+   que cuenta es lo contrario —no falta para que suba, falta para que se acabe la
+   oferta—, y esa diferencia tiene que verse antes de leer una sola palabra. */
+.phase-timer.flash{border-color:rgba(243,210,122,.5);
+  background:linear-gradient(160deg,rgba(243,210,122,.13),rgba(243,210,122,.03));
+  box-shadow:0 0 22px rgba(243,210,122,.14)}
+.phase-timer.flash .pt-flash{font:800 10px "Space Grotesk";letter-spacing:.12em;
+  text-transform:uppercase;color:#f3d27a;margin-bottom:6px;text-align:center;
+  padding:4px 6px;border-radius:7px;background:rgba(243,210,122,.12);
+  border:1px solid rgba(243,210,122,.3)}
+.phase-timer.flash .pt-fase,.phase-timer.flash .pt-u b{color:#f3d27a}
+.phase-timer.flash .pt-u{border-color:rgba(243,210,122,.3)}
+
+/* El precio de antes, tachado, en el botón del tipo de boleto. */
+.typeopt .tantes{font-size:.62em;color:var(--cream-45);text-decoration:line-through;
+  font-weight:600;margin-right:2px}
 
 /* Menos de 48 h: los números se ponen al rojo vivo y el bloque respira. */
 .phase-timer.urge{border-color:var(--ember);
