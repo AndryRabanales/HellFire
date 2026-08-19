@@ -234,11 +234,16 @@ function dibujarPrecio(ctx, ticket, x, y) {
     return;
   }
   const fase = ticket.phase_name;
+  // En un boleto con descuento la fase ES el aviso de la oferta ("Fase 2 Flash"), no
+  // un dato de archivo: va en el dorado del sello y con su rayo, no en el gris de
+  // antes, que junto a un GRUPO 10 grande no se leía.
+  const conDescuento = ticket.normal_price > ticket.price;
   const pintaFase = (px) => {
     if (!fase) return;
-    ctx.font = '600 12px "Space Grotesk", monospace';
-    ctx.fillStyle = 'rgba(255,150,80,.5)';
-    ctx.fillText(fase, px, y);
+    ctx.font = conDescuento ? '800 12px "Space Grotesk", monospace'
+                            : '600 12px "Space Grotesk", monospace';
+    ctx.fillStyle = conDescuento ? '#f3d27a' : 'rgba(255,150,80,.5)';
+    ctx.fillText(conDescuento ? '\u26a1 ' + fase.toUpperCase() : fase, px, y);
   };
   // El tachado aparece siempre que el boleto se vendió por DEBAJO de su precio
   // normal: venta flash o un grupo con descuento. El boleto congeló los dos números

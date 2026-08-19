@@ -1898,10 +1898,14 @@ def create_phase(tid):
         price = 0
     if not name or price <= 0 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         return jsonify(error="Fase incompleta: nombre, precio y fecha (AAAA-MM-DD)"), 400
-    db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on) VALUES(?,?,?,?)",
-               (tid, name, price, date))
+    # es_flash se ignoraba aquí: una fase creada por esta vía cobraba el precio de
+    # oferta pero NO tachaba nada, así que el descuento no se veía por ningún lado.
+    es_flash = 1 if b.get("es_flash") else 0
+    db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, es_flash) "
+               "VALUES(?,?,?,?,?)", (tid, name, price, date, es_flash))
     audit(db, s["admin"]["username"], "precio",
-          f"Creó fase '{name}' de {t['name']}: ${price/100:.2f} desde {date}")
+          f"Creó {'VENTA FLASH' if es_flash else 'fase'} '{name}' de {t['name']}: "
+          f"${price/100:.2f} desde {date}")
     db.commit()
     return jsonify(ok=True)
 
