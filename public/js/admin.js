@@ -1514,16 +1514,31 @@ function renderPhases(types) {
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
       ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)}${estrellaDe({ type_name: t.name, type_is_vip: t.is_vip }) ? ' ★' : ''} — precio nuevo
         <input class="input" type="number" min="1" placeholder="$" data-ph-price="${t.id}" style="width:110px;padding:9px;font-size:12px"></label>`).join('')}
-      <button class="btn sm" id="btn-ph-create" style="width:auto">+ Fase</button>
     </div>
-    <label class="row" style="gap:7px;cursor:pointer;margin-top:8px;align-items:center">
-      <input type="checkbox" id="ph-flash">
-      <span style="font:600 11.5px Manrope;color:#f3d27a">⚡ Venta flash — el boleto sale con el precio normal tachado</span>
+    <!-- La casilla va DENTRO del formulario y ANTES del botón: puesta después, se leía
+         como un interruptor general del sistema y no como "esta fase que estoy
+         creando es flash". El botón cambia de texto para no dejar dudas. -->
+    <label class="row" id="ph-flash-box" style="gap:8px;cursor:pointer;margin-top:10px;
+        align-items:center;padding:9px 11px;border-radius:11px;
+        border:1px solid rgba(243,210,122,.28);background:rgba(243,210,122,.05)">
+      <input type="checkbox" id="ph-flash" style="accent-color:#f3d27a;width:16px;height:16px">
+      <span style="font:700 12px Manrope;color:#f3d27a">⚡ Esta fase es una VENTA FLASH</span>
     </label>
-    <div class="muted" style="font-size:10px;margin-top:3px">
-      El precio tachado es el que regiría sin el flash. Al crear la fase que lo termina,
-      todo vuelve solo: no hay que apagar nada.
-    </div>`;
+    <div class="muted" id="ph-flash-txt" style="font-size:10.5px;margin-top:5px;line-height:1.5"></div>
+    <button class="btn sm mt8" id="btn-ph-create" style="width:100%">+ Crear fase</button>`;
+
+  // el texto de ayuda cambia según la casilla: dice qué va a pasar, no qué es
+  const sincroFlash = () => {
+    const on = $('#ph-flash').checked;
+    $('#ph-flash-box').style.borderColor = on ? '#f3d27a' : 'rgba(243,210,122,.28)';
+    $('#btn-ph-create').textContent = on ? '+ Crear venta flash' : '+ Crear fase';
+    $('#ph-flash-txt').innerHTML = on
+      ? 'El boleto saldrá con el precio de la fase anterior <b>tachado</b> y el sello '
+        + '<b style="color:#f3d27a">⚡ AHORRÓ $X</b>. Termina sola cuando arranque la siguiente fase.'
+      : 'Fase normal: el boleto sale con su precio, sin tachado.';
+  };
+  $('#ph-flash').onchange = sincroFlash;
+  sincroFlash();
 
   $('#btn-ph-create').onclick = async () => {
     const prices = {};
@@ -1560,15 +1575,30 @@ function editarFase(g, types) {
         <input class="input ef-p" data-tid="${t.id}" type="number" min="0" step="1" inputmode="decimal"
           placeholder="—" value="${g.byType[t.id] != null ? g.byType[t.id] / 100 : ''}"></label>`).join('')}
     </div>
-    <label class="row mt12" style="gap:7px;cursor:pointer;align-items:center">
-      <input type="checkbox" id="ef-flash" ${g.es_flash ? 'checked' : ''}>
-      <span style="font:600 12px Manrope;color:#f3d27a">⚡ Venta flash — el boleto sale con el precio normal tachado</span>
+    <label class="row mt16" id="ef-flash-box" style="gap:8px;cursor:pointer;align-items:center;
+        padding:10px 12px;border-radius:11px;
+        border:1px solid ${g.es_flash ? '#f3d27a' : 'rgba(243,210,122,.28)'};
+        background:rgba(243,210,122,.05)">
+      <input type="checkbox" id="ef-flash" ${g.es_flash ? 'checked' : ''}
+             style="accent-color:#f3d27a;width:16px;height:16px">
+      <span style="font:700 12px Manrope;color:#f3d27a">⚡ Esta fase es una VENTA FLASH</span>
     </label>
+    <div class="muted" id="ef-flash-txt" style="font-size:10.5px;margin-top:5px;line-height:1.5"></div>
     <div class="err mt8" id="ef-err"></div>
     <div class="row mt16">
       <button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
       <button class="btn grow" id="ef-save">Guardar cambios</button>
     </div>`);
+  const sincroEf = () => {
+    const on = $('#ef-flash').checked;
+    $('#ef-flash-box').style.borderColor = on ? '#f3d27a' : 'rgba(243,210,122,.28)';
+    $('#ef-flash-txt').innerHTML = on
+      ? 'Sus boletos salen con el precio de la fase anterior <b>tachado</b> y el sello '
+        + '<b style="color:#f3d27a">⚡ AHORRÓ $X</b>.'
+      : 'Fase normal: sus boletos salen con su precio, sin tachado.';
+  };
+  $('#ef-flash').onchange = sincroEf;
+  sincroEf();
   $('#ef-save').onclick = async () => {
     const prices = {};
     $$('.ef-p').forEach(i => { prices[i.dataset.tid] = i.value.trim(); });
@@ -1622,7 +1652,17 @@ async function loadCatalogs() {
         <input class="input mt12" id="ef-name" value="${esc(f.name)}">
         <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
         <button class="btn grow" id="ef-save">Guardar</button></div>`);
-      $('#ef-save').onclick = async () => {
+      const sincroEf = () => {
+    const on = $('#ef-flash').checked;
+    $('#ef-flash-box').style.borderColor = on ? '#f3d27a' : 'rgba(243,210,122,.28)';
+    $('#ef-flash-txt').innerHTML = on
+      ? 'Sus boletos salen con el precio de la fase anterior <b>tachado</b> y el sello '
+        + '<b style="color:#f3d27a">⚡ AHORRÓ $X</b>.'
+      : 'Fase normal: sus boletos salen con su precio, sin tachado.';
+  };
+  $('#ef-flash').onchange = sincroEf;
+  sincroEf();
+  $('#ef-save').onclick = async () => {
         try { await API.put('/api/admin/faculties/' + f.id, { name: $('#ef-name').value.trim() }); closeModal(); loadCatalogs(); }
         catch (e) { if (!guard(e)) toast(e.message); }
       };

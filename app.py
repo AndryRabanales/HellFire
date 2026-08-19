@@ -2009,9 +2009,17 @@ def create_type():
     db = get_db()
     b = request.json or {}
     name = str(b.get("name", "")).strip()
-    price = int(round(float(b.get("price", 0)) * 100))
-    if not name or price <= 0:
-        return jsonify(error="Nombre y precio válidos requeridos"), 400
+    # Un campo vacío llega como null y float(None) revienta con 500: el panel entonces
+    # dice "Error de conexión", que hace pensar en el internet cuando lo único que
+    # pasó es que faltaba escribir el precio.
+    try:
+        price = int(round(float(b.get("price") or 0) * 100))
+    except (TypeError, ValueError):
+        price = 0
+    if not name:
+        return jsonify(error="Escribe el nombre del tipo de boleto"), 400
+    if price <= 0:
+        return jsonify(error="Escribe un precio mayor a cero"), 400
     # La facultad es la EXCEPCIÓN, no la regla: solo la llevan los boletos UADY. Antes
     # el valor por omisión era "sí", así que cualquier tipo nuevo nacía pidiéndola y
     # sacándola impresa en el boleto aunque nadie lo hubiera querido.
