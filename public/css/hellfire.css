@@ -655,6 +655,12 @@ table.data tr.void td.strike{text-decoration:line-through}
 .phase-timer.flash .pt-fase,.phase-timer.flash .pt-u b{color:#f3d27a}
 .phase-timer.flash .pt-u{border-color:rgba(243,210,122,.3)}
 
+/* El precio de antes, tachado, y la etiqueta de la fase, en el historial y en la
+   tira del último boleto. Mismo dorado que el sello del boleto: es la misma cosa. */
+.f-antes{color:var(--cream-45);text-decoration:line-through;font-size:.78em;
+  font-weight:600;margin-right:3px}
+.f-flash{color:#f3d27a;font-weight:700;margin-left:6px;white-space:nowrap}
+
 /* El precio de antes, tachado, en el botón del tipo de boleto. */
 .typeopt .tantes{font-size:.62em;color:var(--cream-45);text-decoration:line-through;
   font-weight:600;margin-right:2px}

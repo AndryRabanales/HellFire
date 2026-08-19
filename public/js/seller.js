@@ -490,7 +490,7 @@ function showSoloResult(t, bajoAutomatico) {
       <div class="u-fila">
         <div class="u-datos">
           <div class="u-nombre">${esc(t.buyer_name)}</div>
-          <div class="u-meta">${esc(ticketTypeLabel(t))} \u00b7 ${fmtMoney(t.price)}</div>
+          <div class="u-meta">${esc(ticketTypeLabel(t))} \u00b7 ${precioConTachado(t)}${etiquetaFlash(t)}</div>
         </div>
         <button class="u-dl" id="solo-dl">${DL_ICON}<span>Descargar</span></button>
       </div>
@@ -538,6 +538,19 @@ function drawPreviewQR(token) {
       if (qr.isDark(r, c)) ctx.fillRect(c, r, 1, 1);
 }
 
+/* El precio de un boleto de venta flash: el de antes tachado y el cobrado. Se
+   escribe una sola vez porque aparece en tres sitios —el último boleto, el
+   historial y el boleto que se descarga— y si cada uno lo arma por su cuenta,
+   tarde o temprano uno se queda sin el tachado y el vendedor no sabe cuál creer. */
+function precioConTachado(t) {
+  if (!(t.normal_price > t.price)) return fmtMoney(t.price);
+  return `<span class="f-antes">${fmtMoney(t.normal_price)}</span> ${fmtMoney(t.price)}`;
+}
+function etiquetaFlash(t) {
+  return t.normal_price > t.price
+    ? `<span class="f-flash">\u26a1 ${esc(t.phase_name || 'Venta flash')}</span>` : '';
+}
+
 /* ---------------- historial ---------------- */
 let _searchTimer = null;
 
@@ -564,9 +577,9 @@ async function loadHistory() {
       row.innerHTML = `
         <div class="tmain">
           <div class="tbuyer">${esc(t.buyer_name)}</div>
-          <div class="tmeta">${esc(t.type_name)} · ${esc(fmtDate(t.created_at))}</div>
+          <div class="tmeta">${esc(t.type_name)} · ${esc(fmtDate(t.created_at))}${etiquetaFlash(t)}</div>
         </div>
-        <div class="tprice">${fmtMoney(t.price)}</div>`;
+        <div class="tprice">${precioConTachado(t)}</div>`;
       if (isVoid) {
         row.insertAdjacentHTML('beforeend', '<div class="badge-void">Anulado</div>');   // RF-75
       } else {
