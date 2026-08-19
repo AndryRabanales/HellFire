@@ -19,14 +19,20 @@ SITIO = "https://hellfire-production.up.railway.app"
 # la Fase 2 y el boleto anunciaría un ahorro mayor que el real.
 CALENDARIO = [
     # (nombre,          arranca,      flash, [UADY, Externo, VIP, Ultra vip])
+    #
+    # El flash dura el DOBLE que la fase normal que le sigue. Si la gente sabe que
+    # viene una promoción, deja de comprar mientras espera: con bloques normales
+    # largos, esos días se venden solos... a nadie. Cada pareja es 12 de flash y 6
+    # de precio lleno. Y el orden importa: las normales van primero porque el flash
+    # tacha el precio de la siguiente fase normal y necesita que ya exista.
     ("Fase 1",         "2026-09-02", False, [150, 175, 350,  900]),
-    ("Fase 2",         "2026-09-22", False, [200, 225, 425,  950]),
-    ("Fase 3",         "2026-10-07", False, [275, 300, 520, 1000]),
-    ("Fase 4",         "2026-10-22", False, [330, 355, 575, 1110]),
+    ("Fase 2",         "2026-09-20", False, [200, 225, 425,  950]),
+    ("Fase 3",         "2026-10-08", False, [275, 300, 520, 1000]),
+    ("Fase 4",         "2026-10-26", False, [330, 355, 575, 1100]),
     ("Venta Flash",    "2026-08-18", True,  [100, 125, 300,  550]),
-    ("Fase 2 Flash",   "2026-09-17", True,  [140, 165, 330,  650]),
-    ("Fase 3 Flash",   "2026-10-02", True,  [190, 215, 400,  750]),
-    ("Fase 4 Flash",   "2026-10-17", True,  [260, 285, 500,  800]),
+    ("Fase 2 Flash",   "2026-09-08", True,  [140, 165, 330,  650]),
+    ("Fase 3 Flash",   "2026-09-26", True,  [190, 215, 400,  750]),
+    ("Fase 4 Flash",   "2026-10-14", True,  [260, 285, 500,  800]),
 ]
 ORDEN = ["UADY", "Externo", "VIP", "Ultra vip"]
 
@@ -62,8 +68,11 @@ def main():
     print("  ✓ Sesión iniciada\n")
 
     est, r = api("/api/admin/ticket-types", token=tok)
-    tipos = {t["name"]: t["id"] for t in r.get("types", []) if t["active"]}
-    faltan = [n for n in ORDEN if n not in tipos]
+    # Se compara sin distinguir mayúsculas ni espacios: el tipo puede llamarse "Uady",
+    # "UADY" o "uady " según quién lo haya escrito, y exigir una forma exacta hacía
+    # fallar el script diciendo que "falta" un tipo que está a la vista en Catálogos.
+    tipos = {t["name"].strip().lower(): t["id"] for t in r.get("types", []) if t["active"]}
+    faltan = [n for n in ORDEN if n.strip().lower() not in tipos]
     if faltan:
         print(f"  ✗ Faltan tipos de boleto activos: {', '.join(faltan)}")
         print("    Créalos en Catálogos antes de correr esto.\n")
@@ -104,7 +113,7 @@ def main():
     for nom, fecha, flash, precios in CALENDARIO:
         est, r = api("/api/admin/phases-all", {
             "name": nom, "starts_on": fecha, "es_flash": flash,
-            "prices": {str(tipos[t]): p for t, p in zip(ORDEN, precios)},
+            "prices": {str(tipos[t.strip().lower()]): p for t, p in zip(ORDEN, precios)},
         }, token=tok)
         marca = "⚡" if flash else " "
         if est == 200:
