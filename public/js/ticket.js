@@ -218,9 +218,10 @@ function dibujarPrecio(ctx, ticket, x, y) {
     ctx.fillStyle = 'rgba(255,150,80,.5)';
     ctx.fillText(fase, px, y);
   };
-  // el tachado solo tiene sentido si de verdad hubo descuento (hoy los grupos van a
-  // precio normal, así que caen en el caso simple de abajo)
-  if (ticket.group_size && ticket.normal_price > ticket.price) {
+  // El tachado aparece siempre que el boleto se vendió por DEBAJO de su precio
+  // normal: venta flash o un grupo con descuento. El boleto congeló los dos números
+  // al generarse, así que sigue saliendo igual aunque el flash ya haya terminado.
+  if (ticket.normal_price > ticket.price) {
     const normal = fmtMoney(ticket.normal_price), pagado = fmtMoney(ticket.price);
     ctx.font = '600 17px "Space Grotesk", monospace';
     ctx.fillStyle = 'rgba(246,241,231,.38)';

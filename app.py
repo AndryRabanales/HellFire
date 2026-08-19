@@ -221,7 +221,8 @@ CREATE TABLE IF NOT EXISTS price_phases (
   name TEXT NOT NULL,              -- ej. Preventa, Fase 2, General
   price_cents INTEGER NOT NULL,
   starts_on TEXT NOT NULL,         -- fecha AAAA-MM-DD desde la que aplica
-  group_pct INTEGER                -- % de descuento de grupo de ESTA fase (NULL = usar el de Ajustes)
+  group_pct INTEGER,               -- % de descuento de grupo de ESTA fase (NULL = usar el de Ajustes)
+  es_flash INTEGER NOT NULL DEFAULT 0  -- venta flash: el boleto sale con el precio normal tachado
 );
 CREATE TABLE IF NOT EXISTS faculties (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -403,15 +404,27 @@ def flyer_info(db):
     return out
 
 def effective_price(db, type_row):
-    """Precio vigente de un tipo: la fase más reciente cuya fecha ya llegó;
-    si no hay fase aplicable, el precio base del tipo."""
+    """Precio vigente de un tipo: la fase más reciente cuya fecha ya llegó; si no hay
+    fase aplicable, el precio base. Devuelve (precio, nombre_fase, normal): normal
+    solo viene cuando la fase vigente es una VENTA FLASH, y es el precio que regiría
+    sin ella —el que el boleto saca tachado—. No se guarda a mano en ningún lado:
+    se calcula ignorando las fases flash, así que nunca puede quedar desactualizado
+    respecto a la fase real a la que se vuelve cuando el flash termina."""
     today = now_dt().strftime("%Y-%m-%d")
     ph = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on<=?
                        ORDER BY starts_on DESC, id DESC LIMIT 1""",
                     (type_row["id"], today)).fetchone()
-    if ph:
-        return ph["price_cents"], ph["name"]
-    return type_row["price_cents"], None
+    if not ph:
+        return type_row["price_cents"], None, None
+    if not ph["es_flash"]:
+        return ph["price_cents"], ph["name"], None
+    sin_flash = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on<=?
+                              AND es_flash=0 ORDER BY starts_on DESC, id DESC LIMIT 1""",
+                           (type_row["id"], today)).fetchone()
+    normal = sin_flash["price_cents"] if sin_flash else type_row["price_cents"]
+    if normal <= ph["price_cents"]:
+        normal = None      # un "flash" más caro que lo normal no tacha nada
+    return ph["price_cents"], ph["name"], normal
 
 def next_phase(db, type_row):
     """La próxima fase cuya fecha aún NO llegó (el siguiente cambio de precio).
@@ -500,6 +513,8 @@ def init_db():
                    "es_cortesia INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS normal_price_cents INTEGER")
         db.execute("ALTER TABLE price_phases ADD COLUMN IF NOT EXISTS group_pct INTEGER")
+        db.execute("ALTER TABLE price_phases ADD COLUMN IF NOT EXISTS "
+                   "es_flash INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS client_ref TEXT")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
@@ -551,6 +566,8 @@ def init_db():
         pcols = [r["name"] for r in db.execute("PRAGMA table_info(price_phases)").fetchall()]
         if "group_pct" not in pcols:
             db.execute("ALTER TABLE price_phases ADD COLUMN group_pct INTEGER")
+        if "es_flash" not in pcols:
+            db.execute("ALTER TABLE price_phases ADD COLUMN es_flash INTEGER NOT NULL DEFAULT 0")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -1219,10 +1236,11 @@ def catalog():
     db = get_db()
     types = []
     for r in db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY price_cents").fetchall():
-        price, phase = effective_price(db, r)
+        price, phase, normal = effective_price(db, r)
         types.append({"id": r["id"], "name": r["name"], "is_vip": r["is_vip"],
                       "needs_faculty": r["needs_faculty"],
                       "price_cents": price, "phase": phase,
+                      "normal_cents": normal,
                       "next_phase": next_phase(db, r)})
     facs = [dict(r) for r in db.execute(
         "SELECT id, name FROM faculties WHERE active=1 ORDER BY name").fetchall()]
@@ -1373,14 +1391,16 @@ def create_ticket():
         fac_id, fac_name = fac["id"], fac["name"]
     else:
         fac_id, fac_name = None, ""
-    price_now, phase_name = effective_price(db, tt)   # precio de la fase vigente, congelado en el boleto
+    price_now, phase_name, normal_now = effective_price(db, tt)   # congelado en el boleto
     if price_now <= 0:   # el sistema no vende hasta que el admin defina el precio
         return jsonify(error="El precio de este boleto aún no está configurado. "
                              "Pídele al administrador que lo defina en Catálogos."), 400
     # RF-43: el boleto queda ligado al vendedor que lo genera
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
+    # en venta flash el boleto congela también el precio normal, para salir tachado
     t = _insert_ticket_row(db, buyer, fac_id, fac_name, tt, price_now,
                            seller_id, seller_name, seller_code, phase_name=phase_name,
+                           normal_price_cents=normal_now,
                            guest=is_guest_seller(s["seller"]), client_ref=ref or None)
     if not t:
         return jsonify(error="No se pudo generar el folio, intenta de nuevo"), 500
@@ -1428,7 +1448,7 @@ def create_group():
     tt = db.execute("SELECT * FROM ticket_types WHERE name='Externo' AND active=1").fetchone()
     if not tt:
         return jsonify(error="El tipo Externo no está disponible para armar grupos"), 400
-    price_now, phase_name = effective_price(db, tt)
+    price_now, phase_name, _normal = effective_price(db, tt)
     if price_now <= 0:
         return jsonify(error="El precio de Externo aún no está configurado"), 400
     pct = 0   # el grupo ya no tiene descuento: su beneficio es la botella
@@ -1781,7 +1801,7 @@ def list_types():
     db = get_db()
     out = []
     for r in db.execute("SELECT * FROM ticket_types ORDER BY id").fetchall():
-        price, phase = effective_price(db, r)
+        price, phase, _n = effective_price(db, r)
         phases = [dict(p) for p in db.execute(
             "SELECT * FROM price_phases WHERE type_id=? ORDER BY starts_on, id",
             (r["id"],)).fetchall()]
@@ -1846,6 +1866,7 @@ def create_phase_all():
     name = str(b.get("name", "")).strip()
     date = str(b.get("starts_on", "")).strip()
     prices = b.get("prices") or {}
+    es_flash = 1 if b.get("es_flash") else 0
     if not name or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         return jsonify(error="Falta el nombre o la fecha (AAAA-MM-DD) de la fase"), 400
     db = get_db()
@@ -1870,10 +1891,10 @@ def create_phase_all():
     if not parsed:
         return jsonify(error="Pon al menos un precio para la fase"), 400
     for tid, cents in parsed:
-        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on) "
-                   "VALUES(?,?,?,?)", (tid, name, cents, date))
+        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, es_flash) "
+                   "VALUES(?,?,?,?,?)", (tid, name, cents, date, es_flash))
     audit(db, s["admin"]["username"], "precio",
-          f"Creó la fase '{name}' desde {date} (todos los tipos)")
+          f"Creó la {'VENTA FLASH' if es_flash else 'fase'} '{name}' desde {date} (todos los tipos)")
     db.commit()
     return jsonify(ok=True)
 
@@ -1895,6 +1916,7 @@ def edit_phase_all():
     name = str(b.get("name", "")).strip()
     date = str(b.get("starts_on", "")).strip()
     prices = b.get("prices") or {}
+    es_flash = 1 if b.get("es_flash") else 0
     if not orig_name or not orig_date:
         return jsonify(error="Falta identificar la fase"), 400
     if not name or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
@@ -1927,8 +1949,8 @@ def edit_phase_all():
         (orig_name, orig_date)).fetchall()}
     db.execute("DELETE FROM price_phases WHERE name=? AND starts_on=?", (orig_name, orig_date))
     for tid, cents in parsed:
-        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on) "
-                   "VALUES(?,?,?,?)", (tid, name, cents, date))
+        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, es_flash) "
+                   "VALUES(?,?,?,?,?)", (tid, name, cents, date, es_flash))
     # el movimiento dice QUÉ cambió, no solo que se editó: si mañana un precio no
     # cuadra, la única forma de reconstruirlo es que quede escrito aquí
     nombres = {t["id"]: t["name"] for t in types}

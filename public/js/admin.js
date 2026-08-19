@@ -1424,6 +1424,7 @@ function renderPhases(types) {
     const key = p.starts_on + '|' + p.name;
     const g = (groups[key] = groups[key] || { name: p.name, starts_on: p.starts_on, byType: {} });
     g.byType[t.id] = p.price_cents;
+    if (p.es_flash) g.es_flash = true;
   }));
   const arr = Object.values(groups).sort((a, b) => a.starts_on < b.starts_on ? -1 : 1);
   const today = new Date().toLocaleDateString('en-CA');   // AAAA-MM-DD local
@@ -1437,7 +1438,9 @@ function renderPhases(types) {
       + (vigente ? 'var(--ember)' : 'rgba(255,120,40,.15)');
     const top = document.createElement('div');
     top.className = 'row'; top.style.justifyContent = 'space-between';
-    top.innerHTML = `<div style="font:700 12px Manrope">${esc(g.name)}${vigente ? ' <span style="color:var(--ember-soft);font-size:9px">● VIGENTE</span>' : ''}</div>
+    top.innerHTML = `<div style="font:700 12px Manrope">${esc(g.name)}${g.es_flash
+        ? ' <span style="color:#f3d27a;font-size:9px">⚡ FLASH</span>' : ''}${
+        vigente ? ' <span style="color:var(--ember-soft);font-size:9px">● VIGENTE</span>' : ''}</div>
       <div class="muted" style="font-size:11px">desde ${esc(g.starts_on)}</div>`;
     // Editar va PRIMERO y borrar detrás de un "¿seguro?": la ✕ estaba sola y sin
     // aviso, así que quien quería cambiar un precio terminaba borrando la fase —y no
@@ -1491,6 +1494,14 @@ function renderPhases(types) {
       ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)}${estrellaDe({ type_name: t.name, type_is_vip: t.is_vip }) ? ' ★' : ''} — precio nuevo
         <input class="input" type="number" min="1" placeholder="$" data-ph-price="${t.id}" style="width:110px;padding:9px;font-size:12px"></label>`).join('')}
       <button class="btn sm" id="btn-ph-create" style="width:auto">+ Fase</button>
+    </div>
+    <label class="row" style="gap:7px;cursor:pointer;margin-top:8px;align-items:center">
+      <input type="checkbox" id="ph-flash">
+      <span style="font:600 11.5px Manrope;color:#f3d27a">⚡ Venta flash — el boleto sale con el precio normal tachado</span>
+    </label>
+    <div class="muted" style="font-size:10px;margin-top:3px">
+      El precio tachado es el que regiría sin el flash. Al crear la fase que lo termina,
+      todo vuelve solo: no hay que apagar nada.
     </div>`;
 
   $('#btn-ph-create').onclick = async () => {
@@ -1502,7 +1513,8 @@ function renderPhases(types) {
     $('#ph-err').textContent = '';
     try {
       await API.post('/api/admin/phases-all',
-        { name: $('#ph-name').value.trim(), starts_on: $('#ph-date').value, prices });
+        { name: $('#ph-name').value.trim(), starts_on: $('#ph-date').value, prices,
+          es_flash: $('#ph-flash').checked });
       loadCatalogs();
     } catch (e) { if (!guard(e)) $('#ph-err').textContent = e.message; }
   };
@@ -1527,6 +1539,10 @@ function editarFase(g, types) {
         <input class="input ef-p" data-tid="${t.id}" type="number" min="0" step="1" inputmode="decimal"
           placeholder="—" value="${g.byType[t.id] != null ? g.byType[t.id] / 100 : ''}"></label>`).join('')}
     </div>
+    <label class="row mt12" style="gap:7px;cursor:pointer;align-items:center">
+      <input type="checkbox" id="ef-flash" ${g.es_flash ? 'checked' : ''}>
+      <span style="font:600 12px Manrope;color:#f3d27a">⚡ Venta flash — el boleto sale con el precio normal tachado</span>
+    </label>
     <div class="err mt8" id="ef-err"></div>
     <div class="row mt16">
       <button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
@@ -1539,6 +1555,7 @@ function editarFase(g, types) {
       await API.put('/api/admin/phases-all', {
         orig_name: g.name, orig_starts_on: g.starts_on,
         name: $('#ef-name').value.trim(), starts_on: $('#ef-date').value, prices,
+        es_flash: $('#ef-flash').checked,
       });
       closeModal(); toast('Fase actualizada'); loadCatalogs();
     } catch (e) { if (!guard(e)) $('#ef-err').textContent = e.message; }
