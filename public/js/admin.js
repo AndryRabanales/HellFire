@@ -1431,8 +1431,18 @@ function renderPhases(types) {
   const list = $('#ph-list');
   list.innerHTML = arr.length ? '' :
     '<div class="muted" style="font-size:12px">Sin fases todavía. Agrega la primera abajo.</div>';
-  arr.forEach(g => {
-    const vigente = g.starts_on <= today;
+  arr.forEach((g, i) => {
+    const sig = arr[i + 1];                       // la fase que la termina
+    const vigente = g.starts_on <= today && (!sig || sig.starts_on > today);
+    // Cuántos días dura: hasta que arranca la siguiente. Se muestra porque un
+    // calendario de 8 bloques no se puede verificar sumando fechas de cabeza.
+    const dias = sig
+      ? Math.round((new Date(sig.starts_on) - new Date(g.starts_on)) / 86400000)
+      : null;
+    // El riesgo real de una venta flash: que se quede encendida. Si no hay ninguna
+    // fase DESPUÉS que la apague, el descuento sigue hasta el día del evento — y eso
+    // no se nota mirando la lista, se nota contando el dinero al final.
+    const flashSinFin = g.es_flash && !sig;
     const row = document.createElement('div');
     row.style.cssText = 'padding:8px 11px;border-radius:11px;margin-bottom:6px;background:rgba(255,255,255,.03);border:1px solid '
       + (vigente ? 'var(--ember)' : 'rgba(255,120,40,.15)');
@@ -1441,7 +1451,8 @@ function renderPhases(types) {
     top.innerHTML = `<div style="font:700 12px Manrope">${esc(g.name)}${g.es_flash
         ? ' <span style="color:#f3d27a;font-size:9px">⚡ FLASH</span>' : ''}${
         vigente ? ' <span style="color:var(--ember-soft);font-size:9px">● VIGENTE</span>' : ''}</div>
-      <div class="muted" style="font-size:11px">desde ${esc(g.starts_on)}</div>`;
+      <div class="muted" style="font-size:11px">desde ${esc(g.starts_on)}${
+        dias ? ` · ${dias} día${dias === 1 ? '' : 's'}` : ''}</div>`;
     // Editar va PRIMERO y borrar detrás de un "¿seguro?": la ✕ estaba sola y sin
     // aviso, así que quien quería cambiar un precio terminaba borrando la fase —y no
     // había forma de deshacerlo salvo teclearla otra vez completa.
@@ -1479,6 +1490,16 @@ function renderPhases(types) {
       return `<span style="font:600 11px Manrope;color:var(--cream-60)">${esc(t.name)}${estrellaDe({ type_name: t.name, type_is_vip: t.is_vip }) ? ' ★' : ''}: <b style="color:var(--ember-soft)">${c != null ? fmtMoney(c / 100) : '—'}</b></span>`;
     }).join('');
     row.appendChild(pr);
+    if (flashSinFin) {
+      const av = document.createElement('div');
+      av.style.cssText = 'margin-top:6px;font:600 10.5px Manrope;color:var(--danger);'
+        + 'background:rgba(232,112,106,.1);border:1px solid rgba(232,112,106,.4);'
+        + 'border-radius:8px;padding:6px 9px';
+      av.textContent = '⚠ No hay ninguna fase después: este descuento NO se apaga solo. '
+        + 'Crea la fase que la sigue para que los precios vuelvan a subir.';
+      row.appendChild(av);
+      row.style.borderColor = 'rgba(232,112,106,.5)';
+    }
     list.appendChild(row);
   });
   // formulario de alta: nombre + fecha + un precio por cada tipo

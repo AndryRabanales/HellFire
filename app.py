@@ -418,10 +418,21 @@ def effective_price(db, type_row):
         return type_row["price_cents"], None, None
     if not ph["es_flash"]:
         return ph["price_cents"], ph["name"], None
-    sin_flash = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on<=?
-                              AND es_flash=0 ORDER BY starts_on DESC, id DESC LIMIT 1""",
-                           (type_row["id"], today)).fetchone()
-    normal = sin_flash["price_cents"] if sin_flash else type_row["price_cents"]
+    # El tachado es el precio AL QUE SE VUELVE cuando el flash termine, o sea la
+    # próxima fase normal. No el de la fase anterior: un flash suele ser la apertura
+    # con descuento de su propia fase —"5 días antes de que suba a $425"—, y mirando
+    # hacia atrás salía tachando un precio más barato que el que se está cobrando.
+    sig = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on>?
+                        AND es_flash=0 ORDER BY starts_on ASC, id ASC LIMIT 1""",
+                     (type_row["id"], today)).fetchone()
+    if sig:
+        normal = sig["price_cents"]
+    else:
+        # un flash sin fase que lo termine: se compara con lo último normal que hubo
+        prev = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on<=?
+                             AND es_flash=0 ORDER BY starts_on DESC, id DESC LIMIT 1""",
+                          (type_row["id"], today)).fetchone()
+        normal = prev["price_cents"] if prev else type_row["price_cents"]
     if normal <= ph["price_cents"]:
         normal = None      # un "flash" más caro que lo normal no tacha nada
     return ph["price_cents"], ph["name"], normal
@@ -2005,6 +2016,14 @@ def create_type():
     # el valor por omisión era "sí", así que cualquier tipo nuevo nacía pidiéndola y
     # sacándola impresa en el boleto aunque nadie lo hubiera querido.
     needs_fac = 1 if b.get("needs_faculty") else 0
+    # Dos tipos con el mismo nombre son un desastre silencioso: el vendedor ve dos
+    # "Ultra vip" idénticos en su boletera, cada fase pide el precio dos veces, y las
+    # cuentas se parten entre dos filas que parecen una. Se prohíbe repetir.
+    igual = db.execute("SELECT name FROM ticket_types WHERE LOWER(TRIM(name))=LOWER(TRIM(?))",
+                       (name,)).fetchone()
+    if igual:
+        return jsonify(error=f"Ya existe un tipo llamado «{igual['name']}». "
+                             f"Edítalo en vez de crear otro."), 400
     db.execute("INSERT INTO ticket_types(name, price_cents, is_vip, needs_faculty) VALUES(?,?,?,?)",
                (name, price, 1 if b.get("is_vip") else 0, needs_fac))
     audit(db, s["admin"]["username"], "precio", f"Creó tipo '{name}' a ${price/100:.2f}")
@@ -2022,6 +2041,11 @@ def edit_type(tid):
     if not t:
         return jsonify(error="no existe"), 404
     name = str(b.get("name", t["name"])).strip() or t["name"]
+    if name.strip().lower() != (t["name"] or "").strip().lower():
+        choca = db.execute("SELECT name FROM ticket_types WHERE LOWER(TRIM(name))=LOWER(TRIM(?)) "
+                           "AND id!=?", (name, tid)).fetchone()
+        if choca:
+            return jsonify(error=f"Ya existe un tipo llamado «{choca['name']}»"), 400
     price = int(round(float(b.get("price", t["price_cents"] / 100)) * 100))
     active = 1 if b.get("active", t["active"]) else 0
     is_vip = 1 if b.get("is_vip", t["is_vip"]) else 0

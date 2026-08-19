@@ -233,7 +233,21 @@ function dibujarPrecio(ctx, ticket, x, y) {
     ctx.font = '800 28px Manrope, sans-serif';
     ctx.fillStyle = '#ff8a4d';
     ctx.fillText(pagado, x + w1 + 14, y + 3);
-    pintaFase(x + w1 + 14 + ctx.measureText(pagado).width + 12);
+    // Un sello con lo que se ahorró. El número tachado dice de dónde viene el
+    // descuento, pero el que compra quiere el otro dato: cuánto se llevó de más.
+    // Dorado y con rayo, para que no se confunda con el precio.
+    const ahorro = ticket.normal_price - ticket.price;
+    const sello = '⚡ AHORRÓ ' + fmtMoney(ahorro);
+    const sx = x + w1 + 14 + ctx.measureText(pagado).width + 14;
+    ctx.font = '800 11px "Space Grotesk", monospace';
+    const sw = ctx.measureText(sello).width;
+    ctx.fillStyle = 'rgba(243,210,122,.16)';
+    roundRect(ctx, sx, y - 12, sw + 16, 20, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(243,210,122,.5)'; ctx.lineWidth = 1;
+    roundRect(ctx, sx, y - 12, sw + 16, 20, 10); ctx.stroke();
+    ctx.fillStyle = '#f3d27a';
+    ctx.fillText(sello, sx + 8, y + 2);
+    pintaFase(sx + sw + 16 + 10);
   } else {
     const pagado = fmtMoney(ticket.price);
     ctx.font = '800 28px Manrope, sans-serif';
