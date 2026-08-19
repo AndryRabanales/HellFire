@@ -343,10 +343,6 @@ DEFAULT_SETTINGS = {
     "flyer_data_grupo10": "", "flyer_mime_grupo10": "", "flyer_focus_grupo10": "", "flyer_scale_grupo10": "",
     # Ultra VIP: ya está a la venta como cualquier otro tipo
     "flyer_data_ultravip": "", "flyer_mime_ultravip": "", "flyer_focus_ultravip": "", "flyer_scale_ultravip": "",
-    "flyer_data_grupo10vip": "", "flyer_mime_grupo10vip": "",
-    "flyer_focus_grupo10vip": "", "flyer_scale_grupo10vip": "",
-    "flyer_data_grupo10ultra": "", "flyer_mime_grupo10ultra": "",
-    "flyer_focus_grupo10ultra": "", "flyer_scale_grupo10ultra": "",
     "flyer_data_cortesiaexterno": "", "flyer_mime_cortesiaexterno": "",
     "flyer_focus_cortesiaexterno": "", "flyer_scale_cortesiaexterno": "",
     "flyer_data_cortesiavip": "", "flyer_mime_cortesiavip": "",
@@ -366,21 +362,19 @@ def set_setting(db, key, value):
     db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
+# No hay apartado de grupo VIP ni de grupo Ultra VIP: el fondo de un grupo VIP ES
+# el de VIP —lo que cambia es el boleto, no la imagen—. Grupo de 10 sí tiene el suyo
+# porque ahí el fondo es distinto.
 FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip",
-                  "grupo10vip", "grupo10ultra",
                   "cortesiaexterno", "cortesiavip", "cortesiaultra")
 FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
                "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
-               "grupo10vip": "Grupo de 10 · VIP", "grupo10ultra": "Grupo de 10 · Ultra VIP",
                "cortesiaexterno": "Cortesía Externo", "cortesiavip": "Cortesía VIP",
                "cortesiaultra": "Cortesía Ultra VIP"}
 # cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
 # relacionado antes de caer al flyer legado de una sola imagen
 FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
                    "ultravip": "vip",
-                   # un grupo VIP sin flyer propio usa el de VIP, no el de grupo
-                   # Externo: lo que el comprador reconoce primero es su categoría
-                   "grupo10vip": "vip", "grupo10ultra": "ultravip",
                    # mientras no suban el suyo, la cortesía usa el flyer del tipo que
                    # le toca: se ve bien desde el primer invitado, sin configurar nada
                    "cortesiaexterno": "externo", "cortesiavip": "vip",
