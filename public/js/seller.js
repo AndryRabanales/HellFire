@@ -170,6 +170,8 @@ function flashActivo() {
   const t = (CATALOG.types || []).filter(x => x.normal_cents && x.normal_cents > x.price_cents);
   if (!t.length) return null;
   const ahorro = Math.max(...t.map(x => (x.normal_cents - x.price_cents) / 100));
+  // el nombre de la fase EN CURSO (no la que viene): si el admin la llamó "Fase 2
+  // Flash", el vendedor tiene que poder decir en cuál está cuando le pregunten
   return { nombre: t[0].phase || 'Venta flash', ahorroMax: ahorro };
 }
 
@@ -210,7 +212,7 @@ function renderPhaseTimer() {
   // después entra "Fase 1", le sirve saber que la oferta se acaba. Y los precios de
   // abajo dejan de ser "los nuevos" para ser "a lo que vuelve".
   box.innerHTML =
-    (fl ? `<div class="pt-flash">⚡ VENTA FLASH · hasta $${fl.ahorroMax.toFixed(0)} de descuento</div>` : '')
+    (fl ? `<div class="pt-flash">⚡ ${esc(fl.nombre)} · hasta $${fl.ahorroMax.toFixed(0)} de descuento</div>` : '')
     + `<div class="pt-head">
        <span class="pt-sub">${fl ? 'La oferta termina en' : 'Los precios suben'}</span>
        ${fl ? '' : `<span class="pt-fase">${esc(g.name)}</span>`}
