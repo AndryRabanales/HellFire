@@ -978,6 +978,12 @@ function pintaCuenta(s, c) {
       Para mandarle su estado de cuenta si pregunta c\u00f3mo fue pagando
     </div>` : ''}
 
+    <!-- Fuera del bloque de arriba a propósito: ese solo aparece cuando ya entregó
+         dinero, y "a quién le vendió" se pregunta sobre todo del que TODAVÍA no ha
+         entregado nada. -->
+    ${c.sold_tickets ? `<button class="btn sm ghost mt8" id="pg-vertk" style="width:100%">
+      \u25a4 Ver sus ${c.sold_tickets} boleto(s) \u00b7 a qui\u00e9n le vendi\u00f3</button>` : ''}
+
     ${c.can_edit && c.balance > 0.005 ? `
     <div class="card mt12">
       <div class="label">Registrar una entrega</div>
@@ -1070,6 +1076,18 @@ function pintaCuenta(s, c) {
   }
   const mas = $('#pg-mas');
   if (mas) mas.onclick = () => pintaCuenta(s, { ...c, _verTodos: true });
+  // El "cuántos vendió" siempre lleva al "¿a quiénes?". Estaba a tres pasos —cerrar,
+  // ir a Boletos, buscar su nombre en el filtro—; ahora es un botón desde su cuenta.
+  const vertk = $('#pg-vertk');
+  if (vertk) vertk.onclick = () => {
+    closeModal();
+    openTab('boletos');
+    setTimeout(() => {
+      const sel = $('#fl-seller');
+      if (sel) { sel.value = String(s.id); loadTicketsTable(); }
+      $('#fl-q') && ($('#fl-q').value = '');
+    }, 400);
+  };
   const dl = $('#pg-dl');
   if (dl) dl.onclick = () => descargarEstadoCuenta(s, c);
   const xls = $('#pg-xls');
@@ -1538,8 +1556,9 @@ function renderPhases(types) {
     $('#ph-flash-box').style.borderColor = on ? '#f3d27a' : 'rgba(243,210,122,.28)';
     $('#btn-ph-create').textContent = on ? '+ Crear venta flash' : '+ Crear fase';
     $('#ph-flash-txt').innerHTML = on
-      ? 'El boleto saldrá con el precio de la fase anterior <b>tachado</b> y el sello '
-        + '<b style="color:#f3d27a">⚡ AHORRÓ $X</b>. Termina sola cuando arranque la siguiente fase.'
+      ? 'El boleto saldrá con el precio de la <b>siguiente fase normal tachado</b> —lo que '
+        + 'costará si esperan— y el sello <b style="color:#f3d27a">⚡ AHORRÓ $X</b>. '
+        + 'Termina sola cuando arranque esa fase.'
       : 'Fase normal: el boleto sale con su precio, sin tachado.';
   };
   $('#ph-flash').onchange = sincroFlash;
@@ -1598,8 +1617,8 @@ function editarFase(g, types) {
     const on = $('#ef-flash').checked;
     $('#ef-flash-box').style.borderColor = on ? '#f3d27a' : 'rgba(243,210,122,.28)';
     $('#ef-flash-txt').innerHTML = on
-      ? 'Sus boletos salen con el precio de la fase anterior <b>tachado</b> y el sello '
-        + '<b style="color:#f3d27a">⚡ AHORRÓ $X</b>.'
+      ? 'Sus boletos salen con el precio de la <b>siguiente fase normal tachado</b> y el '
+        + 'sello <b style="color:#f3d27a">⚡ AHORRÓ $X</b>.'
       : 'Fase normal: sus boletos salen con su precio, sin tachado.';
   };
   $('#ef-flash').onchange = sincroEf;
@@ -1661,8 +1680,8 @@ async function loadCatalogs() {
     const on = $('#ef-flash').checked;
     $('#ef-flash-box').style.borderColor = on ? '#f3d27a' : 'rgba(243,210,122,.28)';
     $('#ef-flash-txt').innerHTML = on
-      ? 'Sus boletos salen con el precio de la fase anterior <b>tachado</b> y el sello '
-        + '<b style="color:#f3d27a">⚡ AHORRÓ $X</b>.'
+      ? 'Sus boletos salen con el precio de la <b>siguiente fase normal tachado</b> y el '
+        + 'sello <b style="color:#f3d27a">⚡ AHORRÓ $X</b>.'
       : 'Fase normal: sus boletos salen con su precio, sin tachado.';
   };
   $('#ef-flash').onchange = sincroEf;
