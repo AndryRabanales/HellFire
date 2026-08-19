@@ -1441,6 +1441,18 @@ async function deleteSeller(s) {
 /* ---------------- catálogos ---------------- */
 // Fases GLOBALES: se agrupan las fases de todos los tipos por (fecha + nombre).
 // Cada grupo es "una fase de venta" que sube todos los boletos a la vez.
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
+               'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+function fechaCorta(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return `${d} ${MESES[m - 1]}`;
+}
+function diaAntes(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const f = new Date(y, m - 1, d - 1);
+  return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;
+}
+
 function renderPhases(types) {
   const groups = {};   // clave "fecha|nombre" -> {name, starts_on, byType:{id:price_cents}}
   types.forEach(t => (t.phases || []).forEach(p => {
@@ -1449,6 +1461,9 @@ function renderPhases(types) {
     g.byType[t.id] = p.price_cents;
     if (p.es_flash) g.es_flash = true;
   }));
+  // El calendario se lee como tabla: cada fase con su DESDE y su HASTA. El "hasta"
+  // no se guarda —lo marca el arranque de la siguiente— pero tener que restarle un
+  // día de cabeza a ocho fechas es justo donde se cuela el error.
   const arr = Object.values(groups).sort((a, b) => a.starts_on < b.starts_on ? -1 : 1);
   const today = new Date().toLocaleDateString('en-CA');   // AAAA-MM-DD local
   const list = $('#ph-list');
@@ -1474,8 +1489,9 @@ function renderPhases(types) {
     top.innerHTML = `<div style="font:700 12px Manrope">${esc(g.name)}${g.es_flash
         ? ' <span style="color:#f3d27a;font-size:9px">⚡ FLASH</span>' : ''}${
         vigente ? ' <span style="color:var(--ember-soft);font-size:9px">● VIGENTE</span>' : ''}</div>
-      <div class="muted" style="font-size:11px">desde ${esc(g.starts_on)}${
-        dias ? ` · ${dias} día${dias === 1 ? '' : 's'}` : ''}</div>`;
+      <div class="muted" style="font-size:11px;text-align:right">${esc(fechaCorta(g.starts_on))}
+        → ${sig ? esc(fechaCorta(diaAntes(sig.starts_on))) : 'el evento'}${
+        dias ? `<div style="font-size:9.5px">${dias} día${dias === 1 ? '' : 's'}</div>` : ''}</div>`;
     // Editar va PRIMERO y borrar detrás de un "¿seguro?": la ✕ estaba sola y sin
     // aviso, así que quien quería cambiar un precio terminaba borrando la fase —y no
     // había forma de deshacerlo salvo teclearla otra vez completa.
@@ -1528,6 +1544,16 @@ function renderPhases(types) {
   // formulario de alta: nombre + fecha + un precio por cada tipo
   const add = $('#ph-add');
   add.innerHTML = `
+    <!-- Lo PRIMERO es decidir qué se va a crear. Antes la casilla iba al final, después
+         de teclear nombre, fecha y cuatro precios: para entonces ya se había escrito
+         todo pensando en otra cosa, y marcarla al final se sentía como un extra. -->
+    <div class="label" style="margin:0 0 6px">¿Qué vas a crear?</div>
+    <div class="row" style="gap:6px;margin-bottom:10px">
+      <button type="button" class="btn sm ghost grow ph-tipo sel" data-flash="0"
+        style="padding:10px 6px;font-size:12px">Fase normal</button>
+      <button type="button" class="btn sm ghost grow ph-tipo" data-flash="1"
+        style="padding:10px 6px;font-size:12px">⚡ Venta flash</button>
+    </div>
     <div class="row" style="gap:6px;flex-wrap:wrap;align-items:flex-end">
       <label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px;flex:1;min-width:130px">Nombre de la fase
         <input class="input" id="ph-name" placeholder="ej. Fase 2" style="padding:9px;font-size:12px"></label>
@@ -1538,30 +1564,27 @@ function renderPhases(types) {
       ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)}${estrellaDe({ type_name: t.name, type_is_vip: t.is_vip }) ? ' ★' : ''} — precio nuevo
         <input class="input" type="number" min="1" placeholder="$" data-ph-price="${t.id}" style="width:110px;padding:9px;font-size:12px"></label>`).join('')}
     </div>
-    <!-- La casilla va DENTRO del formulario y ANTES del botón: puesta después, se leía
-         como un interruptor general del sistema y no como "esta fase que estoy
-         creando es flash". El botón cambia de texto para no dejar dudas. -->
-    <label class="row" id="ph-flash-box" style="gap:8px;cursor:pointer;margin-top:10px;
-        align-items:center;padding:9px 11px;border-radius:11px;
-        border:1px solid rgba(243,210,122,.28);background:rgba(243,210,122,.05)">
-      <input type="checkbox" id="ph-flash" style="accent-color:#f3d27a;width:16px;height:16px">
-      <span style="font:700 12px Manrope;color:#f3d27a">⚡ Esta fase es una VENTA FLASH</span>
-    </label>
-    <div class="muted" id="ph-flash-txt" style="font-size:10.5px;margin-top:5px;line-height:1.5"></div>
+    <input type="checkbox" id="ph-flash" style="display:none">
+    <div class="muted" id="ph-flash-txt" style="font-size:10.5px;margin-top:8px;line-height:1.5"></div>
     <button class="btn sm mt8" id="btn-ph-create" style="width:100%">+ Crear fase</button>`;
 
   // el texto de ayuda cambia según la casilla: dice qué va a pasar, no qué es
   const sincroFlash = () => {
     const on = $('#ph-flash').checked;
-    $('#ph-flash-box').style.borderColor = on ? '#f3d27a' : 'rgba(243,210,122,.28)';
+    $$('.ph-tipo').forEach(b => b.classList.toggle('sel', (b.dataset.flash === '1') === on));
+    $('#ph-name').placeholder = on ? 'ej. Fase 2 Flash' : 'ej. Fase 2';
     $('#btn-ph-create').textContent = on ? '+ Crear venta flash' : '+ Crear fase';
     $('#ph-flash-txt').innerHTML = on
-      ? 'El boleto saldrá con el precio de la <b>siguiente fase normal tachado</b> —lo que '
-        + 'costará si esperan— y el sello <b style="color:#f3d27a">⚡ AHORRÓ $X</b>. '
+      ? '<b style="color:#f3d27a">⚡ Venta flash.</b> Pon aquí el precio CON descuento. '
+        + 'El boleto saldrá con el precio de la siguiente fase normal <b>tachado</b> —lo '
+        + 'que costará si esperan— y el sello <b style="color:#f3d27a">⚡ AHORRÓ $X</b>. '
         + 'Termina sola cuando arranque esa fase.'
       : 'Fase normal: el boleto sale con su precio, sin tachado.';
   };
-  $('#ph-flash').onchange = sincroFlash;
+  $$('.ph-tipo').forEach(b => b.onclick = () => {
+    $('#ph-flash').checked = b.dataset.flash === '1';
+    sincroFlash();
+  });
   sincroFlash();
 
   $('#btn-ph-create').onclick = async () => {
