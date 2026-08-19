@@ -137,8 +137,13 @@ function ticketBadgeSpec(ticket) {
     // El representante lleva SU marca. El de la barra no tiene el panel abierto:
     // tiene un boleto enfrente, y si los diez se ven iguales cualquiera puede decir
     // que él es.
+    // ...y con su categoría escrita: en la barra hay botella de grupo general, de
+    // VIP y de Ultra VIP, y no son la misma. Sin el tipo, el de la barra tendría que
+    // adivinarlo por el color.
     if (ticket.es_representante)
-      return { text: '★ BOTELLA · REPRESENTANTE', grad: t.grad, textColor: t.texto };
+      return { text: '★ BOTELLA · REPRESENTANTE' + (esCategoriaAlta(ticket)
+                 ? ' · ' + (ticket.type_name || '').toUpperCase() : ''),
+               grad: t.grad, textColor: t.texto };
     return { text: 'GRUPO ' + ticket.group_size + (esCategoriaAlta(ticket)
                ? ' · ' + (ticket.type_name || '').toUpperCase() : ''),
              grad: t.grad, textColor: t.texto };
@@ -152,8 +157,15 @@ function ticketBadgeSpec(ticket) {
   return { text: ticketTypeLabel(ticket).toUpperCase(), ghost: true };
 }
 
-function drawTicketBadge(ctx, spec, x, y) {
-  ctx.font = '800 15px Manrope, sans-serif';   // Manrope sí dibuja bien el glifo ★
+function drawTicketBadge(ctx, spec, x, y, maxW) {
+  // La insignia crece con su texto ("★ BOTELLA · REPRESENTANTE · ULTRA VIP" es la
+  // más larga). Si no cupiera, se encoge la letra en vez de salirse del boleto.
+  let tam = 15;
+  ctx.font = `800 ${tam}px Manrope, sans-serif`;   // Manrope sí dibuja bien el glifo ★
+  while (maxW && ctx.measureText(spec.text).width + 26 > maxW && tam > 10) {
+    tam -= 0.5;
+    ctx.font = `800 ${tam}px Manrope, sans-serif`;
+  }
   const tw = ctx.measureText(spec.text).width;
   const bh = 30, bw = tw + 26;
   if (spec.ghost) {
@@ -368,7 +380,8 @@ async function renderTicket(ticket, ev, imgOverride) {
   ctx.font = '600 14px "Space Grotesk", monospace';
   const anchoEtiqueta = [...etiqueta].reduce((a, ch) => a + ctx.measureText(ch).width, 0)
                         + 2.6 * (etiqueta.length - 1);
-  drawTicketBadge(ctx, ticketBadgeSpec(ticket), padX + anchoEtiqueta + 18, FLY + 24);
+  const badgeX = padX + anchoEtiqueta + 18;
+  drawTicketBadge(ctx, ticketBadgeSpec(ticket), badgeX, FLY + 24, W - badgeX - padX);
 
   // 2) abajo: el precio, anclado al pie de la banda
   const precioY = FLY + BAND - 42;
