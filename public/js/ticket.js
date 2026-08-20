@@ -423,19 +423,73 @@ function letterSpaced(ctx, text, cx, y, spacing) {
 }
 
 
+/* ¿Estamos DENTRO de otra app? WhatsApp, Instagram, Facebook y Messenger abren los
+   enlaces en su propio navegador incrustado. Ahí una descarga no falla con un error:
+   simplemente NO PASA NADA, porque quien tiene que recibir el archivo es la app
+   anfitriona y esas no lo implementan. Como los vendedores mandan el link por
+   WhatsApp, es justo donde más se usa. En iPhone no se nota porque Safari abre la
+   imagen en pantalla y de ahí se guarda; en Android se queda en nada. */
+function navegadorIncrustado() {
+  const ua = navigator.userAgent || '';
+  return /FBAN|FBAV|FB_IAB|Instagram|Messenger|Line\/|MicroMessenger|; wv\)/i.test(ua);
+}
+function soportaDescarga() {
+  return 'download' in document.createElement('a');
+}
+
+/* Plan B: se enseña la imagen a pantalla completa para guardarla con el dedo. No es
+   un mensaje de error —es la forma normal de guardar una imagen en un teléfono— y
+   funciona en cualquier navegador, incrustado o no. */
+function mostrarParaGuardar(url, ticket) {
+  const prev = document.getElementById('guardar-img');
+  if (prev) prev.remove();
+  const capa = document.createElement('div');
+  capa.id = 'guardar-img';
+  capa.innerHTML = `
+    <div class="gi-caja">
+      <div class="gi-tit">Mantén presionada la imagen</div>
+      <div class="gi-sub">y elige <b>Guardar imagen</b> o <b>Descargar imagen</b></div>
+      <img src="${url}" alt="Boleto de ${esc0(ticket.buyer_name || '')}">
+      <div class="gi-nota">Estás dentro de otra app. Para que se descargue sola,
+        abre el enlace en Chrome desde el menú ⋮ → «Abrir en Chrome».</div>
+      <button type="button" class="gi-cerrar">Listo</button>
+    </div>`;
+  document.body.appendChild(capa);
+  const cerrar = () => capa.remove();
+  capa.querySelector('.gi-cerrar').onclick = cerrar;
+  capa.onclick = e => { if (e.target === capa) cerrar(); };
+}
+function esc0(t) {
+  return String(t).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 async function downloadTicket(ticket, ev) {
   const cv = await renderTicket(ticket, ev);
-  return new Promise(resolve => {
-    cv.toBlob(blob => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      // el nombre del archivo usa al comprador, no el folio (el folio revela cuántos van vendidos)
-      const slug = (ticket.buyer_name || 'boleto').normalize('NFD').replace(/[̀-ͯ]/g, '')
-        .replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'boleto';
-      a.download = 'boleto_' + slug + '.png';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); resolve(); }, 400);
-    }, 'image/png');
-  });
+  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  if (!blob) throw new Error('No se pudo generar la imagen del boleto');
+  // el nombre del archivo usa al comprador, no el folio (el folio revela cuántos van vendidos)
+  const slug = (ticket.buyer_name || 'boleto').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'boleto';
+  const url = URL.createObjectURL(blob);
+  // La URL se soltaba a los 400 ms. En Android la descarga a veces todavía no había
+  // arrancado y se quedaba a medias: el archivo desaparecía antes de guardarse.
+  const soltar = () => setTimeout(() => URL.revokeObjectURL(url), 60000);
+
+  // Devuelve si el archivo se descargó de verdad o si se enseñó para guardarlo a
+  // mano: quien avisa "Boleto descargado ✓" no puede decirlo cuando no ocurrió.
+  if (navegadorIncrustado() || !soportaDescarga()) {
+    mostrarParaGuardar(url, ticket);
+    soltar();
+    return false;
+  }
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'boleto_' + slug + '.png';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => a.remove(), 1000);
+  soltar();
+  return true;
 }

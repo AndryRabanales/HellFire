@@ -798,3 +798,23 @@ details.card>summary:active{transform:scale(.99)}
 .rk-d b{font:800 15px "Space Grotesk";color:var(--cream)}
 .rk-row.podio .rk-d b{color:#f3d27a}
 .rk-sec{display:block;font:600 10.5px Manrope;color:var(--cream-45);margin-top:1px}
+
+/* ---------- guardar el boleto con el dedo ----------
+   Plan B para cuando la página se abre DENTRO de otra app (WhatsApp, Instagram):
+   ahí la descarga no falla, simplemente no ocurre. Se enseña la imagen grande y se
+   guarda como se guarda cualquier foto: dejando el dedo encima. */
+#guardar-img{position:fixed;inset:0;z-index:9999;background:rgba(6,3,2,.94);
+  display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto;
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+#guardar-img .gi-caja{max-width:420px;width:100%;text-align:center}
+#guardar-img .gi-tit{font:800 17px Manrope;color:var(--cream)}
+#guardar-img .gi-sub{font:600 13px Manrope;color:var(--cream-60);margin:4px 0 12px}
+#guardar-img .gi-sub b{color:var(--ember-soft)}
+#guardar-img img{width:100%;height:auto;border-radius:14px;display:block;
+  border:1px solid rgba(255,120,40,.3);
+  /* que el navegador ofrezca su menú de imagen al dejar el dedo encima */
+  -webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto}
+#guardar-img .gi-nota{font:600 11px/1.5 Manrope;color:var(--cream-45);margin-top:11px}
+#guardar-img .gi-cerrar{margin-top:13px;width:100%;padding:13px;border-radius:12px;
+  border:none;cursor:pointer;font:800 14px Manrope;color:#fff;
+  background:linear-gradient(135deg,var(--ember),#c81e3a)}

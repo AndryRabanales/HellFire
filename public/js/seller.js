@@ -468,12 +468,13 @@ function showGroupResult(r) {
     b.addEventListener('click', async () => {
       b.disabled = true;
       try {
-        await downloadTicket(r.tickets[Number(b.dataset.idx)], CATALOG);
-        // marca el botón como "ya descargado" (check + relleno), para que el
-        // vendedor sepa de un vistazo cuáles boletos del grupo le faltan
-        b.innerHTML = CHECK_ICON;
-        b.classList.add('grabbed');
-        b.title = 'Ya descargado · toca para volver a descargarlo';
+        if (await downloadTicket(r.tickets[Number(b.dataset.idx)], CATALOG)) {
+          // marca el botón como "ya descargado" (check + relleno), para que el
+          // vendedor sepa de un vistazo cuáles boletos del grupo le faltan
+          b.innerHTML = CHECK_ICON;
+          b.classList.add('grabbed');
+          b.title = 'Ya descargado · toca para volver a descargarlo';
+        }
       } finally { b.disabled = false; }
     });
   });
@@ -545,7 +546,7 @@ async function generate() {
     VENTA_REF = null;                       // venta cerrada: la siguiente lleva otra
     // se descarga en el acto; si el navegador lo bloquea queda el botón de la tira
     let bajo = false;
-    try { await downloadTicket(r.ticket, CATALOG); bajo = true; } catch (_) {}
+    try { bajo = await downloadTicket(r.ticket, CATALOG); } catch (_) {}
     showSoloResult(r.ticket, bajo);
     clearForm();                            // listo para la siguiente venta
     toast(r.repetido
@@ -587,9 +588,10 @@ function showSoloResult(t, bajoAutomatico) {
   b.addEventListener('click', async () => {
     b.disabled = true;
     try {
-      await downloadTicket(t, CATALOG);
-      DOWNLOADED.add(t.id);
-      toast('Boleto descargado otra vez');
+      if (await downloadTicket(t, CATALOG)) {
+        DOWNLOADED.add(t.id);
+        toast('Boleto descargado otra vez');
+      }
     } finally { b.disabled = false; }
   });
   $('#solo-result').classList.remove('hidden');
@@ -679,12 +681,13 @@ async function loadHistory() {
         b.addEventListener('click', async () => {
           b.disabled = true;
           try {
-            await downloadTicket(t, CATALOG);
-            toast('Boleto descargado');
-            DOWNLOADED.add(t.id);
-            b.innerHTML = CHECK_ICON;
-            b.classList.add('grabbed');
-            b.title = 'Ya descargado · toca para volver a descargarlo';
+            if (await downloadTicket(t, CATALOG)) {
+              toast('Boleto descargado');
+              DOWNLOADED.add(t.id);
+              b.innerHTML = CHECK_ICON;
+              b.classList.add('grabbed');
+              b.title = 'Ya descargado · toca para volver a descargarlo';
+            }
           } finally { b.disabled = false; }
         });
         row.appendChild(b);
@@ -735,7 +738,7 @@ $('#btn-download').addEventListener('click', async () => {
   const b = $('#btn-download');
   const restore = b.innerHTML;
   b.disabled = true; b.textContent = 'Generando imagen…';
-  try { await downloadTicket(LAST_TICKET, CATALOG); toast('Boleto descargado ✓'); }
+  try { if (await downloadTicket(LAST_TICKET, CATALOG)) toast('Boleto descargado ✓'); }
   catch (e) { toast('No se pudo descargar: ' + e.message); }
   finally { b.disabled = false; b.innerHTML = restore; }
 });
