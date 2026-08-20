@@ -144,16 +144,14 @@
   <!-- ===== Vendedores (RF-82..88) ===== -->
   <!-- ===== Ranking: quién vende y quién no ===== -->
   <section id="tab-ranking" class="mt16 hidden">
-    <div class="card">
+    <div class="card rk-card">
       <div class="label" style="margin:0">Quién está vendiendo</div>
-      <div class="muted" style="font-size:11px;margin-top:3px">Los boletos anulados no cuentan. Los que no han vendido nada salen al final, sin puesto.</div>
-      <div class="row mt12" style="gap:6px">
-        <button type="button" class="btn sm ghost grow rk-por sel" data-por="boletos"
-          style="padding:10px 6px;font-size:12px">Por boletos</button>
-        <button type="button" class="btn sm ghost grow rk-por" data-por="dinero"
-          style="padding:10px 6px;font-size:12px">Por dinero</button>
+      <div class="muted rk-nota">Los anulados no cuentan. Los de cero van al final.</div>
+      <div class="rk-switch">
+        <button type="button" class="rk-por sel" data-por="boletos">Por boletos</button>
+        <button type="button" class="rk-por" data-por="dinero">Por dinero</button>
       </div>
-      <div class="row mt12" id="rk-stats" style="gap:7px;flex-wrap:wrap"></div>
+      <div class="rk-stats" id="rk-stats"></div>
     </div>
     <div id="rk-list" class="mt12"></div>
   </section>

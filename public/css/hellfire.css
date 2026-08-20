@@ -749,25 +749,52 @@ details.card>summary:active{transform:scale(.99)}
 /* la flash de botón no lleva reloj: lleva el aviso de que está corriendo ya */
 .pt-ahora{font:800 12px Manrope;color:#f3d27a;letter-spacing:.4px;margin:9px 0 2px}
 
+/* ---------- ranking: el encabezado ----------
+   Todo esto tiene que caber junto en la pantalla de un teléfono, porque la captura
+   de esta pantalla es lo que se manda al grupo. Cada cosa ocupa lo mínimo: el filtro
+   es una tira de dos, y los cuatro números van en rejilla —con flex el cuarto se
+   caía solo a un renglón y dejaba un hueco. */
+.rk-card{padding:12px 13px}
+.rk-nota{font-size:10.5px;margin-top:2px;line-height:1.45}
+.rk-switch{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:10px;
+  padding:3px;border-radius:11px;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,120,40,.16)}
+.rk-switch .rk-por{border:none;background:none;cursor:pointer;border-radius:9px;
+  padding:7px 4px;font:700 12px Manrope;color:var(--cream-60);transition:.15s}
+.rk-switch .rk-por.sel{background:linear-gradient(135deg,var(--ember),#c81e3a);color:#fff}
+.rk-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px}
+.rk-st{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.13);
+  border-radius:10px;padding:7px 6px;min-width:0;text-align:center}
+.rk-st i{display:block;font:700 8.5px Manrope;color:var(--cream-45);
+  letter-spacing:.4px;text-transform:uppercase;font-style:normal;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.rk-st b{display:block;font:800 17px "Space Grotesk";color:var(--cream);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rk-st small{font-size:11px;color:var(--cream-45);font-weight:600}
+@media(max-width:400px){ .rk-st b{font-size:15px} }
+/* En pantallas muy angostas (iPhone SE) los cuatro en fila dejan celdas donde no
+   cabe "$61,000" y el número sale cortado. Dos y dos: siguen sin huecos y se leen. */
+@media(max-width:360px){ .rk-stats{grid-template-columns:1fr 1fr} }
+
 /* ---------- ranking de vendedores ----------
    Una fila por vendedor, con su puesto a la izquierda. El podio se distingue y los
    de cero se apagan: la lista se lee de un vistazo para premiar arriba y para ver
    abajo quién no ha movido un boleto. */
-.rk-row{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;
-  padding:10px 12px;margin-bottom:6px;border-radius:12px;cursor:pointer;
+.rk-row{display:grid;grid-template-columns:36px 1fr auto;gap:9px;align-items:center;
+  padding:8px 11px;margin-bottom:5px;border-radius:11px;cursor:pointer;
   background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.13);
   transition:border-color .15s,background .15s}
 .rk-row:active{transform:scale(.995)}
 .rk-row.podio{border-color:rgba(243,210,122,.4);background:rgba(243,210,122,.06)}
 .rk-row.cero{opacity:.5}
-.rk-pos{font:800 15px "Space Grotesk";color:var(--ember-soft);text-align:center}
-.rk-row.podio .rk-pos{font-size:20px}
+.rk-pos{font:800 14px "Space Grotesk";color:var(--ember-soft);text-align:center}
+.rk-row.podio .rk-pos{font-size:18px}
 .rk-row.cero .rk-pos{color:var(--cream-45)}
 .rk-n{font:700 13px Manrope;color:var(--cream);min-width:0}
 .rk-sub{display:block;font:600 10.5px Manrope;color:var(--cream-45);margin-top:2px}
 .rk-tag{font:700 9px Manrope;color:#f3d27a;border:1px solid rgba(243,210,122,.4);
   border-radius:20px;padding:1px 6px;vertical-align:middle}
 .rk-d{text-align:right;white-space:nowrap}
-.rk-d b{font:800 16px "Space Grotesk";color:var(--cream)}
+.rk-d b{font:800 15px "Space Grotesk";color:var(--cream)}
 .rk-row.podio .rk-d b{color:#f3d27a}
 .rk-sec{display:block;font:600 10.5px Manrope;color:var(--cream-45);margin-top:1px}

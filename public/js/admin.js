@@ -1728,11 +1728,14 @@ async function loadRanking(silent) {
     b.classList.toggle('sel', b.dataset.por === RK_POR);
     b.onclick = () => { RK_POR = b.dataset.por; _sigRanking = null; loadRanking(); };
   });
+  // Cuatro celdas iguales en rejilla, no cuatro tarjetas que se acomodan solas: con
+  // flex la cuarta se caía a un renglón propio y dejaba un hueco a la mitad — feo en
+  // pantalla y peor en una captura de teléfono.
   $('#rk-stats').innerHTML = `
-    <div class="stat" style="flex:1;min-width:96px"><div class="sk">Vendiendo</div><div class="sv">${r.con_ventas}<small> de ${r.total_vendedores}</small></div></div>
-    <div class="stat" style="flex:1;min-width:96px"><div class="sk">Sin vender</div><div class="sv">${r.sin_ventas}</div></div>
-    <div class="stat" style="flex:1;min-width:96px"><div class="sk">Boletos</div><div class="sv">${r.total_boletos}</div></div>
-    <div class="stat" style="flex:1;min-width:110px"><div class="sk">Vendido</div><div class="sv">${fmtMoney(r.total_monto)}</div></div>`;
+    <div class="rk-st"><i>Vendiendo</i><b>${r.con_ventas}<small>/${r.total_vendedores}</small></b></div>
+    <div class="rk-st"><i>Sin vender</i><b>${r.sin_ventas}</b></div>
+    <div class="rk-st"><i>Boletos</i><b>${r.total_boletos}</b></div>
+    <div class="rk-st"><i>Vendido</i><b>${fmtMoney(r.total_monto)}</b></div>`;
 
   const lista = $('#rk-list');
   lista.innerHTML = '';
