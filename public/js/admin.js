@@ -43,7 +43,7 @@ async function enter(name) {
 /* ---------------- tabs ---------------- */
 const loaders = {
   resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
-  vendedores: loadSellers, grupos: loadGroups, gastos: loadExpenses,
+  vendedores: loadSellers, ranking: loadRanking, grupos: loadGroups, gastos: loadExpenses,
   colideres: loadColideres, cortesias: loadCortesias,
   catalogos: loadCatalogs, ajustes: loadAjustes,
 };
@@ -68,7 +68,7 @@ $('#tabs').addEventListener('click', e => {
 let liveTimer = null;
 const LIVE = { resumen: loadSummary, boletos: loadTicketsTable,
                movimientos: loadMovements, vendedores: loadSellers,
-               cortesias: loadCortesias,
+               cortesias: loadCortesias, ranking: loadRanking,
                // Catálogos se mira solo por la venta flash: si otro admin la prende
                // desde su teléfono, esta pantalla no puede seguir diciendo "apagada"
                // y ofrecer un botón que hace lo contrario de lo que se lee.
@@ -1709,6 +1709,69 @@ function editarFase(g, types) {
     } catch (e) { if (!guard(e)) $('#ef-err').textContent = e.message; }
   };
 }
+
+/* ---------------- ranking: quién vende y quién no ----------------
+
+   Sirve para dos cosas opuestas y por eso salen todos en la misma lista: premiar al
+   de arriba y ver al que no ha movido un boleto. Un vendedor con cero que no
+   apareciera en ninguna parte es justo el que se pasa por alto.
+
+   Dos órdenes porque no miden lo mismo: quien coloca más boletos no siempre es quien
+   más dinero trae —diez UADY son menos que dos Ultra VIP—. */
+let RK_POR = 'boletos';
+async function loadRanking(silent) {
+  const r = await API.get('/api/admin/ranking?por=' + RK_POR);
+  const sig = JSON.stringify(r);
+  if (silent && sig === _sigRanking) return;
+  _sigRanking = sig;
+  $$('.rk-por').forEach(b => {
+    b.classList.toggle('sel', b.dataset.por === RK_POR);
+    b.onclick = () => { RK_POR = b.dataset.por; _sigRanking = null; loadRanking(); };
+  });
+  $('#rk-stats').innerHTML = `
+    <div class="stat" style="flex:1;min-width:96px"><div class="sk">Vendiendo</div><div class="sv">${r.con_ventas}<small> de ${r.total_vendedores}</small></div></div>
+    <div class="stat" style="flex:1;min-width:96px"><div class="sk">Sin vender</div><div class="sv">${r.sin_ventas}</div></div>
+    <div class="stat" style="flex:1;min-width:96px"><div class="sk">Boletos</div><div class="sv">${r.total_boletos}</div></div>
+    <div class="stat" style="flex:1;min-width:110px"><div class="sk">Vendido</div><div class="sv">${fmtMoney(r.total_monto)}</div></div>`;
+
+  const lista = $('#rk-list');
+  lista.innerHTML = '';
+  let yaSinVentas = false;
+  r.vendedores.forEach(v => {
+    // una línea que separa a los que venden de los que no: es la decisión que se va
+    // a tomar mirando esta pantalla, así que se ve sin tener que contar
+    if (!v.puesto && !yaSinVentas) {
+      yaSinVentas = true;
+      if (r.sin_ventas) {
+        const sep = document.createElement('div');
+        sep.style.cssText = 'margin:14px 0 8px;font:700 11px Manrope;color:var(--cream-45);'
+          + 'letter-spacing:.5px;display:flex;align-items:center;gap:9px';
+        sep.innerHTML = `SIN NINGUNA VENTA · ${r.sin_ventas}
+          <span style="flex:1;height:1px;background:rgba(255,120,40,.18)"></span>`;
+        lista.appendChild(sep);
+      }
+    }
+    const medalla = v.puesto === 1 ? '🥇' : v.puesto === 2 ? '🥈' : v.puesto === 3 ? '🥉' : null;
+    const podio = v.puesto && v.puesto <= 3;
+    const row = document.createElement('div');
+    row.className = 'rk-row' + (podio ? ' podio' : '') + (v.puesto ? '' : ' cero');
+    const dato = RK_POR === 'dinero'
+      ? `<b>${fmtMoney(v.monto)}</b><span class="rk-sec">${v.boletos} boleto${v.boletos === 1 ? '' : 's'}</span>`
+      : `<b>${v.boletos}</b><span class="rk-sec">${fmtMoney(v.monto)}</span>`;
+    row.innerHTML = `
+      <div class="rk-pos">${medalla || (v.puesto ? v.puesto + 'º' : '—')}</div>
+      <div class="rk-n">${esc(v.name)}${v.es_lider ? ' <span class="rk-tag">colíder</span>' : ''}
+        <span class="rk-sub">${v.ultima ? 'última venta ' + esc(fechaCorta(String(v.ultima).slice(0, 10)))
+          : 'no ha vendido nada'}</span></div>
+      <div class="rk-d">${dato}</div>`;
+    // se abre su cuenta desde aquí mismo: si vas a premiarlo o a darlo de baja, lo
+    // primero que quieres ver es qué vendió y qué debe, sin ir a buscarlo a la lista
+    row.onclick = () => paySeller({ id: v.id, name: v.name, total: v.monto });
+    lista.appendChild(row);
+  });
+  if (!r.vendedores.length) lista.innerHTML = '<div class="muted">Todavía no hay vendedores.</div>';
+}
+let _sigRanking = null;
 
 async function loadCatalogs() {
   loadFlash();

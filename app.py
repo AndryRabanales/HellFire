@@ -2478,6 +2478,69 @@ def list_sellers():
         out.append(d)
     return jsonify(sellers=out)
 
+@app.get("/api/admin/ranking")
+def ranking_vendedores():
+    """Quién está vendiendo y quién no. Ordenado por boletos o por dinero.
+
+    Salen TODOS, incluidos los de cero: la lista sirve tanto para premiar arriba como
+    para ver quién no ha movido un boleto, y un vendedor sin ventas que no aparece en
+    ninguna lista es justo el que se pasa por alto.
+
+    Los boletos anulados no cuentan —ni en el conteo ni en el dinero—: si contaran,
+    generar y anular sería una forma de subir en la tabla."""
+    s = require_panel()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    por = "dinero" if (request.args.get("por") == "dinero") else "boletos"
+    rows = db.execute("""
+        SELECT s.id, s.name, s.code, s.deleted, s.es_lider, s.owner_admin_id,
+               s.owner_admin_name,
+               COALESCE(SUM(CASE WHEN t.status!='void' THEN 1 ELSE 0 END),0) AS boletos,
+               COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS monto,
+               MAX(CASE WHEN t.status!='void' THEN t.created_at END) AS ultima
+        FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id
+        WHERE s.hidden=0 AND s.deleted=0
+        GROUP BY s.id, s.name, s.code, s.deleted, s.es_lider, s.owner_admin_id,
+                 s.owner_admin_name""").fetchall()
+    duenio = mi_ambito(s)
+    if duenio:
+        rows = [r for r in rows if r["owner_admin_id"] == duenio]
+    filas = [dict(r) for r in rows]
+    # El orden que se pidió manda; el otro dato desempata. Dos vendedores con nueve
+    # boletos no están empatados si uno vendió puros Ultra VIP.
+    clave = ((lambda f: (f["monto"], f["boletos"])) if por == "dinero"
+             else (lambda f: (f["boletos"], f["monto"])))
+    filas.sort(key=lambda f: (-clave(f)[0], -clave(f)[1], (f["name"] or "").lower()))
+    # Empate = mismo puesto. Que dos con la misma venta salgan 3° y 4° convierte un
+    # empate en una jerarquía inventada, y esto se va a usar para repartir un premio.
+    salida = []
+    puesto = 0
+    anterior = None
+    for i, f in enumerate(filas):
+        actual = clave(f)
+        if actual != anterior:
+            puesto = i + 1
+            anterior = actual
+        salida.append({
+            "id": f["id"], "name": f["name"], "code": f["code"],
+            "es_lider": bool(f["es_lider"]),
+            "owner_admin_name": f["owner_admin_name"],
+            "boletos": f["boletos"], "monto": money(f["monto"]),
+            "ultima": f["ultima"],
+            "puesto": puesto if f["boletos"] else None,   # sin ventas no tiene puesto
+        })
+    conVentas = [f for f in salida if f["boletos"]]
+    return jsonify(
+        por=por, vendedores=salida,
+        total_vendedores=len(salida),
+        con_ventas=len(conVentas),
+        sin_ventas=len(salida) - len(conVentas),
+        total_boletos=sum(f["boletos"] for f in salida),
+        total_monto=sum(f["monto"] for f in salida),
+    )
+
+
 def comision_general(db):
     """El porcentaje que se aplica a quien no tenga uno propio."""
     try:
