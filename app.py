@@ -433,103 +433,81 @@ def _nombre_base(nombre):
 
 
 def migrar_precios_flash(db):
-    """Las ventas flash ya cargadas por fecha se convierten TAMBIÉN en el precio de
-    flash de su fase ('Fase 2 Flash' $300 → Fase 2 vale $300 en flash), para que el
-    botón sirva desde el primer día sin volver a teclear la tabla. No borra nada: las
-    fases flash del calendario siguen ahí."""
+    """Deja UNA sola forma de que haya venta flash: el botón.
+
+    Antes convivían dos —el calendario y el botón— y se peleaban: una fila
+    'Fase 1 ⚡ FLASH' con fecha ya llegada ponía a los vendedores en flash aunque el
+    botón estuviera apagado, y desde el panel no había manera de terminarla.
+
+    Cada venta flash del calendario se guarda como el PRECIO DE FLASH de su fase
+    ('FASE 2 ⚡ FLASH $330' → la Fase 2 cuesta $330 cuando se prende el botón) y la
+    fila se retira del calendario. No se pierde ningún precio, y ninguna fecha vuelve
+    a cambiar un precio sola. Si alguna no encuentra su fase por el nombre, se deja
+    donde está y se avisa: más vale una fila de sobra que un precio perdido.
+    """
     filas = db.execute("SELECT * FROM price_phases ORDER BY id").fetchall()
     porTipo = {}
     for f in filas:
         porTipo.setdefault(f["type_id"], []).append(f)
-    tocados = 0
+    copiados = retirados = 0
+    huerfanas = []
     for tid, fases in porTipo.items():
-        flashes = [f for f in fases if f["es_flash"]]
-        for f in flashes:
+        for f in [x for x in fases if x["es_flash"]]:
             base = _nombre_base(f["name"])
-            for n in fases:
-                if n["es_flash"] or n["flash_price_cents"] is not None:
-                    continue
-                if _nombre_base(n["name"]) == base and f["price_cents"] < n["price_cents"]:
-                    db.execute("UPDATE price_phases SET flash_price_cents=? WHERE id=?",
-                               (f["price_cents"], n["id"]))
-                    tocados += 1
-    if tocados:
+            pareja = next((n for n in fases
+                           if not n["es_flash"] and _nombre_base(n["name"]) == base
+                           and f["price_cents"] < n["price_cents"]), None)
+            if not pareja:
+                huerfanas.append(f"{f['name']} ({f['starts_on']})")
+                continue
+            if pareja["flash_price_cents"] is None:
+                db.execute("UPDATE price_phases SET flash_price_cents=? WHERE id=?",
+                           (f["price_cents"], pareja["id"]))
+                copiados += 1
+            db.execute("DELETE FROM price_phases WHERE id=?", (f["id"],))
+            retirados += 1
+    if copiados or retirados:
         db.commit()
-        print(f"[OnFire] Precios de venta flash copiados a su fase: {tocados}")
+        print(f"[OnFire] Ventas flash del calendario: {copiados} precio(s) guardados "
+              f"en su fase, {retirados} fila(s) retiradas. Ahora solo prende el botón.")
+    if huerfanas:
+        print("[OnFire] AVISO: estas ventas flash no encontraron su fase por el nombre "
+              "y siguen en el calendario (ya no cambian precios): " + ", ".join(huerfanas))
 
 
 def effective_price(db, type_row):
-    """Precio vigente de un tipo: la fase más reciente cuya fecha ya llegó; si no hay
-    fase aplicable, el precio base. Devuelve (precio, nombre_fase, normal): normal
-    solo viene cuando la fase vigente es una VENTA FLASH, y es el precio que regiría
-    sin ella —el que el boleto saca tachado—. No se guarda a mano en ningún lado:
-    se calcula ignorando las fases flash, así que nunca puede quedar desactualizado
-    respecto a la fase real a la que se vuelve cuando el flash termina."""
+    """Lo que cuesta HOY un tipo de boleto. Devuelve (precio, nombre_fase, normal).
+
+    Dos cosas, y solo dos:
+      1. El calendario decide el precio normal: la última fase cuya fecha ya llegó,
+         o el precio base si todavía no arranca ninguna.
+      2. El BOTÓN de venta flash decide si además hay descuento. Cuando está
+         prendido se cobra el precio de flash de esa misma fase y `normal` trae el
+         precio de la fase, que es el que el boleto saca tachado.
+
+    Ninguna fecha enciende un flash sola: eso ya pasó una vez —una fila
+    'Fase 1 ⚡ FLASH' con la fecha llegada dejó a los vendedores en oferta sin forma
+    de apagarla desde el panel— y por eso ahora hay un solo interruptor."""
     today = now_dt().strftime("%Y-%m-%d")
+    # es_flash=0 a propósito: una fila flash que quedara suelta en el calendario NO
+    # puede volver a mover un precio sola.
     ph = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on<=?
-                       ORDER BY starts_on DESC, id DESC LIMIT 1""",
+                       AND es_flash=0 ORDER BY starts_on DESC, id DESC LIMIT 1""",
                     (type_row["id"], today)).fetchone()
     if not ph:
-        # Sin ninguna fase corriendo se vende al precio base. El botón TAMBIÉN tiene
-        # que servir aquí: las fases pueden arrancar semanas después y mientras tanto
-        # ya se está vendiendo. El precio de flash vive entonces en el tipo mismo.
+        # Todavía no arranca ninguna fase: se vende al precio base. El botón también
+        # sirve aquí, con el precio de flash guardado en el tipo.
         base = type_row["price_cents"]
         suyo = type_row["flash_price_cents"] if "flash_price_cents" in type_row.keys() else None
         if flash_manual(db) and suyo and suyo < base:
             return suyo, "Venta flash", base
         return base, None, None
-    if not ph["es_flash"]:
-        # EL INTERRUPTOR. Cada fase guarda su propio precio de flash, así que prender
-        # el botón cobra el flash DE LA FASE QUE ESTÉ CORRIENDO: si se prende en
-        # Fase 1 sale el de Fase 1, y si se vuelve a prender en Fase 4 sale el de
-        # Fase 4, sin tocar nada. Apagar y volver a prender no cambia el precio.
-        if flash_manual(db) and ph["flash_price_cents"] and ph["flash_price_cents"] < ph["price_cents"]:
-            return ph["flash_price_cents"], ph["name"] + " Flash", ph["price_cents"]
-        return ph["price_cents"], ph["name"], None
-    # El tachado es el precio AL QUE SE VUELVE cuando el flash termine, o sea la
-    # próxima fase normal. No el de la fase anterior: un flash suele ser la apertura
-    # con descuento de su propia fase —"5 días antes de que suba a $425"—, y mirando
-    # hacia atrás salía tachando un precio más barato que el que se está cobrando.
-    sig = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on>?
-                        AND es_flash=0 ORDER BY starts_on ASC, id ASC LIMIT 1""",
-                     (type_row["id"], today)).fetchone()
-    if sig:
-        normal = sig["price_cents"]
-    else:
-        # un flash sin fase que lo termine: se compara con lo último normal que hubo
-        prev = db.execute("""SELECT * FROM price_phases WHERE type_id=? AND starts_on<=?
-                             AND es_flash=0 ORDER BY starts_on DESC, id DESC LIMIT 1""",
-                          (type_row["id"], today)).fetchone()
-        normal = prev["price_cents"] if prev else type_row["price_cents"]
-    if normal <= ph["price_cents"]:
-        normal = None      # un "flash" más caro que lo normal no tacha nada
-    return ph["price_cents"], ph["name"], normal
-
-def avisos_flash(db, parsed, date, tipos):
-    """Un flash que cuesta MÁS que la fase anterior no es una oferta: el que compró
-    ayer pagó menos. El sistema no lo prohíbe —puede haber una razón— pero lo dice,
-    porque en la pantalla los dos números se ven bien y el error solo aparece cuando
-    un comprador reclama."""
-    nombres = {t["id"]: t["name"] for t in tipos}
-    avisos = []
-    for tid, cents in parsed:
-        previa = db.execute("""SELECT price_cents FROM price_phases WHERE type_id=?
-                               AND starts_on<? AND es_flash=0
-                               ORDER BY starts_on DESC, id DESC LIMIT 1""",
-                            (tid, date)).fetchone()
-        base = db.execute("SELECT price_cents FROM ticket_types WHERE id=?", (tid,)).fetchone()
-        antes = previa["price_cents"] if previa else (base["price_cents"] if base else 0)
-        if antes and cents > antes:
-            avisos.append(f"{nombres.get(tid, tid)}: ${cents/100:,.0f} es MÁS caro que "
-                          f"antes del flash (${antes/100:,.0f})")
-        sig = db.execute("""SELECT price_cents FROM price_phases WHERE type_id=?
-                            AND starts_on>? AND es_flash=0
-                            ORDER BY starts_on ASC, id ASC LIMIT 1""",
-                         (tid, date)).fetchone()
-        if sig and cents >= sig["price_cents"]:
-            avisos.append(f"{nombres.get(tid, tid)}: ${cents/100:,.0f} no baja de su fase "
-                          f"(${sig['price_cents']/100:,.0f}), así que el boleto no llevará tachado")
-    return avisos
+    # Prender el botón cobra el flash DE LA FASE QUE ESTÉ CORRIENDO: en Fase 1 sale
+    # el de Fase 1 y en Fase 4 el de Fase 4, sin tocar nada. Apagar y volver a
+    # prender dentro de la misma fase no mueve el precio.
+    if flash_manual(db) and ph["flash_price_cents"] and ph["flash_price_cents"] < ph["price_cents"]:
+        return ph["flash_price_cents"], ph["name"] + " Flash", ph["price_cents"]
+    return ph["price_cents"], ph["name"], None
 
 def next_phase(db, type_row):
     """La próxima fase cuya fecha aún NO llegó (el siguiente cambio de precio).
@@ -1969,14 +1947,16 @@ def create_phase(tid):
         price = 0
     if not name or price <= 0 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         return jsonify(error="Fase incompleta: nombre, precio y fecha (AAAA-MM-DD)"), 400
-    # es_flash se ignoraba aquí: una fase creada por esta vía cobraba el precio de
-    # oferta pero NO tachaba nada, así que el descuento no se veía por ningún lado.
-    es_flash = 1 if b.get("es_flash") else 0
-    db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, es_flash) "
-               "VALUES(?,?,?,?,?)", (tid, name, price, date, es_flash))
+    # Ya no se crean "fases flash": la fase es una sola y lleva, opcionalmente, el
+    # precio al que queda cuando se prende el botón de venta flash.
+    fl, err = _precio_flash(b.get("flash") or {}, t, price)
+    if err:
+        return jsonify(error=err), 400
+    db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, "
+               "flash_price_cents) VALUES(?,?,?,?,?)", (tid, name, price, date, fl))
     audit(db, s["admin"]["username"], "precio",
-          f"Creó {'VENTA FLASH' if es_flash else 'fase'} '{name}' de {t['name']}: "
-          f"${price/100:.2f} desde {date}")
+          f"Creó fase '{name}' de {t['name']}: ${price/100:.2f} desde {date}"
+          + (f" (en venta flash ${fl/100:.2f})" if fl else ""))
     db.commit()
     return jsonify(ok=True)
 
@@ -2108,6 +2088,24 @@ def precios_flash():
     return jsonify(**estado_flash(db))
 
 
+def _precio_flash(flashes, t, precio_fase):
+    """Lee el precio de venta flash de un tipo dentro de una fase. En blanco = esa
+    fase no tiene oferta. Devuelve (centavos|None, error|None)."""
+    raw = flashes.get(str(t["id"]), flashes.get(t["id"]))
+    if raw is None or str(raw).strip() == "":
+        return None, None
+    try:
+        cents = int(round(float(raw) * 100))
+    except (TypeError, ValueError):
+        return None, f"Pon un precio de venta flash válido para {t['name']}"
+    if cents <= 0:
+        return None, f"El precio de venta flash de {t['name']} tiene que ser mayor a cero"
+    if cents >= precio_fase:
+        return None, (f"La venta flash de {t['name']} (${cents/100:g}) no puede costar "
+                      f"igual ni más que su fase (${precio_fase/100:g})")
+    return cents, None
+
+
 @app.post("/api/admin/phases-all")
 def create_phase_all():
     """Crea una fase para TODOS los tipos activos a la vez: misma fecha y nombre,
@@ -2119,7 +2117,7 @@ def create_phase_all():
     name = str(b.get("name", "")).strip()
     date = str(b.get("starts_on", "")).strip()
     prices = b.get("prices") or {}
-    es_flash = 1 if b.get("es_flash") else 0
+    flashes = b.get("flash") or {}
     if not name or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         return jsonify(error="Falta el nombre o la fecha (AAAA-MM-DD) de la fase"), 400
     db = get_db()
@@ -2140,16 +2138,19 @@ def create_phase_all():
             cents = 0
         if cents <= 0:
             return jsonify(error=f"Pon un precio válido para {t['name']}"), 400
-        parsed.append((t["id"], cents))
+        fl, err = _precio_flash(flashes, t, cents)
+        if err:
+            return jsonify(error=err), 400
+        parsed.append((t["id"], cents, fl))
     if not parsed:
         return jsonify(error="Pon al menos un precio para la fase"), 400
-    for tid, cents in parsed:
-        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, es_flash) "
-                   "VALUES(?,?,?,?,?)", (tid, name, cents, date, es_flash))
+    for tid, cents, fl in parsed:
+        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, "
+                   "flash_price_cents) VALUES(?,?,?,?,?)", (tid, name, cents, date, fl))
     audit(db, s["admin"]["username"], "precio",
-          f"Creó la {'VENTA FLASH' if es_flash else 'fase'} '{name}' desde {date} (todos los tipos)")
+          f"Creó la fase '{name}' desde {date} (todos los tipos)")
     db.commit()
-    return jsonify(ok=True, avisos=avisos_flash(db, parsed, date, types) if es_flash else [])
+    return jsonify(ok=True, avisos=[])
 
 @app.put("/api/admin/phases-all")
 def edit_phase_all():
@@ -2169,7 +2170,7 @@ def edit_phase_all():
     name = str(b.get("name", "")).strip()
     date = str(b.get("starts_on", "")).strip()
     prices = b.get("prices") or {}
-    es_flash = 1 if b.get("es_flash") else 0
+    flashes = b.get("flash")
     if not orig_name or not orig_date:
         return jsonify(error="Falta identificar la fase"), 400
     if not name or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
@@ -2183,6 +2184,12 @@ def edit_phase_all():
             "SELECT 1 FROM price_phases WHERE name=? AND starts_on=?", (name, date)).fetchone():
         return jsonify(error=f"Ya existe una fase '{name}' que arranca el {date}"), 400
     types = db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY id").fetchall()
+    # Esta fase se borra y se vuelve a escribir, así que su precio de venta flash hay
+    # que RESCATARLO antes: si no, editarle la fecha a una fase le borraba en silencio
+    # el descuento que ya tenía guardado.
+    previo = {r["type_id"]: r for r in db.execute(
+        "SELECT * FROM price_phases WHERE name=? AND starts_on=?",
+        (orig_name, orig_date)).fetchall()}
     parsed = []
     for t in types:
         raw = prices.get(str(t["id"]), prices.get(t["id"]))
@@ -2194,16 +2201,23 @@ def edit_phase_all():
             cents = 0
         if cents <= 0:
             return jsonify(error=f"Pon un precio válido para {t['name']}"), 400
-        parsed.append((t["id"], cents))
+        if flashes is None:      # no vinieron en la petición → se conserva el de antes
+            anterior = previo.get(t["id"])
+            fl = anterior["flash_price_cents"] if anterior else None
+            if fl and fl >= cents:
+                fl = None        # el precio nuevo dejó al flash sin descuento
+        else:
+            fl, err = _precio_flash(flashes, t, cents)
+            if err:
+                return jsonify(error=err), 400
+        parsed.append((t["id"], cents, fl))
     if not parsed:
         return jsonify(error="Pon al menos un precio para la fase"), 400
-    antes = {r["type_id"]: r["price_cents"] for r in db.execute(
-        "SELECT type_id, price_cents FROM price_phases WHERE name=? AND starts_on=?",
-        (orig_name, orig_date)).fetchall()}
+    antes = {tid: r["price_cents"] for tid, r in previo.items()}
     db.execute("DELETE FROM price_phases WHERE name=? AND starts_on=?", (orig_name, orig_date))
-    for tid, cents in parsed:
-        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, es_flash) "
-                   "VALUES(?,?,?,?,?)", (tid, name, cents, date, es_flash))
+    for tid, cents, fl in parsed:
+        db.execute("INSERT INTO price_phases(type_id, name, price_cents, starts_on, "
+                   "flash_price_cents) VALUES(?,?,?,?,?)", (tid, name, cents, date, fl))
     # el movimiento dice QUÉ cambió, no solo que se editó: si mañana un precio no
     # cuadra, la única forma de reconstruirlo es que quede escrito aquí
     nombres = {t["id"]: t["name"] for t in types}
@@ -2212,7 +2226,7 @@ def edit_phase_all():
         cambios.append(f"nombre '{orig_name}' → '{name}'")
     if date != orig_date:
         cambios.append(f"fecha {orig_date} → {date}")
-    for tid, cents in parsed:
+    for tid, cents, _fl in parsed:
         viejo = antes.get(tid)
         if viejo is None:
             cambios.append(f"{nombres.get(tid, tid)} ${cents/100:,.2f} (nuevo)")
@@ -2225,7 +2239,7 @@ def edit_phase_all():
           f"Editó la fase '{orig_name}' ({orig_date}): "
           + (", ".join(cambios) if cambios else "sin cambios"))
     db.commit()
-    return jsonify(ok=True, avisos=avisos_flash(db, parsed, date, types) if es_flash else [])
+    return jsonify(ok=True, avisos=[])
 
 @app.delete("/api/admin/phases-all")
 def delete_phase_all():

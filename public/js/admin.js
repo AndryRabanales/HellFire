@@ -1535,7 +1535,8 @@ function renderPhases(types) {
     const key = p.starts_on + '|' + p.name;
     const g = (groups[key] = groups[key] || { name: p.name, starts_on: p.starts_on, byType: {} });
     g.byType[t.id] = p.price_cents;
-    if (p.es_flash) g.es_flash = true;
+    g.flashByType = g.flashByType || {};
+    if (p.flash_price_cents) g.flashByType[t.id] = p.flash_price_cents;
   }));
   // El calendario se lee como tabla: cada fase con su DESDE y su HASTA. El "hasta"
   // no se guarda —lo marca el arranque de la siguiente— pero tener que restarle un
@@ -1553,17 +1554,14 @@ function renderPhases(types) {
     const dias = sig
       ? Math.round((new Date(sig.starts_on) - new Date(g.starts_on)) / 86400000)
       : null;
-    // El riesgo real de una venta flash: que se quede encendida. Si no hay ninguna
-    // fase DESPUÉS que la apague, el descuento sigue hasta el día del evento — y eso
-    // no se nota mirando la lista, se nota contando el dinero al final.
-    const flashSinFin = g.es_flash && !sig;
+    const conFlash = Object.keys(g.flashByType || {}).length > 0;
     const row = document.createElement('div');
     row.style.cssText = 'padding:8px 11px;border-radius:11px;margin-bottom:6px;background:rgba(255,255,255,.03);border:1px solid '
       + (vigente ? 'var(--ember)' : 'rgba(255,120,40,.15)');
     const top = document.createElement('div');
     top.className = 'row'; top.style.justifyContent = 'space-between';
-    top.innerHTML = `<div style="font:700 12px Manrope">${esc(g.name)}${g.es_flash
-        ? ' <span style="color:#f3d27a;font-size:9px">⚡ FLASH</span>' : ''}${
+    top.innerHTML = `<div style="font:700 12px Manrope">${esc(g.name)}${conFlash
+        ? ' <span style="color:#f3d27a;font-size:9px">⚡ CON FLASH</span>' : ''}${
         vigente ? ' <span style="color:var(--ember-soft);font-size:9px">● VIGENTE</span>' : ''}</div>
       <div class="muted" style="font-size:11px;text-align:right">${esc(fechaCorta(g.starts_on))}
         → ${sig ? esc(fechaCorta(diaAntes(sig.starts_on))) : 'el evento'}${
@@ -1605,31 +1603,26 @@ function renderPhases(types) {
       return `<span style="font:600 11px Manrope;color:var(--cream-60)">${esc(t.name)}${estrellaDe({ type_name: t.name, type_is_vip: t.is_vip }) ? ' ★' : ''}: <b style="color:var(--ember-soft)">${c != null ? fmtMoney(c / 100) : '—'}</b></span>`;
     }).join('');
     row.appendChild(pr);
-    if (flashSinFin) {
-      const av = document.createElement('div');
-      av.style.cssText = 'margin-top:6px;font:600 10.5px Manrope;color:var(--danger);'
-        + 'background:rgba(232,112,106,.1);border:1px solid rgba(232,112,106,.4);'
-        + 'border-radius:8px;padding:6px 9px';
-      av.textContent = '⚠ No hay ninguna fase después: este descuento NO se apaga solo. '
-        + 'Crea la fase que la sigue para que los precios vuelvan a subir.';
-      row.appendChild(av);
-      row.style.borderColor = 'rgba(232,112,106,.5)';
+    // El precio de venta flash DE ESTA FASE, a la vista. Es lo que se cobrará si el
+    // botón está prendido mientras ella corre; sin esta línea había que esperar a que
+    // llegara su fecha para poder verlo.
+    if (conFlash) {
+      const fl = document.createElement('div');
+      fl.style.cssText = 'margin-top:5px;display:flex;gap:12px;flex-wrap:wrap;'
+        + 'padding-top:5px;border-top:1px dashed rgba(243,210,122,.25)';
+      fl.innerHTML = '<span style="font:700 10px Manrope;color:#f3d27a">⚡ EN VENTA FLASH</span>'
+        + types.map(t => {
+          const c = g.flashByType[t.id];
+          if (c == null) return '';
+          return `<span style="font:600 11px Manrope;color:var(--cream-60)">${esc(t.name)}: <b style="color:#f3d27a">${fmtMoney(c / 100)}</b></span>`;
+        }).join('');
+      row.appendChild(fl);
     }
     list.appendChild(row);
   });
   // formulario de alta: nombre + fecha + un precio por cada tipo
   const add = $('#ph-add');
   add.innerHTML = `
-    <!-- Lo PRIMERO es decidir qué se va a crear. Antes la casilla iba al final, después
-         de teclear nombre, fecha y cuatro precios: para entonces ya se había escrito
-         todo pensando en otra cosa, y marcarla al final se sentía como un extra. -->
-    <div class="label" style="margin:0 0 6px">¿Qué vas a crear?</div>
-    <div class="row" style="gap:6px;margin-bottom:10px">
-      <button type="button" class="btn sm ghost grow ph-tipo sel" data-flash="0"
-        style="padding:10px 6px;font-size:12px">Fase normal</button>
-      <button type="button" class="btn sm ghost grow ph-tipo" data-flash="1"
-        style="padding:10px 6px;font-size:12px">⚡ Venta flash</button>
-    </div>
     <div class="row" style="gap:6px;flex-wrap:wrap;align-items:flex-end">
       <label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px;flex:1;min-width:130px">Nombre de la fase
         <input class="input" id="ph-name" placeholder="ej. Fase 2" style="padding:9px;font-size:12px"></label>
@@ -1640,48 +1633,29 @@ function renderPhases(types) {
       ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)}${estrellaDe({ type_name: t.name, type_is_vip: t.is_vip }) ? ' ★' : ''} — precio nuevo
         <input class="input" type="number" min="1" placeholder="$" data-ph-price="${t.id}" style="width:110px;padding:9px;font-size:12px"></label>`).join('')}
     </div>
-    <input type="checkbox" id="ph-flash" style="display:none">
-    <div class="muted" id="ph-flash-txt" style="font-size:10.5px;margin-top:8px;line-height:1.5"></div>
-    <button class="btn sm mt8" id="btn-ph-create" style="width:100%">+ Crear fase</button>`;
-
-  // el texto de ayuda cambia según la casilla: dice qué va a pasar, no qué es
-  const sincroFlash = () => {
-    const on = $('#ph-flash').checked;
-    $$('.ph-tipo').forEach(b => b.classList.toggle('sel', (b.dataset.flash === '1') === on));
-    $('#ph-name').placeholder = on ? 'ej. Fase 2 Flash' : 'ej. Fase 2';
-    $('#btn-ph-create').textContent = on ? '+ Crear venta flash' : '+ Crear fase';
-    $('#ph-flash-txt').innerHTML = on
-      ? '<b style="color:#f3d27a">⚡ Venta flash.</b> Pon aquí el precio CON descuento. '
-        + 'El boleto saldrá con el precio de la siguiente fase normal <b>tachado</b> —lo '
-        + 'que costará si esperan— y el sello <b style="color:#f3d27a">⚡ AHORRÓ $X</b>. '
-        + 'Termina sola cuando arranque esa fase.'
-      : 'Fase normal: el boleto sale con su precio, sin tachado.';
-  };
-  $$('.ph-tipo').forEach(b => b.onclick = () => {
-    $('#ph-flash').checked = b.dataset.flash === '1';
-    sincroFlash();
-  });
-  sincroFlash();
+    <!-- La venta flash NO es otra fase con otra fecha: es el precio al que queda ESTA
+         fase cuando se prende el botón. Así no puede haber dos ofertas peleándose ni
+         una encendida sin forma de apagarla. -->
+    <div class="label" style="margin:14px 0 4px;color:#f3d27a">⚡ Precio en venta flash <span class="muted" style="font-weight:600">(opcional)</span></div>
+    <div class="muted" style="font-size:10.5px;margin-bottom:7px;line-height:1.5">A cuánto queda cada boleto si prendes la venta flash mientras corre esta fase. Déjalo en blanco si esta fase no lleva oferta. <b>Ninguna fecha lo enciende: solo el botón de arriba.</b></div>
+    <div class="row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+      ${types.map(t => `<label style="font:600 10px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:3px">${esc(t.name)} — en flash
+        <input class="input" type="number" min="1" placeholder="—" data-ph-flash="${t.id}" style="width:110px;padding:9px;font-size:12px"></label>`).join('')}
+    </div>
+    <button class="btn sm mt12" id="btn-ph-create" style="width:100%">+ Crear fase</button>`;
 
   $('#btn-ph-create').onclick = async () => {
-    const prices = {};
+    const prices = {}, flash = {};
     types.forEach(t => {
       const v = add.querySelector(`[data-ph-price="${t.id}"]`).value.trim();
       if (v) prices[t.id] = parseFloat(v);
+      const f = add.querySelector(`[data-ph-flash="${t.id}"]`).value.trim();
+      if (f) flash[t.id] = parseFloat(f);
     });
     $('#ph-err').textContent = '';
     try {
-      const r = await API.post('/api/admin/phases-all',
-        { name: $('#ph-name').value.trim(), starts_on: $('#ph-date').value, prices,
-          es_flash: $('#ph-flash').checked });
-      // La fase SE CREA igual: el aviso no es un rechazo, es un "revísalo". Bloquearlo
-      // sería decidir por el organizador algo que puede tener su razón.
-      if (r.avisos && r.avisos.length) {
-        await confirmModal({ title: 'Revisa estos precios', okLabel: 'Entendido',
-          body: 'La fase se creó, pero:<br><br>' +
-            r.avisos.map(a => '• ' + esc(a)).join('<br>') +
-            '<br><br>Puedes corregirla con <b>Editar</b>.' });
-      }
+      await API.post('/api/admin/phases-all',
+        { name: $('#ph-name').value.trim(), starts_on: $('#ph-date').value, prices, flash });
       loadCatalogs();
     } catch (e) { if (!guard(e)) $('#ph-err').textContent = e.message; }
   };
@@ -1706,44 +1680,28 @@ function editarFase(g, types) {
         <input class="input ef-p" data-tid="${t.id}" type="number" min="0" step="1" inputmode="decimal"
           placeholder="—" value="${g.byType[t.id] != null ? g.byType[t.id] / 100 : ''}"></label>`).join('')}
     </div>
-    <label class="row mt16" id="ef-flash-box" style="gap:8px;cursor:pointer;align-items:center;
-        padding:10px 12px;border-radius:11px;
-        border:1px solid ${g.es_flash ? '#f3d27a' : 'rgba(243,210,122,.28)'};
-        background:rgba(243,210,122,.05)">
-      <input type="checkbox" id="ef-flash" ${g.es_flash ? 'checked' : ''}
-             style="accent-color:#f3d27a;width:16px;height:16px">
-      <span style="font:700 12px Manrope;color:#f3d27a">⚡ Esta fase es una VENTA FLASH</span>
-    </label>
-    <div class="muted" id="ef-flash-txt" style="font-size:10.5px;margin-top:5px;line-height:1.5"></div>
+    <div class="label mt16" style="color:#f3d27a">⚡ Precio en venta flash <span class="muted" style="font-weight:600">(opcional)</span></div>
+    <div class="muted" style="font-size:11px;margin-bottom:8px">A cuánto queda cada boleto si prendes la venta flash mientras corre esta fase. En blanco = esta fase no lleva oferta.</div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      ${types.map(t => `<label style="font:600 11px Manrope;color:var(--cream-60);display:flex;flex-direction:column;gap:4px;flex:1;min-width:110px">${esc(t.name)}
+        <input class="input ef-f" data-tid="${t.id}" type="number" min="0" step="1" inputmode="decimal"
+          placeholder="—" value="${g.flashByType && g.flashByType[t.id] != null ? g.flashByType[t.id] / 100 : ''}"></label>`).join('')}
+    </div>
     <div class="err mt8" id="ef-err"></div>
     <div class="row mt16">
       <button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
       <button class="btn grow" id="ef-save">Guardar cambios</button>
     </div>`);
-  const sincroEf = () => {
-    const on = $('#ef-flash').checked;
-    $('#ef-flash-box').style.borderColor = on ? '#f3d27a' : 'rgba(243,210,122,.28)';
-    $('#ef-flash-txt').innerHTML = on
-      ? 'Sus boletos salen con el precio de la <b>siguiente fase normal tachado</b> y el '
-        + 'sello <b style="color:#f3d27a">⚡ AHORRÓ $X</b>.'
-      : 'Fase normal: sus boletos salen con su precio, sin tachado.';
-  };
-  $('#ef-flash').onchange = sincroEf;
-  sincroEf();
   $('#ef-save').onclick = async () => {
-    const prices = {};
+    const prices = {}, flash = {};
     $$('.ef-p').forEach(i => { prices[i.dataset.tid] = i.value.trim(); });
+    $$('.ef-f').forEach(i => { flash[i.dataset.tid] = i.value.trim(); });
     try {
-      const r = await API.put('/api/admin/phases-all', {
+      await API.put('/api/admin/phases-all', {
         orig_name: g.name, orig_starts_on: g.starts_on,
-        name: $('#ef-name').value.trim(), starts_on: $('#ef-date').value, prices,
-        es_flash: $('#ef-flash').checked,
+        name: $('#ef-name').value.trim(), starts_on: $('#ef-date').value, prices, flash,
       });
       closeModal(); toast('Fase actualizada'); loadCatalogs();
-      if (r.avisos && r.avisos.length) {
-        await confirmModal({ title: 'Revisa estos precios', okLabel: 'Entendido',
-          body: 'Se guardó, pero:<br><br>' + r.avisos.map(a => '• ' + esc(a)).join('<br>') });
-      }
     } catch (e) { if (!guard(e)) $('#ef-err').textContent = e.message; }
   };
 }
@@ -1788,17 +1746,7 @@ async function loadCatalogs() {
         <input class="input mt12" id="ef-name" value="${esc(f.name)}">
         <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
         <button class="btn grow" id="ef-save">Guardar</button></div>`);
-      const sincroEf = () => {
-    const on = $('#ef-flash').checked;
-    $('#ef-flash-box').style.borderColor = on ? '#f3d27a' : 'rgba(243,210,122,.28)';
-    $('#ef-flash-txt').innerHTML = on
-      ? 'Sus boletos salen con el precio de la <b>siguiente fase normal tachado</b> y el '
-        + 'sello <b style="color:#f3d27a">⚡ AHORRÓ $X</b>.'
-      : 'Fase normal: sus boletos salen con su precio, sin tachado.';
-  };
-  $('#ef-flash').onchange = sincroEf;
-  sincroEf();
-  $('#ef-save').onclick = async () => {
+      $('#ef-save').onclick = async () => {
         try { await API.put('/api/admin/faculties/' + f.id, { name: $('#ef-name').value.trim() }); closeModal(); loadCatalogs(); }
         catch (e) { if (!guard(e)) toast(e.message); }
       };
