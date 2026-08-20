@@ -196,7 +196,7 @@ function renderFlash(e) {
       </div>
       <input class="input fl-in" type="number" min="0" step="1"
              data-tid="${f.type_id}" value="${f.flash != null ? f.flash : ''}"
-             placeholder="sin flash" ${f.phase_id ? '' : 'disabled'}>
+             placeholder="$ flash" ${f.phase_id ? '' : 'disabled'}>
     </div>`).join('');
   $$('#fl-tabla .fl-in').forEach(inp => {
     inp.onchange = async () => {

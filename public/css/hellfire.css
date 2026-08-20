@@ -743,7 +743,7 @@ details.card>summary:active{transform:scale(.99)}
 .fl-ahorro{font:700 10px Manrope;color:#7ee0a0;margin-left:5px}
 .fl-in{padding:7px 8px;font-size:13px;text-align:right}
 @media(max-width:520px){
-  .fl-row{grid-template-columns:1fr 82px;grid-template-areas:"t i" "p i"}
+  .fl-row{grid-template-columns:1fr 104px;grid-template-areas:"t i" "p i"}
   .fl-t{grid-area:t}.fl-p{grid-area:p}.fl-in{grid-area:i}
 }
 /* la flash de botón no lleva reloj: lleva el aviso de que está corriendo ya */
