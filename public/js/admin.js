@@ -188,7 +188,8 @@ function renderFlash(e) {
   $('#fl-tabla').innerHTML = (e.filas || []).map(f => `
     <div class="fl-row${f.listo ? '' : ' sin'}">
       <div class="fl-t">${esc(f.type_name)}
-        <span class="fl-fase">${f.phase_name ? esc(f.phase_name) : 'precio base'}</span></div>
+        <span class="fl-fase">${f.phase_name ? esc(f.phase_name)
+          : 'precio de hoy · aún no arranca ninguna fase'}</span></div>
       <div class="fl-p">
         <span class="${e.activa && f.listo ? 'fl-tachado' : 'fl-normal'}">${fmtMoney(f.normal)}</span>
         ${f.listo ? `<span class="fl-flash">${fmtMoney(f.flash)}</span>
@@ -196,7 +197,7 @@ function renderFlash(e) {
       </div>
       <input class="input fl-in" type="number" min="0" step="1"
              data-tid="${f.type_id}" value="${f.flash != null ? f.flash : ''}"
-             placeholder="$ flash" ${f.phase_id ? '' : 'disabled'}>
+             placeholder="$ flash">
     </div>`).join('');
   $$('#fl-tabla .fl-in').forEach(inp => {
     inp.onchange = async () => {

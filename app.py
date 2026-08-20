@@ -212,7 +212,8 @@ CREATE TABLE IF NOT EXISTS ticket_types (
   price_cents INTEGER NOT NULL,
   is_vip INTEGER NOT NULL DEFAULT 0,
   active INTEGER NOT NULL DEFAULT 1,
-  needs_faculty INTEGER NOT NULL DEFAULT 1   -- UADY la pide, VIP/Externo no
+  needs_faculty INTEGER NOT NULL DEFAULT 1,  -- UADY la pide, VIP/Externo no
+  flash_price_cents INTEGER        -- lo que cuesta cuando NO hay fase corriendo y se prende el flash
 );
 CREATE TABLE IF NOT EXISTS price_phases (
   -- fases de precio por tipo: al llegar la fecha de cada fase, el precio cambia solo
@@ -463,7 +464,14 @@ def effective_price(db, type_row):
                        ORDER BY starts_on DESC, id DESC LIMIT 1""",
                     (type_row["id"], today)).fetchone()
     if not ph:
-        return type_row["price_cents"], None, None
+        # Sin ninguna fase corriendo se vende al precio base. El botón TAMBIÉN tiene
+        # que servir aquí: las fases pueden arrancar semanas después y mientras tanto
+        # ya se está vendiendo. El precio de flash vive entonces en el tipo mismo.
+        base = type_row["price_cents"]
+        suyo = type_row["flash_price_cents"] if "flash_price_cents" in type_row.keys() else None
+        if flash_manual(db) and suyo and suyo < base:
+            return suyo, "Venta flash", base
+        return base, None, None
     if not ph["es_flash"]:
         # EL INTERRUPTOR. Cada fase guarda su propio precio de flash, así que prender
         # el botón cobra el flash DE LA FASE QUE ESTÉ CORRIENDO: si se prende en
@@ -607,6 +615,7 @@ def init_db():
         db.execute("ALTER TABLE price_phases ADD COLUMN IF NOT EXISTS "
                    "es_flash INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE price_phases ADD COLUMN IF NOT EXISTS flash_price_cents INTEGER")
+        db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS flash_price_cents INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS client_ref TEXT")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
@@ -662,6 +671,9 @@ def init_db():
             db.execute("ALTER TABLE price_phases ADD COLUMN es_flash INTEGER NOT NULL DEFAULT 0")
         if "flash_price_cents" not in pcols:
             db.execute("ALTER TABLE price_phases ADD COLUMN flash_price_cents INTEGER")
+        tcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
+        if "flash_price_cents" not in tcols:
+            db.execute("ALTER TABLE ticket_types ADD COLUMN flash_price_cents INTEGER")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -1996,11 +2008,14 @@ def estado_flash(db):
     for t in db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY id").fetchall():
         fase = _fase_hoy(db, t["id"])
         normal = fase["price_cents"] if fase else t["price_cents"]
-        flash = fase["flash_price_cents"] if fase else None
+        # con fase corriendo el precio de flash es el de ESA fase; sin fase, el del
+        # tipo, que es el que se está cobrando
+        flash = fase["flash_price_cents"] if fase else t["flash_price_cents"]
         filas.append({
             "type_id": t["id"], "type_name": t["name"], "is_vip": bool(t["is_vip"]),
             "phase_id": fase["id"] if fase else None,
             "phase_name": fase["name"] if fase else None,
+            "sin_fase": fase is None,
             "normal": money(normal),
             "flash": money(flash) if flash else None,
             "ahorro": money(normal - flash) if flash and flash < normal else 0,
@@ -2056,11 +2071,18 @@ def precios_flash():
         except (TypeError, ValueError):
             continue
         t = db.execute("SELECT * FROM ticket_types WHERE id=?", (tid,)).fetchone()
-        fase = _fase_hoy(db, tid)
-        if not t or not fase:
+        if not t:
             continue
+        fase = _fase_hoy(db, tid)
+        # se guarda en la fase que corre; si no hay ninguna, en el tipo
+        if fase:
+            sql = "UPDATE price_phases SET flash_price_cents=? WHERE id=?"
+            destino, tope, donde = fase["id"], fase["price_cents"], fase["name"]
+        else:
+            sql = "UPDATE ticket_types SET flash_price_cents=? WHERE id=?"
+            destino, tope, donde = t["id"], t["price_cents"], "precio base"
         if raw is None or str(raw).strip() == "":
-            db.execute("UPDATE price_phases SET flash_price_cents=NULL WHERE id=?", (fase["id"],))
+            db.execute(sql, (None, destino))
             cambios.append(f"{t['name']} sin flash")
             continue
         try:
@@ -2069,11 +2091,11 @@ def precios_flash():
             return jsonify(error=f"Pon un precio válido para {t['name']}"), 400
         if cents <= 0:
             return jsonify(error=f"El precio de flash de {t['name']} tiene que ser mayor a cero"), 400
-        if cents >= fase["price_cents"]:
-            return jsonify(error=f"El flash de {t['name']} ({money(cents):g}) no puede costar igual "
-                                 f"ni más que su fase ({money(fase['price_cents']):g})"), 400
-        db.execute("UPDATE price_phases SET flash_price_cents=? WHERE id=?", (cents, fase["id"]))
-        cambios.append(f"{t['name']} en flash ${cents/100:.2f} ({fase['name']})")
+        if cents >= tope:
+            return jsonify(error=f"El flash de {t['name']} (${cents/100:g}) no puede costar igual "
+                                 f"ni más que su precio de hoy (${tope/100:g})"), 400
+        db.execute(sql, (cents, destino))
+        cambios.append(f"{t['name']} en flash ${cents/100:.2f} ({donde})")
     if cambios:
         audit(db, s["admin"]["username"], "precio", "Precios de venta flash: " + ", ".join(cambios))
         db.commit()
