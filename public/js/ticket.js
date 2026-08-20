@@ -64,13 +64,11 @@ function flyerVariantFor(ticket) {
     if (t === 'ultravip') return 'cortesiaultra';
     return ticket.type_is_vip ? 'cortesiavip' : 'cortesiaexterno';
   }
-  // El grupo también tiene categoría, pero eso NO es un flyer aparte: un grupo VIP
-  // lleva el mismo fondo de VIP y un grupo Ultra el de Ultra VIP —lo que cambia es
-  // el boleto (la etiqueta, el color, la botella), no la imagen—. El único con fondo
-  // propio es el grupo general, que sí es otra imagen.
+  // El grupo también tiene categoría: un grupo VIP con el flyer del grupo Externo
+  // le enseña al comprador un boleto que no es el que pagó.
   if (ticket.group_size === 10) {
-    if (esUltra(ticket)) return 'ultravip';
-    return ticket.type_is_vip ? 'vip' : 'grupo10';
+    if (esUltra(ticket)) return 'grupo10ultra';
+    return ticket.type_is_vip ? 'grupo10vip' : 'grupo10';
   }
   // se compara contra el NOMBRE del tipo, para que un tipo nuevo que cree el admin
   // (ej. "Ultra VIP") use su propio flyer en vez de caer en el de VIP o Externo
