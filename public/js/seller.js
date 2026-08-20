@@ -182,6 +182,21 @@ function flashActivo() {
 
 function renderPhaseTimer() {
   const box = $('#f-phase-timer');
+  const fmanual = CATALOG.flash_manual && flashActivo();
+  // Una venta flash prendida a mano se apaga cuando el organizador quiera: NO tiene
+  // hora de fin. Enseñar un reloj sería prometerle al comprador un plazo que no
+  // existe —y peor, uno más largo del real—. Se dice lo que sí es cierto: está
+  // activa ahora, y puede terminar en cualquier momento.
+  if (fmanual) {
+    const vuelve = (CATALOG.types || []).filter(t => t.normal_cents > t.price_cents)
+      .map(t => `<span>${esc(t.name)}<b>${fmtMoney(t.normal_cents / 100)}</b></span>`).join('');
+    box.classList.remove('hidden'); box.classList.add('flash'); box.classList.remove('urge');
+    box.innerHTML = `<div class="pt-flash">⚡ ${esc(fmanual.nombre)} · hasta $${fmanual.ahorroMax.toFixed(0)} de descuento</div>
+      <div class="pt-ahora">Activa AHORA · puede terminar en cualquier momento</div>
+      <div class="pt-vuelve">Sin la oferta cuesta</div>
+      <div class="pt-items">${vuelve}</div>`;
+    return;
+  }
   const g = nextGlobalPhase();
   if (!g) { box.classList.add('hidden'); box.innerHTML = ''; return; }
   const diff = phaseStart(g.starts_on) - new Date();
@@ -258,6 +273,23 @@ async function revisaCierre() {
     if (!!c.ventas_cerradas !== !!CATALOG.ventas_cerradas) {
       CATALOG = c;
       if (aplicarCierre()) toast('El organizador cerr\u00f3 las ventas');
+      return;
+    }
+    // La venta flash se prende y se apaga a mano: es un cambio de PRECIO que ocurre
+    // sin avisar, así que se aplica en cuanto se detecta aunque haya una venta a
+    // medias. El boleto ya se cobraba bien —el precio lo pone el servidor—, lo que
+    // faltaba era que el vendedor lo viera antes de decir un número en voz alta.
+    if (!!c.flash_manual !== !!CATALOG.flash_manual) {
+      CATALOG = c;
+      renderTypes(); renderPhaseTimer();
+      if (GROUP_SIZE) {
+        // el tipo elegido guarda su precio: hay que releerlo del catálogo nuevo o la
+        // barra seguiría enseñando el de antes
+        if (GROUP_TYPE) GROUP_TYPE = tiposDeGrupo().find(t => t.id === GROUP_TYPE.id) || null;
+        renderGroupPriceBar();
+      }
+      toast(c.flash_manual ? '\u26a1 Empez\u00f3 la venta flash: precios nuevos'
+                           : 'Termin\u00f3 la venta flash: precios normales');
     }
   } catch (_) { /* se reintenta en el siguiente tick */ }
 }

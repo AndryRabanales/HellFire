@@ -139,6 +139,77 @@ async function loadSummary(silent) {
       <div class="muted" style="font-size:12px;margin-top:3px">cobró <b style="color:var(--cream)">${fmtMoney(a.collected)}</b> de <b>${fmtMoney(a.sold)}</b></div>
     </div>`;
   }).join('') || '<div class="muted">Sin datos aún</div>';
+  loadFlash(silent);
+}
+
+/* ------------------------------------------------ el interruptor de la venta flash
+
+   Prender la venta flash tiene que ser un toque, no ir a Catálogos a inventar una
+   fase con la fecha de hoy. El precio NO se escribe cada vez: cada fase guarda el
+   suyo, así que el botón cobra el flash DE LA FASE QUE ESTÉ CORRIENDO —se prende en
+   Fase 1 y sale el de Fase 1, se prende en Fase 4 y sale el de Fase 4—, y apagar y
+   volver a prender no lo mueve. La tabla enseña eso ANTES de prender. */
+let _flashSig = null;
+async function loadFlash(silent) {
+  if (document.body.classList.contains('es-colider')) return;
+  let e;
+  try { e = await API.get('/api/admin/flash'); }
+  catch (err) { return; }   // un colíder no lo ve: su 401 no debe romper el resumen
+  const sig = JSON.stringify(e);
+  if (silent && sig === _flashSig) return;
+  _flashSig = sig;
+  renderFlash(e);
+}
+
+function renderFlash(e) {
+  const card = $('#fl-card');
+  if (!card) return;
+  card.classList.toggle('flash-on', !!e.activa);
+  const listos = (e.filas || []).filter(f => f.listo);
+  $('#fl-estado').innerHTML = e.activa
+    ? `<b style="color:#f3d27a">ACTIVA ahora mismo</b> · ${listos.length} tipo(s) con descuento`
+    : (listos.length
+        ? 'Apagada · los precios de abajo se aplican en cuanto la prendas'
+        : 'Apagada · primero escribe a cuánto queda cada boleto');
+  const btn = $('#fl-toggle');
+  btn.textContent = e.activa ? 'TERMINAR VENTA FLASH' : '⚡ PRENDER VENTA FLASH';
+  btn.className = e.activa ? 'btn danger' : 'btn';
+  btn.style.width = 'auto';
+  btn.disabled = !e.activa && !listos.length;
+  btn.onclick = async () => {
+    $('#fl-err').textContent = '';
+    btn.disabled = true;
+    try { renderFlash(await API.post('/api/admin/flash', { activa: !e.activa })); }
+    catch (err) { $('#fl-err').textContent = err.message || 'No se pudo'; btn.disabled = false; }
+  };
+  // La tabla es el "antes de prender": en qué fase va cada tipo, a cuánto se vende
+  // hoy y a cuánto quedaría. Con la flash encendida el precio de flash es el que se
+  // está cobrando, así que se marca al revés.
+  $('#fl-tabla').innerHTML = (e.filas || []).map(f => `
+    <div class="fl-row${f.listo ? '' : ' sin'}">
+      <div class="fl-t">${esc(f.type_name)}
+        <span class="fl-fase">${f.phase_name ? esc(f.phase_name) : 'precio base'}</span></div>
+      <div class="fl-p">
+        <span class="${e.activa && f.listo ? 'fl-tachado' : 'fl-normal'}">${fmtMoney(f.normal)}</span>
+        ${f.listo ? `<span class="fl-flash">${fmtMoney(f.flash)}</span>
+                     <span class="fl-ahorro">-${fmtMoney(f.ahorro)}</span>` : ''}
+      </div>
+      <input class="input fl-in" type="number" min="0" step="1"
+             data-tid="${f.type_id}" value="${f.flash != null ? f.flash : ''}"
+             placeholder="sin flash" ${f.phase_id ? '' : 'disabled'}>
+    </div>`).join('');
+  $$('#fl-tabla .fl-in').forEach(inp => {
+    inp.onchange = async () => {
+      $('#fl-err').textContent = '';
+      try {
+        renderFlash(await API.put('/api/admin/flash',
+          { precios: { [inp.dataset.tid]: inp.value.trim() } }));
+      } catch (err) {
+        $('#fl-err').textContent = err.message || 'No se pudo guardar';
+        loadFlash();
+      }
+    };
+  });
 }
 
 /* El panel visto por un colíder: se le quitan de encima las pestañas que no le
@@ -163,6 +234,11 @@ function aplicarColider(esCo) {
   if (scan) scan.classList.toggle('hidden', esCo);
   const card = $('#sum-by-admin');
   if (card && card.closest('.card')) card.closest('.card').classList.toggle('hidden', esCo);
+  // El colíder no prende ni apaga la venta flash: le cambiaría el precio a TODO el
+  // evento, no solo a su grupo. El servidor ya se lo niega; aquí se le quita de la
+  // vista para que no lo intente.
+  const fl = $('#fl-card');
+  if (fl) fl.classList.toggle('hidden', esCo);
   if (esCo && VEDADAS.includes(currentTab)) openTab('resumen');
 }
 
