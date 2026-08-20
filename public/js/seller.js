@@ -263,37 +263,42 @@ function catalogoAlDia() {
   if (GROUP_SIZE || $('#f-buyer').value.trim()) return;   // venta a medias: no se toca
   reloadCatalog();
 }
-// El cierre de ventas SÍ se consulta aunque haya una venta a medias: si el
-// organizador ya cortó, el vendedor tiene que enterarse ahora, no al fallarle el
-// botón después de escribir diez nombres.
-async function revisaCierre() {
+/* El pulso. Cada pocos segundos se pregunta lo mínimo —¿hay venta flash?, ¿ya
+   cerraron?— y solo si cambió se recarga el catálogo entero.
+
+   Va aparte del refresco lento y NO se salta aunque el vendedor esté a medio
+   escribir un nombre: las dos cosas que consulta le cambian el número que va a
+   decir en voz alta. Antes había que refrescar a mano para ver el precio nuevo, y
+   un teléfono que no cierra el navegador en todo el día se quedaba con el de la
+   mañana. */
+async function pulso() {
   if (!API.token || !CATALOG) return;
   try {
+    const e = await API.get('/api/estado');
+    const cambioCierre = !!e.ventas_cerradas !== !!CATALOG.ventas_cerradas;
+    const cambioFlash = !!e.flash_manual !== !!CATALOG.flash_manual;
+    if (!cambioCierre && !cambioFlash) return;
     const c = await API.get('/api/catalog');
-    if (!!c.ventas_cerradas !== !!CATALOG.ventas_cerradas) {
-      CATALOG = c;
+    CATALOG = c;
+    if (cambioCierre) {
       if (aplicarCierre()) toast('El organizador cerr\u00f3 las ventas');
       return;
     }
-    // La venta flash se prende y se apaga a mano: es un cambio de PRECIO que ocurre
-    // sin avisar, así que se aplica en cuanto se detecta aunque haya una venta a
-    // medias. El boleto ya se cobraba bien —el precio lo pone el servidor—, lo que
-    // faltaba era que el vendedor lo viera antes de decir un número en voz alta.
-    if (!!c.flash_manual !== !!CATALOG.flash_manual) {
-      CATALOG = c;
-      renderTypes(); renderPhaseTimer();
-      if (GROUP_SIZE) {
-        // el tipo elegido guarda su precio: hay que releerlo del catálogo nuevo o la
-        // barra seguiría enseñando el de antes
-        if (GROUP_TYPE) GROUP_TYPE = tiposDeGrupo().find(t => t.id === GROUP_TYPE.id) || null;
-        renderGroupPriceBar();
-      }
-      toast(c.flash_manual ? '\u26a1 Empez\u00f3 la venta flash: precios nuevos'
-                           : 'Termin\u00f3 la venta flash: precios normales');
+    renderTypes(); renderPhaseTimer();
+    if (GROUP_SIZE) {
+      // el tipo elegido guarda su precio: hay que releerlo del catálogo nuevo o la
+      // barra seguiría enseñando el de antes
+      if (GROUP_TYPE) GROUP_TYPE = tiposDeGrupo().find(t => t.id === GROUP_TYPE.id) || null;
+      renderGroupPriceBar();
     }
+    toast(c.flash_manual ? '\u26a1 Empez\u00f3 la venta flash: precios nuevos'
+                         : 'Termin\u00f3 la venta flash: precios normales');
   } catch (_) { /* se reintenta en el siguiente tick */ }
 }
-setInterval(revisaCierre, 45000);
+setInterval(pulso, 5000);
+// al volver a la pantalla se pregunta ya, sin esperar el tick: el teléfono estuvo
+// dormido en el bolsillo y ahí es justo cuando el precio pudo haber cambiado
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pulso(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) catalogoAlDia(); });
 setInterval(catalogoAlDia, 120000);
 

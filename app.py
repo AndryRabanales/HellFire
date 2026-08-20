@@ -41,6 +41,14 @@ def revalidate_assets(resp):
     ct = resp.headers.get("Content-Type", "")
     if any(t in ct for t in ("text/html", "javascript", "text/css")):
         resp.headers["Cache-Control"] = "no-cache"
+    # Las respuestas de la API no se guardan NUNCA. Sin esto el navegador puede
+    # decidir por su cuenta reusar un /api/catalog viejo —no lleva fecha de
+    # caducidad, así que se la inventa— y el vendedor se queda con el precio de
+    # antes hasta que refresca a mano. Con dinero de por medio eso no es opcional.
+    elif "application/json" in ct:
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
     return resp
 
 # ---------------------------------------------------------------- utilidades
@@ -1319,6 +1327,22 @@ def owns_seller(admin, seller_row):
     return seller_row["owner_admin_id"] is None or seller_row["owner_admin_id"] == admin["id"]
 
 # ---------------------------------------------------------------- API: vendedor
+
+@app.get("/api/estado")
+def estado_venta():
+    """Lo mínimo para saber si lo que el vendedor tiene en pantalla sigue siendo
+    cierto: si hay venta flash y si las ventas están cerradas.
+
+    Existe aparte del catálogo porque se consulta cada pocos segundos y el catálogo
+    trae tipos, facultades, fases y el plan de grupo. Prender la venta flash cambia
+    el precio de todos al instante, y esperar a que el vendedor recargue —o peor, a
+    que cierre el navegador— es decirle un número equivocado en voz alta."""
+    s = current_session()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    return jsonify(flash_manual=flash_manual(db), ventas_cerradas=ventas_cerradas(db))
+
 
 @app.get("/api/catalog")
 def catalog():

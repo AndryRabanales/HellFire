@@ -68,7 +68,11 @@ $('#tabs').addEventListener('click', e => {
 let liveTimer = null;
 const LIVE = { resumen: loadSummary, boletos: loadTicketsTable,
                movimientos: loadMovements, vendedores: loadSellers,
-               cortesias: loadCortesias };   // la noche del evento se mira sola
+               cortesias: loadCortesias,
+               // Catálogos se mira solo por la venta flash: si otro admin la prende
+               // desde su teléfono, esta pantalla no puede seguir diciendo "apagada"
+               // y ofrecer un botón que hace lo contrario de lo que se lee.
+               catalogos: loadFlash };
 function startLive() {
   stopLive();
   const fn = LIVE[currentTab];

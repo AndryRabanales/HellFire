@@ -12,7 +12,9 @@ const API = {
     else localStorage.removeItem(this.storageKey);
   },
   async call(method, path, body) {
-    const opts = { method, headers: {} };
+    // no-store: ni el navegador ni un proxy pueden contestar por su cuenta con una
+    // respuesta vieja. Un precio de hace media hora se ve idéntico a uno de ahora.
+    const opts = { method, headers: {}, cache: 'no-store' };
     if (this.token) opts.headers['Authorization'] = 'Bearer ' + this.token;
     if (body !== undefined && !(body instanceof FormData)) {
       opts.headers['Content-Type'] = 'application/json';
