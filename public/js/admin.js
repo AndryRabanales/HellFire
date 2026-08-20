@@ -139,13 +139,12 @@ async function loadSummary(silent) {
       <div class="muted" style="font-size:12px;margin-top:3px">cobró <b style="color:var(--cream)">${fmtMoney(a.collected)}</b> de <b>${fmtMoney(a.sold)}</b></div>
     </div>`;
   }).join('') || '<div class="muted">Sin datos aún</div>';
-  loadFlash(silent);
 }
 
 /* ------------------------------------------------ el interruptor de la venta flash
 
-   Prender la venta flash tiene que ser un toque, no ir a Catálogos a inventar una
-   fase con la fecha de hoy. El precio NO se escribe cada vez: cada fase guarda el
+   Vive en Catálogos, junto a los precios: es un precio, no un reporte. Prenderla
+   tiene que ser un toque, no inventar una fase con la fecha de hoy. El precio NO se escribe cada vez: cada fase guarda el
    suyo, así que el botón cobra el flash DE LA FASE QUE ESTÉ CORRIENDO —se prende en
    Fase 1 y sale el de Fase 1, se prende en Fase 4 y sale el de Fase 4—, y apagar y
    volver a prender no lo mueve. La tabla enseña eso ANTES de prender. */
@@ -1750,6 +1749,7 @@ function editarFase(g, types) {
 }
 
 async function loadCatalogs() {
+  loadFlash();
   const [tt, fc] = await Promise.all([
     API.get('/api/admin/ticket-types'), API.get('/api/admin/faculties'),
   ]);

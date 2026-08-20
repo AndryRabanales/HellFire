@@ -79,20 +79,7 @@
 
   <!-- ===== Resumen ===== -->
   <section id="tab-resumen" class="mt16">
-    <!-- El interruptor va PRIMERO y en el resumen: prender la venta flash tiene que
-         costar un toque, no entrar a Catálogos y buscar una fase. -->
-    <div class="card" id="fl-card" style="max-width:640px">
-      <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
-        <div>
-          <div class="label" style="margin:0">⚡ Venta flash</div>
-          <div class="muted" id="fl-estado" style="font-size:11px;margin-top:2px">Cargando…</div>
-        </div>
-        <button class="btn" id="fl-toggle" style="width:auto;white-space:nowrap">…</button>
-      </div>
-      <div id="fl-tabla" class="mt12"></div>
-      <div class="err mt8" id="fl-err"></div>
-    </div>
-    <div class="stats mt16" id="sum-stats"></div>
+    <div class="stats" id="sum-stats"></div>
     <div class="card mt16" style="max-width:640px">
       <div class="label">Cobranza por administrador</div>
       <div class="muted" style="margin-bottom:10px;font-size:11px">Cuánto ha cobrado cada admin a sus propios vendedores. Visible para todos.</div>
@@ -216,6 +203,19 @@
 
   <!-- ===== Catálogos (RF-80/81) ===== -->
   <section id="tab-catalogos" class="mt16 hidden" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
+    <!-- La venta flash va con los precios: es un precio, no un reporte. -->
+    <div class="card" id="fl-card">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
+        <div>
+          <div class="label" style="margin:0">⚡ Venta flash</div>
+          <div class="muted" id="fl-estado" style="font-size:11px;margin-top:2px">Cargando…</div>
+        </div>
+        <button class="btn" id="fl-toggle" style="width:auto;white-space:nowrap">…</button>
+      </div>
+      <div class="muted" style="margin:10px 0 0;font-size:11px">Escribe a cuánto queda cada boleto y préndela cuando quieras: se aplica al instante en el teléfono de todos los vendedores, y se apaga igual. El precio sale de la fase que esté corriendo, así que no hay que volver a escribirlo cada vez.</div>
+      <div id="fl-tabla" class="mt12"></div>
+      <div class="err mt8" id="fl-err"></div>
+    </div>
     <div class="card">
       <div class="label">Tipos de boleto · precio base</div>
       <div class="muted" style="margin-bottom:10px">Se usa cuando ninguna fase está vigente. Las fases (abajo) suben todos los tipos a la vez.</div>
