@@ -192,8 +192,8 @@ function renderPhaseTimer() {
       .map(t => `<span>${esc(t.name)}<b>${fmtMoney(t.normal_cents / 100)}</b></span>`).join('');
     box.classList.remove('hidden'); box.classList.add('flash'); box.classList.remove('urge');
     box.innerHTML = `<div class="pt-flash">⚡ ${esc(fmanual.nombre)} · hasta $${fmanual.ahorroMax.toFixed(0)} de descuento</div>
-      <div class="pt-ahora">Activa AHORA · puede terminar en cualquier momento</div>
-      <div class="pt-vuelve">Sin la oferta cuesta</div>
+      <div class="pt-ahora">Precios de oferta · solo mientras dure</div>
+      <div class="pt-vuelve">Después vuelve a</div>
       <div class="pt-items">${vuelve}</div>`;
     return;
   }

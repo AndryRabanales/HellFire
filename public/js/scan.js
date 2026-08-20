@@ -108,9 +108,25 @@ window.addEventListener('offline', updateNet);
 const SIN_RESPUESTA = new Map();   // code -> cuándo falló
 const REINTENTO_MS = 45000;   // el reintento real toma segundos; 45s ya es generoso
 
+/* Un QR leído mientras se resuelve el anterior NO se tira. Antes se ignoraba en
+   silencio: la pantalla seguía enseñando el "✓ ENTRA" verde de la persona de
+   adelante, el de atrás pasaba, y su boleto nunca se marcó. Se guarda y se valida
+   en cuanto termina el que va corriendo. */
+let pendiente = null, enCurso = '';
+
 async function validate(code) {
-  if (busy) return;
+  if (busy) { if (code !== enCurso) pendiente = code; return; }
   busy = true;
+  enCurso = code;
+  // Se apunta como "ya leído" AQUÍ, donde de verdad se consulta. Si se apuntara al
+  // detectarlo en la cámara, un código encolado quedaría marcado sin haberse
+  // consultado; y si no se apuntara nunca, la cámara volvería a dispararlo al
+  // terminar y el mismo boleto saldría "YA SE USÓ" en rojo por su propio escaneo.
+  lastCode = code; lastAt = Date.now();
+  // Feedback INMEDIATO: entre leer el QR y la respuesta del servidor había pantalla
+  // muda, y en una red lenta eso son segundos con la persona parada enfrente. Ahora
+  // se ve "leyendo" desde el primer instante, para que nadie pase por el silencio.
+  leyendo();
   try {
     const r = await call(code);
     if (r.result === 'usado' && SIN_RESPUESTA.has(code) &&
@@ -128,8 +144,21 @@ async function validate(code) {
       ? 'Sin conexión — vuelve a apuntar al MISMO código al regresar la señal'
       : 'Error, intenta de nuevo con el mismo código' });
   } finally {
-    setTimeout(() => { busy = false; }, 600);   // pequeño respiro entre escaneos
+    // respiro corto: ya no hace falta que sea largo, porque lo que llegue durante
+    // el respiro se encola en vez de perderse
+    setTimeout(() => {
+      busy = false; enCurso = '';
+      if (pendiente) { const c = pendiente; pendiente = null; validate(c); }
+    }, 250);
   }
+}
+
+function leyendo() {
+  const box = document.getElementById('result');
+  clearTimeout(hideTimer);
+  box.className = 'show wait';
+  box.innerHTML = '<div class="r-title">LEYENDO…</div>'
+    + '<div class="r-meta">No lo dejes pasar todavía</div>';
 }
 
 function render(r) {
@@ -142,9 +171,10 @@ function render(r) {
   else { title = 'Error'; meta = r.message || 'Intenta de nuevo'; }
 
   const name = t ? `<div class="r-name">${esc(t.buyer_name || '')}</div>` : '';
-  const type = t ? (t.type_is_vip
-    ? '<div class="r-type vip">★ VIP</div>'
-    : '<div class="r-type gen">General</div>') : '';   // UADY y Externo son General
+  // En la puerta hay que saber QUÉ pasó, no solo si pasa: un Ultra VIP salía como
+  // "★ VIP", una cortesía se veía igual que un boleto pagado y del grupo de 10 no se
+  // decía nada —y el de la botella se reconoce justo aquí—.
+  const type = t ? etiquetasDe(t) : '';
 
   box.className = 'show ' + cls;
   box.innerHTML = `<div class="r-title">${title}</div>${name}${type}` +
@@ -153,6 +183,25 @@ function render(r) {
   // se limpia solo, para que nunca quede un resultado viejo confundiendo en la puerta
   clearTimeout(hideTimer);
   hideTimer = setTimeout(clearResult, RESULT_MS);
+}
+
+/* Las etiquetas del boleto, con el mismo criterio que el boleto impreso: su
+   categoría real, su color, y aparte lo que cambia la atención en la puerta o en la
+   barra (cortesía, grupo, botella). */
+function etiquetasDe(t) {
+  const n = (t.type_name || '').toLowerCase().replace(/\s+/g, '');
+  const ultra = n === 'ultravip';
+  const alta = !!t.type_is_vip || ultra;
+  const clase = ultra ? 'ultra' : (t.type_is_vip ? 'vip' : 'gen');
+  const nombre = (t.type_name || 'General').toUpperCase();
+  let html = `<div class="r-type ${clase}">${alta ? '★ ' : ''}${esc(nombre)}</div>`;
+  if (t.es_cortesia) html += '<div class="r-tag cortesia">CORTESÍA · no pagó</div>';
+  if (t.group_size) {
+    html += t.es_representante
+      ? '<div class="r-tag botella">★ BOTELLA · le toca a él</div>'
+      : `<div class="r-tag grupo">GRUPO DE ${t.group_size}</div>`;
+  }
+  return html;
 }
 
 function clearResult() {
@@ -240,10 +289,10 @@ function tick() {
       if (code && code.data) {
         const now = Date.now();
         // mismo QR: no re-dispara por 3.5s. QR distinto: valida de inmediato.
-        if (code.data !== lastCode || now - lastAt > 3500) {
-          lastCode = code.data; lastAt = now;
-          validate(code.data);
-        }
+        // OJO: solo se apunta como "ya leído" si de verdad se va a validar. Si se
+        // apuntara aunque esté ocupado, ese boleto quedaría marcado como leído sin
+        // haberse consultado nunca, y no se reintentaría hasta 3.5s después.
+        if (code.data !== lastCode || now - lastAt > 3500) validate(code.data);
       }
     }
   }

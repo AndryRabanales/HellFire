@@ -48,7 +48,20 @@
   @keyframes drenar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
   .r-type{padding:6px 18px;border-radius:10px;font:800 14px "Space Grotesk";letter-spacing:.06em}
   .r-type.vip{background:linear-gradient(150deg,#f3d27a,#d9a53a);color:#3a1e00;box-shadow:0 0 18px rgba(243,210,122,.5)}
+  /* Ultra VIP con su propio color: en la barra y en la puerta no da lo mismo que un
+     VIP, y con la misma insignia dorada nadie los distinguía. */
+  .r-type.ultra{background:linear-gradient(150deg,#bff5ff,#38bdf8);color:#04283a;box-shadow:0 0 18px rgba(56,189,248,.5)}
   .r-type.gen{background:rgba(255,255,255,.1);color:rgba(255,255,255,.72)}
+  /* lo que cambia la atención en la puerta o en la barra, debajo de la categoría */
+  .r-tag{padding:4px 13px;border-radius:9px;font:800 11px "Space Grotesk";letter-spacing:.05em}
+  .r-tag.cortesia{background:rgba(255,255,255,.08);color:rgba(255,255,255,.8);
+    border:1px dashed rgba(255,255,255,.35)}
+  .r-tag.grupo{background:rgba(255,120,40,.16);color:#ffb27a;border:1px solid rgba(255,120,40,.45)}
+  .r-tag.botella{background:linear-gradient(150deg,#f3d27a,#d9a53a);color:#3a1e00}
+  /* mientras el servidor contesta: ni verde ni rojo, para que nadie lo lea como un
+     "pasa" adelantado */
+  #result.wait{border-color:rgba(255,255,255,.35)}
+  #result.wait .r-title{color:rgba(255,255,255,.85)}
 
   /* contador de entradas: chico arriba, y es el botón para ver quiénes pasaron */
   .ent-btn{display:flex;align-items:baseline;gap:5px;cursor:pointer;padding:6px 11px;
