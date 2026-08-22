@@ -2823,7 +2823,14 @@ def rendimiento():
         analisis={"criticos": len(criticos), "atencion": len(atencion), "bien": len(bien),
                   "pct_top3": pct_top3, "por_cobrar": por_cobrar, "lectura": lectura,
                   "ritmo_dia": round(ritmo_dia, 1), "proyeccion": proyeccion,
-                  "dias_faltan": dias_faltan},
+                  "dias_faltan": dias_faltan,
+                  # la tendencia contra la semana pasada, en un número: sube o baja
+                  "tendencia": (round(100.0 * (pulso["sem_n"] - previa["n"]) / previa["n"])
+                                if previa["n"] else None),
+                  "sem_n": pulso["sem_n"], "prev_n": previa["n"],
+                  "pct_cobrar": (round(100.0 * por_cobrar / money(total_monto))
+                                 if total_monto else 0),
+                  "top3": [{"name": v["name"], "monto": v["monto"]} for v in top3]},
         totales={
             "boletos": total_boletos, "monto": money(total_monto),
             "activos": activos, "inactivos": inactivos,

@@ -1737,51 +1737,18 @@ async function loadRendimiento(silent) {
     <div class="rk-st"><i>Vendiendo</i><b>${T.activos}<small>+${T.inactivos} en 0</small></b></div>
     <div class="rk-st"><i>Boleto prom.</i><b>${fmtMoney(Math.round(T.ticket_prom))}</b></div>`;
 
-  // ----- el calendario, de la primera venta al día del evento -----
-  // Un cuadro por día, más encendido cuanto más se vendió. En barras no cabían dos
-  // meses y en lista no se lee: así se ve de un golpe dónde hubo movimiento, dónde
-  // no, y cuánto falta para el evento.
-  const cal = r.calendario || [];
-  const topDia = Math.max(1, ...cal.map(d => d.boletos));
-  const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  const conVenta = cal.filter(d => d.boletos > 0).length;
-  const pasados = cal.filter(d => !d.futuro).length;
-  $('#rd-cal-sub').textContent = cal.length
-    ? `${conVenta} de ${pasados} días con venta · faltan ${r.dias_faltan}`
-    : '';
-  if (!cal.length) {
-    $('#rd-cal').innerHTML = '<div class="muted" style="font-size:12px">Todavía no hay ventas.</div>';
-  } else {
-    // se agrupa por mes para poder etiquetarlos
-    const meses = [];
-    cal.forEach(d => {
-      const m = d.dia.slice(0, 7);
-      if (!meses.length || meses[meses.length - 1].m !== m) meses.push({ m, dias: [] });
-      meses[meses.length - 1].dias.push(d);
-    });
-    $('#rd-cal').innerHTML = `
-      <div class="rd-cal">${meses.map(g => `
-        <div class="rd-mes">
-          <div class="rd-mes-t">${MES[Number(g.m.slice(5, 7)) - 1]}</div>
-          <div class="rd-dias">${g.dias.map(d => {
-            const n = d.boletos;
-            const nivel = n === 0 ? 0 : n >= topDia * 0.75 ? 4 : n >= topDia * 0.5 ? 3
-              : n >= topDia * 0.25 ? 2 : 1;
-            const ev = d.dia === r.evento;
-            return `<span class="rd-d n${nivel}${d.futuro ? ' fut' : ''}${ev ? ' ev' : ''}"
-              title="${esc(d.dia)}: ${n} boleto(s)${n ? ' · ' + fmtMoney(d.monto) : ''}"></span>`;
-          }).join('')}</div>
-        </div>`).join('')}</div>
-      <div class="rd-leyenda">
-        <span>menos</span>
-        <i class="n0"></i><i class="n1"></i><i class="n2"></i><i class="n3"></i><i class="n4"></i>
-        <span>más</span>
-        <span class="rd-lev"><i class="ev"></i> el evento</span>
-      </div>
-      ${mejorDia(r.por_dia || []) ? `<div class="muted" style="font-size:10.5px;margin-top:7px">
-        Día más fuerte: <b style="color:var(--cream)">${esc(mejorDia(r.por_dia).dia)}</b>
-        con ${mejorDia(r.por_dia).boletos} boleto(s) · ${fmtMoney(mejorDia(r.por_dia).monto)}</div>` : ''}`;
-  }
+  // ----- la curva: cuánto se lleva acumulado, día a día -----
+  pintarCurva(r.calendario || []);
+
+  // ----- el calendario, mes por mes -----
+  // Un mes a la vez, con flechas. Los 97 días seguidos no cabían y obligaban a
+  // deslizar; así se ve el mes en curso completo y se avanza al siguiente, que sale
+  // apagado porque son días que todavía no pasan.
+  RD_CAL = r.calendario || [];
+  RD_EVENTO = r.evento;
+  RD_FALTAN = r.dias_faltan;
+  RD_MES = null;   // null = el mes de hoy
+  pintarCalendario();
 
   $('#rd-tipos').innerHTML = (r.por_tipo || []).map(t => `
     <div class="rd-tipo">
@@ -1807,58 +1774,52 @@ async function loadRendimiento(silent) {
   // ----- colíderes: lo suyo y lo de su equipo, siempre separado -----
   const cols = r.colideres || [];
   $('#rd-ncol').textContent = cols.length ? ' · ' + cols.length : '';
-  $('#rd-colideres').innerHTML = cols.length ? cols.map(c => `
-    <div class="rd-col">
-      <div class="rd-fila" style="border:none;padding-bottom:2px">
-        <div class="rd-fn">${esc(c.nombre)}
-          <span class="rd-fsub">${c.equipo.activos} de ${c.equipo.vendedores} vendiendo${
-            c.equipo.sin_vender ? ' · ' + c.equipo.sin_vender + ' en cero' : ''}</span></div>
-        <div class="rd-fv">${fmtMoney(Math.round(c.total.monto))}<small>${c.total.boletos} bol · ${c.pct}%</small></div>
-      </div>
-      <div class="rd-dos">
-        <div><i>Él vendió</i><b>${fmtMoney(Math.round(c.propio.monto))}</b><span>${c.propio.boletos} boleto(s)</span></div>
-        <div><i>Su equipo</i><b>${fmtMoney(Math.round(c.equipo.monto))}</b><span>${c.equipo.boletos} boleto(s)</span></div>
-      </div>
-      ${bloqueEquipo(c.miembros)}
+  RD_COLS = cols;
+  $('#rd-colideres').innerHTML = cols.length ? cols.map((c, i) => `
+    <div class="rd-fila rd-click" data-col="${i}">
+      <div class="rd-fn">${esc(c.nombre)}
+        <span class="rd-fsub">${c.equipo.activos} de ${c.equipo.vendedores} vendiendo${
+          c.equipo.sin_vender ? ' · ' + c.equipo.sin_vender + ' en cero' : ''} · ver grupo ›</span></div>
+      <div class="rd-fv">${fmtMoney(Math.round(c.total.monto))}<small>${c.total.boletos} bol · ${c.pct}%</small></div>
     </div>`).join('') : '<div class="muted" style="font-size:12px">No hay colíderes todavía.</div>';
+  $$('#rd-colideres .rd-click').forEach(f => {
+    f.onclick = () => verGrupo(RD_COLS[Number(f.dataset.col)]);
+  });
 
-  // ----- el analizador -----
-  // En la tarjeta van los tres puntos que más pesan; el resto se lee en su ventana.
-  // Puesto todo aquí, empujaba el calendario y la lista media pantalla abajo.
-  const AN = r.analisis || { lectura: [] };
-  RD_ANALISIS = AN;
-  const ICONO = { bien: '✓', ojo: '▲', neutro: '•' };
-  const punto = p => `
-    <div class="rd-lee ${p.tono}">
-      <span class="rd-ic">${ICONO[p.tono] || '•'}</span>
-      <div><b>${esc(p.titulo)}</b><span>${esc(p.detalle)}</span></div>
-    </div>`;
-  const L = AN.lectura || [];
+  // ----- el tablero -----
+  // Números, no párrafos. Lo que se quiere saber de un vistazo: a qué ritmo va, a
+  // dónde llega el 31 de octubre, si subió o bajó, y qué falta por cobrar.
+  const AN = r.analisis || {};
+  const tend = AN.tendencia;
+  const sinT = (tend === null || tend === undefined);
+  const flecha = sinT ? '' : (tend > 0 ? '▲' : tend < 0 ? '▼' : '=');
+  const tono = sinT ? '' : (tend > 0 ? 'bien' : tend < 0 ? 'mal' : '');
   $('#rd-analisis').innerHTML = `
-    <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
-      <div class="label" style="margin:0">Cómo lo leo</div>
-      ${L.length > 3 ? '<button class="btn sm ghost" id="rd-vertodo" style="width:auto;padding:6px 12px;font-size:11px">Leer todo · ' + L.length + '</button>' : ''}
+    <div class="rd-tablero">
+      <div class="rd-t">
+        <i>Ritmo</i><b>${AN.ritmo_dia || 0}<u>/día</u></b>
+        <span>${AN.sem_n || 0} en 7 días</span>
+      </div>
+      <div class="rd-t">
+        <i>Proyección</i><b>${AN.proyeccion || 0}</b>
+        <span>al 31 oct · hoy ${T.boletos}</span>
+      </div>
+      <div class="rd-t ${tono}">
+        <i>Tendencia</i><b>${flecha} ${sinT ? '—' : Math.abs(tend) + '%'}</b>
+        <span>vs semana pasada</span>
+      </div>
+      <div class="rd-t ${AN.pct_cobrar >= 50 ? 'mal' : ''}">
+        <i>Por cobrar</i><b>${fmtMoney(Math.round(AN.por_cobrar || 0))}</b>
+        <span>${AN.pct_cobrar || 0}% de lo vendido</span>
+      </div>
     </div>
-    <div class="mt8">${L.slice(0, 3).map(punto).join('')}</div>
     <div class="rd-sem">
-      <span class="rd-p critico">${AN.criticos} crítico(s)</span>
+      <span class="rd-p critico">${AN.criticos} en rojo</span>
       <span class="rd-p atencion">${AN.atencion} por atender</span>
       <span class="rd-p bien">${AN.bien} bien</span>
+      ${T.inactivos ? `<span class="rd-p neutro">${T.inactivos} sin vender</span>` : ''}
+      <span class="rd-p neutro">top 3 = ${AN.pct_top3 || 0}%</span>
     </div>`;
-  const vt = $('#rd-vertodo');
-  if (vt) vt.onclick = () => modal(`
-    <div class="h1" style="font-size:18px">Cómo va la venta</div>
-    <div class="muted" style="font-size:11.5px;margin-top:3px">Lectura de los números de
-      hoy${AN.dias_faltan ? ' · faltan ' + AN.dias_faltan + ' días para el evento' : ''}</div>
-    <div class="mt16">${L.map(punto).join('')}</div>
-    <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
-
-  $$('#rd-filtros .rd-f').forEach(b => {
-    const n = b.dataset.est === 'todos' ? (r.vendedores || []).length
-      : (r.vendedores || []).filter(v => v.estado === b.dataset.est).length;
-    b.querySelector('b').textContent = n;
-    b.onclick = () => { RD_EST = b.dataset.est; pintarRendVendedores(); };
-  });
 
   RD_PROM = T.prom_boletos;
   RD_VEND = r.vendedores || [];
@@ -1867,7 +1828,7 @@ async function loadRendimiento(silent) {
 
 /* El buscador: con muchos vendedores, encontrar a uno era deslizar hasta hallarlo.
    Filtra sobre lo ya cargado, sin volver a preguntarle al servidor. */
-let RD_VEND = [], RD_PROM = 0, RD_EST = 'todos', RD_ANALISIS = null;
+let RD_VEND = [], RD_PROM = 0, RD_EST = 'todos', RD_COLS = [], RD_VIS = [];
 document.addEventListener('input', e => {
   if (e.target && e.target.id === 'rd-q') pintarRendVendedores();
 });
@@ -1886,32 +1847,102 @@ function pintarRendVendedores() {
   if (RD_EST !== 'todos') vis = vis.filter(v => v.estado === RD_EST);
   if (q) vis = vis.filter(v => (v.name || '').toLowerCase().includes(q));
   $$('#rd-filtros .rd-f').forEach(b => b.classList.toggle('sel', b.dataset.est === RD_EST));
-  const prom = RD_PROM;
-  const maxMonto = Math.max(1, ...RD_VEND.map(v => v.monto));
-  const ETQ = { critico: '🔴 Crítico', atencion: '🟡 Por atender', bien: '🟢 Bien' };
-  $('#rd-lista').innerHTML = vis.map(v => `
-    <div class="rd-v ${v.estado}">
-      <div class="rd-vtop">
-        <div class="rd-ini">${esc(inicialesDe(v.name))}</div>
-        <div class="rd-vn">${esc(v.name)}
-          <span class="rd-vsub">${ETQ[v.estado]} · ${v.pct_monto}% del total ·
-            ${v.sin_vender === 0 ? 'vendió hoy' : 'hace ' + v.sin_vender + ' día(s)'}</span></div>
-        <div class="rd-vm">${fmtMoney(Math.round(v.monto))}<small>${v.boletos} boleto(s)</small></div>
+  const tope = Math.max(1, ...RD_VEND.map(v => v.monto));
+  RD_VIS = vis;
+  $('#rd-lista').innerHTML = vis.map((v, i) => `
+    <div class="rd-v ${v.estado}" data-i="${i}">
+      <span class="rd-estado"></span>
+      <div>
+        <div class="rd-vn">${esc(v.name)}</div>
+        <span class="rd-vsub">${v.boletos} bol · ${fmtMoney(Math.round(v.ticket_prom))} c/u ·
+          ${v.sin_vender === 0 ? 'hoy' : 'hace ' + v.sin_vender + 'd'}</span>
+        <div class="rd-vbar"><i style="width:${Math.round(v.monto / tope * 100)}%"></i></div>
       </div>
-      <div class="rd-prog"><span style="width:${Math.round(v.monto / maxMonto * 100)}%"></span></div>
-      <div class="rd-chips">
-        <div><i>Boleto prom.</i><b>${fmtMoney(Math.round(v.ticket_prom))}</b></div>
-        <div><i>Ritmo</i><b>${v.ritmo}<span>/día</span></b></div>
-        <div><i>vs promedio</i><b>${prom ? (v.boletos / prom).toFixed(1) : '—'}<span>×</span></b></div>
-        <div><i>Días con venta</i><b>${v.dias_con_venta}</b></div>
-        <div class="ancho"><i>Falta entregar</i>${v.debe > 0.005
-          ? `<b class="rd-debe">${fmtMoney(Math.round(v.debe))}</b>`
-          : '<b class="rd-alcorriente">✓ al día</b>'}</div>
-      </div>
-      ${(v.buenas || []).map(x => `<div class="rd-sen buena">✓ ${esc(x)}</div>`).join('')}
-      ${(v.señales || []).map(x => `<div class="rd-sen ojo">▲ ${esc(x)}</div>`).join('')}
+      <div class="rd-vm">${fmtMoney(Math.round(v.monto))}
+        <small>${v.debe > 0.005
+          ? '<span class="rd-debe">debe ' + fmtMoney(Math.round(v.debe)) + '</span>'
+          : '<span class="rd-alcorriente" style="font-size:9.5px">al día</span>'}</small></div>
     </div>`).join('') || `<div class="muted" style="padding:14px 2px">${
       q ? 'Nadie con ese nombre.' : 'Nadie en este grupo.'}</div>`;
+  $$('#rd-lista .rd-v').forEach(f => {
+    f.onclick = () => verVendedor(RD_VIS[Number(f.dataset.i)]);
+  });
+}
+
+/* El detalle de un vendedor, en su ventana. En la lista va una fila por persona
+   —con 50 vendedores lo demás no cabe— y aquí adentro está todo lo suyo. */
+function verVendedor(v) {
+  if (!v) return;
+  const ETQ = { critico: '🔴 Crítico', atencion: '🟡 Por atender', bien: '🟢 Bien' };
+  modal(`
+    <div class="row" style="gap:11px;align-items:center">
+      <div class="rd-ini">${esc(inicialesDe(v.name))}</div>
+      <div style="min-width:0">
+        <div class="h1" style="font-size:17px;line-height:1.2">${esc(v.name)}</div>
+        <div class="muted" style="font-size:11px;margin-top:2px">${ETQ[v.estado]} ·
+          ${v.pct_monto}% de lo vendido</div>
+      </div>
+      <div style="margin-left:auto;text-align:right">
+        <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${fmtMoney(Math.round(v.monto))}</div>
+        <div class="muted" style="font-size:10px">${v.boletos} boleto(s)</div>
+      </div>
+    </div>
+    <div class="rd-chips">
+      <div><i>Boleto promedio</i><b>${fmtMoney(Math.round(v.ticket_prom))}</b></div>
+      <div><i>Ritmo</i><b>${v.ritmo}<span>/día</span></b></div>
+      <div><i>vs promedio</i><b>${RD_PROM ? (v.boletos / RD_PROM).toFixed(1) : '—'}<span>×</span></b></div>
+      <div><i>Días con venta</i><b>${v.dias_con_venta}</b></div>
+      <div class="ancho"><i>Última venta</i><b>${v.sin_vender === 0 ? 'hoy'
+        : 'hace ' + v.sin_vender + ' día(s)'}<span> · ${esc(v.ultima || '')}</span></b></div>
+      <div class="ancho"><i>Falta entregar</i>${v.debe > 0.005
+        ? `<b class="rd-debe">${fmtMoney(Math.round(v.debe))}</b>`
+        : '<b class="rd-alcorriente">✓ al día</b>'}</div>
+    </div>
+    ${(v.buenas || []).map(x => `<div class="rd-sen buena">✓ ${esc(x)}</div>`).join('')}
+    ${(v.señales || []).map(x => `<div class="rd-sen ojo">▲ ${esc(x)}</div>`).join('')}
+    <button class="btn mt16" onclick="closeModal()">Cerrar</button>`);
+}
+
+/* La ventana del grupo de un colíder. En la lista solo va su renglón —con 50
+   vendedores, meter el equipo entero de cada uno hacía la pantalla interminable— y
+   aquí adentro está todo lo suyo: cuánto puso él, cuánto su gente, y la gráfica de
+   quién trae qué dentro del grupo. */
+function verGrupo(c) {
+  if (!c) return;
+  const venden = (c.miembros || []).filter(m => m.boletos > 0);
+  const ceros = (c.miembros || []).filter(m => !m.boletos);
+  const tope = Math.max(1, ...venden.map(m => m.monto));
+  const pctEl = c.total.monto ? Math.round(100 * c.propio.monto / c.total.monto) : 0;
+  modal(`
+    <div class="h1" style="font-size:18px">Grupo de ${esc(c.nombre)}</div>
+    <div class="muted" style="font-size:11.5px;margin-top:3px">
+      ${c.equipo.activos} de ${c.equipo.vendedores} vendiendo · ${c.pct}% de todo lo vendido</div>
+
+    <div class="rd-dos mt16">
+      <div><i>Él vendió</i><b>${fmtMoney(Math.round(c.propio.monto))}</b>
+        <span>${c.propio.boletos} boleto(s) · ${pctEl}% del grupo</span></div>
+      <div><i>Su equipo</i><b>${fmtMoney(Math.round(c.equipo.monto))}</b>
+        <span>${c.equipo.boletos} boleto(s) · ${100 - pctEl}% del grupo</span></div>
+    </div>
+    <div class="rd-split">
+      <span class="rd-el" style="width:${pctEl}%"></span>
+      <span class="rd-eq2" style="width:${100 - pctEl}%"></span>
+    </div>
+
+    <div class="label mt16" style="margin-bottom:6px">Quién trae qué en el grupo</div>
+    ${venden.length ? `<div class="rd-eq" style="border:none;padding-top:0">${venden.map(m => `
+      <div class="rd-m">
+        <span class="rd-mn">${m.es_lider ? '<b class="rd-est">★</b> ' : ''}${esc(m.name)}</span>
+        <span class="rd-mb"><i style="width:${Math.round(m.monto / tope * 100)}%"></i></span>
+        <span class="rd-mv">${fmtMoney(Math.round(m.monto))}<em>${m.boletos}</em></span>
+      </div>`).join('')}</div>`
+      : '<div class="muted" style="font-size:12px">Nadie del grupo ha vendido todavía.</div>'}
+
+    ${ceros.length ? `<div class="rd-cerosbox">
+      <div class="rd-cerost">${ceros.length} sin vender</div>
+      <div>${ceros.map(m => esc(m.name)).join(' · ')}</div></div>` : ''}
+
+    <button class="btn mt16" onclick="closeModal()">Cerrar</button>`);
 }
 
 /* La gente del colíder. Antes salían todos en fila y los que no han vendido —que
@@ -1936,6 +1967,125 @@ function bloqueEquipo(miembros) {
       <div>${ceros.map(m => esc(m.name)).join(' · ')}</div>
     </details>` : ''}
   </div>`;
+}
+
+/* La curva de la venta: boletos acumulados, un punto por día. Es la única forma de
+   ver de un vistazo si la cosa sube, se aplana o se frenó —el total a secas siempre
+   sube, y las barras de un día no dicen hacia dónde va—. */
+function pintarCurva(cal) {
+  const cont = $('#rd-curva');
+  if (!cont) return;
+  const hoy = new Date().toLocaleDateString('en-CA');
+  const pasados = cal.filter(d => d.dia <= hoy);
+  if (pasados.length < 2) { cont.innerHTML = ''; return; }
+  let acum = 0;
+  const pts = pasados.map(d => ({ dia: d.dia, y: (acum += d.boletos), dia_n: d.boletos }));
+  const W = 300, H = 96, PB = 14, PT = 8;
+  const maxY = Math.max(1, pts[pts.length - 1].y);
+  const x = i => (i / (pts.length - 1)) * W;
+  const y = v => PT + (H - PT - PB) * (1 - v / maxY);
+  const linea = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`).join('');
+  const area = `${linea}L${W},${H - PB}L0,${H - PB}Z`;
+  // el día de más venta, para poder señalarlo
+  let pico = 0;
+  pts.forEach((p, i) => { if (p.dia_n > pts[pico].dia_n) pico = i; });
+  const corto = d => d.slice(8) + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(d.slice(5,7)) - 1];
+  // los últimos 7 días contra los 7 previos: la pendiente reciente en un número
+  const n = pts.length;
+  const ult = pts[n - 1].y - (n > 7 ? pts[n - 8].y : 0);
+  const prev = n > 8 ? (pts[n - 8].y - (n > 15 ? pts[n - 15].y : 0)) : 0;
+  const sube = prev ? Math.round(100 * (ult - prev) / prev) : null;
+  cont.innerHTML = `
+    <div class="rd-curva">
+      <div class="rd-curva-top">
+        <div><b>${pts[n - 1].y}</b><span>boletos acumulados</span></div>
+        ${sube === null ? '' : `<div class="rd-tend ${sube >= 0 ? 'sube' : 'baja'}">
+          ${sube >= 0 ? '▲' : '▼'} ${Math.abs(sube)}%<span>últimos 7 días</span></div>`}
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="rd-svg">
+        <defs>
+          <linearGradient id="gcurva" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#ff7a4d" stop-opacity=".45"/>
+            <stop offset="100%" stop-color="#ff7a4d" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path d="${area}" fill="url(#gcurva)"/>
+        <path d="${linea}" fill="none" stroke="#ff8a4d" stroke-width="2"
+              stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        ${pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.y).toFixed(1)}" r="1.6"
+            fill="${i === pico ? '#f3d27a' : '#ffb27a'}"/>`).join('')}
+        <circle cx="${x(n - 1).toFixed(1)}" cy="${y(pts[n - 1].y).toFixed(1)}" r="3.4"
+                fill="#fff" stroke="#ff7a4d" stroke-width="2" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <div class="rd-curva-pie">
+        <span>${corto(pts[0].dia)}</span>
+        <span class="rd-pico">pico ${corto(pts[pico].dia)} · ${pts[pico].dia_n} bol</span>
+        <span>${corto(pts[n - 1].dia)}</span>
+      </div>
+    </div>`;
+}
+
+/* El calendario, un mes a la vez. */
+let RD_CAL = [], RD_EVENTO = '', RD_FALTAN = 0, RD_MES = null;
+const RD_MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+                  'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function pintarCalendario() {
+  const cont = $('#rd-cal');
+  if (!cont) return;
+  if (!RD_CAL.length) {
+    cont.innerHTML = '<div class="muted" style="font-size:12px">Todavía no hay ventas.</div>';
+    $('#rd-cal-sub').textContent = '';
+    return;
+  }
+  const meses = [...new Set(RD_CAL.map(d => d.dia.slice(0, 7)))].sort();
+  const hoy = new Date().toLocaleDateString('en-CA');
+  if (RD_MES === null) {
+    const mHoy = hoy.slice(0, 7);
+    RD_MES = meses.indexOf(mHoy);
+    if (RD_MES < 0) RD_MES = meses.length - 1;      // si hoy quedó fuera, el último
+  }
+  RD_MES = Math.max(0, Math.min(meses.length - 1, RD_MES));
+  const mes = meses[RD_MES];
+  const dias = RD_CAL.filter(d => d.dia.slice(0, 7) === mes);
+  const tope = Math.max(1, ...RD_CAL.map(d => d.boletos));
+  const vendidos = dias.reduce((a, d) => a + d.boletos, 0);
+  const dinero = dias.reduce((a, d) => a + d.monto, 0);
+  // el hueco antes del día 1, para que cada día caiga bajo su letra
+  const primerDia = new Date(dias[0].dia + 'T12:00:00');
+  const hueco = (primerDia.getDay() + 6) % 7;        // lunes = 0
+  const [aa, mm] = mes.split('-');
+  $('#rd-cal-sub').textContent = `${vendidos} boleto(s) este mes · faltan ${RD_FALTAN} días`;
+  cont.innerHTML = `
+    <div class="rd-nav">
+      <button type="button" class="rd-flecha" id="rd-ant" ${RD_MES === 0 ? 'disabled' : ''}>‹</button>
+      <div class="rd-mtit">${RD_MESES[Number(mm) - 1]} <span>${aa}</span></div>
+      <button type="button" class="rd-flecha" id="rd-sig" ${RD_MES === meses.length - 1 ? 'disabled' : ''}>›</button>
+    </div>
+    <div class="rd-sem-l">${['L', 'M', 'M', 'J', 'V', 'S', 'D'].map(x => `<span>${x}</span>`).join('')}</div>
+    <div class="rd-grid">
+      ${Array.from({ length: hueco }, () => '<span class="rd-hueco"></span>').join('')}
+      ${dias.map(d => {
+        const n = d.boletos;
+        const nivel = n === 0 ? 0 : n >= tope * 0.75 ? 4 : n >= tope * 0.5 ? 3
+          : n >= tope * 0.25 ? 2 : 1;
+        const clases = ['rd-dia', 'n' + nivel];
+        if (d.futuro) clases.push('fut');
+        if (d.dia === hoy) clases.push('hoy');
+        if (d.dia === RD_EVENTO) clases.push('ev');
+        return `<span class="${clases.join(' ')}"
+          title="${esc(d.dia)}: ${n} boleto(s)${n ? ' · ' + fmtMoney(d.monto) : ''}">
+          <b>${Number(d.dia.slice(8))}</b>${n ? `<i>${n}</i>` : ''}</span>`;
+      }).join('')}
+    </div>
+    <div class="rd-leyenda">
+      <span>menos</span><i class="n0"></i><i class="n1"></i><i class="n2"></i><i class="n3"></i><i class="n4"></i><span>más</span>
+      <span class="rd-lev"><i class="ev"></i> el evento</span>
+      <span class="rd-lev" style="margin-left:auto">${fmtMoney(Math.round(dinero))} en el mes</span>
+    </div>`;
+  const a = $('#rd-ant'), sg = $('#rd-sig');
+  if (a) a.onclick = () => { RD_MES--; pintarCalendario(); };
+  if (sg) sg.onclick = () => { RD_MES++; pintarCalendario(); };
 }
 
 function mejorDia(dias) {

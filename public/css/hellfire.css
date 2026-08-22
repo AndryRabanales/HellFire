@@ -839,90 +839,142 @@ details.card>summary:active{transform:scale(.99)}
   background:linear-gradient(90deg,var(--ember),#f3d27a)}
 .rd-tv{text-align:right;font:800 13px "Space Grotesk";color:var(--cream)}
 .rd-tv small{display:block;font:600 9.5px Manrope;color:var(--cream-45)}
-/* La ficha del vendedor. El estado se ve por el borde ANTES de leer un número, y
-   cada dato va en su casilla con su etiqueta: antes iban los tres en una línea de
-   texto corrido y había que buscar cuál era cuál. */
-.rd-v{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.13);
-  border-left:3px solid rgba(255,120,40,.2);
-  border-radius:13px;padding:11px 13px;margin-bottom:8px}
-.rd-v.critico{border-left-color:#e8706a;background:rgba(232,112,106,.05)}
-.rd-v.atencion{border-left-color:#f3d27a;background:rgba(243,210,122,.04)}
-.rd-v.bien{border-left-color:#7ee0a0}
-.rd-vtop{display:flex;gap:10px;align-items:center}
-.rd-ini{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;
-  font:800 12px "Space Grotesk";color:var(--cream);
+/* La ficha del vendedor: UNA FILA, no una tarjeta. Con 50 vendedores las tarjetas
+   grandes convertían la pantalla en un pasillo interminable; el detalle completo se
+   abre en su ventana cuando de verdad se quiere ver a alguien. */
+.rd-v{display:grid;grid-template-columns:8px 1fr 96px;gap:9px;align-items:center;
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.12);
+  border-radius:11px;padding:8px 11px 8px 0;margin-bottom:5px;cursor:pointer;
+  overflow:hidden;transition:border-color .15s}
+.rd-v:active{transform:scale(.997)}
+.rd-v .rd-estado{width:8px;height:100%;min-height:38px;border-radius:0 4px 4px 0}
+.rd-v.critico .rd-estado{background:#e8706a}
+.rd-v.atencion .rd-estado{background:#f3d27a}
+.rd-v.bien .rd-estado{background:#7ee0a0}
+.rd-vn{font:700 12.5px Manrope;color:var(--cream);min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rd-vsub{display:block;font:600 10px Manrope;color:var(--cream-45);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rd-vbar{height:4px;border-radius:3px;background:rgba(255,255,255,.06);margin-top:5px;
+  overflow:hidden}
+.rd-vbar i{display:block;height:100%;border-radius:3px;
+  background:linear-gradient(90deg,var(--ember),#f3d27a)}
+.rd-vm{text-align:right;font:800 14px "Space Grotesk";color:var(--cream);white-space:nowrap}
+.rd-vm small{display:block;font:600 9.5px Manrope;color:var(--cream-45)}
+.rd-vm .rd-debe{font:700 9.5px Manrope}
+
+/* el detalle, ya en su ventana */
+.rd-ini{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;
+  font:800 13px "Space Grotesk";color:var(--cream);flex:none;
   background:linear-gradient(140deg,rgba(255,122,46,.35),rgba(200,30,58,.28));
   border:1px solid rgba(255,120,40,.28)}
-.rd-vn{font:700 13.5px Manrope;color:var(--cream);min-width:0;flex:1}
-.rd-vsub{display:block;font:600 10.5px Manrope;color:var(--cream-45);margin-top:2px}
-.rd-vm{text-align:right;font:800 16px "Space Grotesk";color:var(--cream);white-space:nowrap}
-.rd-vm small{display:block;font:600 9.5px Manrope;color:var(--cream-45)}
-/* barra: cuánto trae este contra el que más trae. Es la comparación de un vistazo */
-.rd-prog{height:4px;border-radius:3px;background:rgba(255,255,255,.06);margin:9px 0 8px;
-  overflow:hidden}
-.rd-prog span{display:block;height:100%;border-radius:3px;
-  background:linear-gradient(90deg,var(--ember),#f3d27a)}
-.rd-chips{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.rd-chips{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:12px}
 .rd-chips>div{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.12);
-  border-radius:9px;padding:6px 7px;min-width:0}
-.rd-chips>div.ancho{grid-column:span 4}
+  border-radius:10px;padding:8px 10px;min-width:0}
+.rd-chips>div.ancho{grid-column:span 2}
 .rd-chips i{display:block;font:700 8.5px Manrope;color:var(--cream-45);font-style:normal;
   letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis}
-.rd-chips b{display:block;font:800 14px "Space Grotesk";color:var(--cream);margin-top:2px;
+.rd-chips b{display:block;font:800 16px "Space Grotesk";color:var(--cream);margin-top:2px;
   white-space:nowrap}
 .rd-chips b span{font:600 9.5px Manrope;color:var(--cream-45)}
-@media(max-width:380px){ .rd-chips{grid-template-columns:repeat(2,1fr)}
-  .rd-chips>div.ancho{grid-column:span 2} }
+.rd-debe{color:#ff8a8a !important}
+.rd-alcorriente{color:#7ee0a0 !important;font:700 12px Manrope !important}
+.rd-sen{font:600 11px Manrope;border-radius:9px;padding:6px 10px;margin-top:6px}
+.rd-sen.buena{color:#7ee0a0;background:rgba(126,224,160,.08);
+  border:1px solid rgba(126,224,160,.25)}
+.rd-sen.ojo{color:#ff8a8a;background:rgba(232,112,106,.1);
+  border:1px solid rgba(232,112,106,.35)}
+/* cuánto puso él contra cuánto su equipo, en una sola barra */
+.rd-split{display:flex;height:7px;border-radius:4px;overflow:hidden;margin-top:8px;
+  background:rgba(255,255,255,.06)}
+.rd-split .rd-el{background:linear-gradient(90deg,#ff7a4d,#f3d27a)}
+.rd-split .rd-eq2{background:rgba(255,255,255,.14)}
+.rd-cerosbox{margin-top:13px;padding:9px 11px;border-radius:10px;
+  background:rgba(255,255,255,.03);border:1px dashed rgba(255,120,40,.22)}
+.rd-cerost{font:700 10.5px Manrope;color:var(--cream-45);margin-bottom:3px}
+.rd-cerosbox>div{font:500 10.5px/1.6 Manrope;color:var(--cream-60)}
 
-/* el analizador: cada punto con su icono, su título y su explicación */
-.rd-lee{display:flex;gap:9px;align-items:flex-start;padding:8px 0;
-  border-bottom:1px solid rgba(255,120,40,.08)}
-.rd-lee:last-child{border-bottom:none}
-.rd-ic{flex:none;width:20px;height:20px;border-radius:7px;display:grid;place-items:center;
-  font:800 10px Manrope;margin-top:1px}
-.rd-lee.bien .rd-ic{color:#7ee0a0;background:rgba(126,224,160,.12)}
-.rd-lee.ojo .rd-ic{color:#ff8a8a;background:rgba(232,112,106,.14)}
-.rd-lee.neutro .rd-ic{color:var(--ember-soft);background:rgba(255,120,40,.12)}
-.rd-lee b{display:block;font:700 12.5px Manrope;color:var(--cream)}
-.rd-lee span{display:block;font:500 11.5px/1.5 Manrope;color:var(--cream-45);margin-top:2px}
+/* el tablero: cuatro números y sus etiquetas, sin una sola frase que leer */
+.rd-tablero{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+@media(min-width:560px){ .rd-tablero{grid-template-columns:repeat(4,1fr)} }
+.rd-t{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.14);
+  border-radius:12px;padding:9px 11px;min-width:0}
+.rd-t i{display:block;font:700 8.5px Manrope;color:var(--cream-45);font-style:normal;
+  letter-spacing:.5px;text-transform:uppercase}
+.rd-t b{display:block;font:800 21px "Space Grotesk";color:var(--cream);margin:2px 0 1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rd-t b u{font:600 10px Manrope;color:var(--cream-45);text-decoration:none;margin-left:2px}
+.rd-t span{display:block;font:600 10px Manrope;color:var(--cream-45);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.rd-t.bien{border-color:rgba(126,224,160,.35)}
+.rd-t.bien b{color:#7ee0a0}
+.rd-t.mal{border-color:rgba(232,112,106,.35)}
+.rd-t.mal b{color:#ff8a8a}
+
 .rd-sem{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:9px;
   border-top:1px dashed rgba(255,120,40,.15)}
 .rd-p{font:700 10.5px Manrope;border-radius:20px;padding:4px 10px}
 .rd-p.critico{color:#ff8a8a;background:rgba(232,112,106,.12);border:1px solid rgba(232,112,106,.35)}
 .rd-p.atencion{color:#f3d27a;background:rgba(243,210,122,.1);border:1px solid rgba(243,210,122,.3)}
 .rd-p.bien{color:#7ee0a0;background:rgba(126,224,160,.1);border:1px solid rgba(126,224,160,.3)}
+.rd-p.neutro{color:var(--cream-60);background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,120,40,.18)}
 
 /* título de sección: da orden a la pantalla sin gastar una tarjeta */
 .rd-sec{font:700 11px Manrope;color:var(--cream-45);letter-spacing:.7px;
   text-transform:uppercase;margin:18px 0 7px}
 
-/* el calendario: un cuadro por día, de la primera venta al día del evento */
-.rd-cal{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-.rd-mes{min-width:0}
-.rd-mes-t{font:700 9.5px Manrope;color:var(--cream-45);text-transform:uppercase;
-  letter-spacing:.5px;margin-bottom:4px}
-.rd-dias{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-.rd-d{width:13px;height:13px;border-radius:3px;background:rgba(255,255,255,.05);
-  border:1px solid rgba(255,255,255,.04)}
-.rd-d.n1{background:rgba(255,122,46,.3)}
-.rd-d.n2{background:rgba(255,122,46,.55)}
-.rd-d.n3{background:rgba(255,122,46,.8)}
-.rd-d.n4{background:linear-gradient(140deg,#ff7a4d,#f3d27a)}
-.rd-d.fut{background:rgba(255,255,255,.03);border-style:dashed;
-  border-color:rgba(255,255,255,.09)}
-.rd-d.ev{background:linear-gradient(140deg,#c81e3a,#ff7a4d);
-  border-color:#f3d27a;box-shadow:0 0 7px rgba(243,210,122,.5)}
-.rd-leyenda{display:flex;align-items:center;gap:4px;margin-top:9px;
+/* El calendario, un mes a la vez: con flechas a los lados y el nombre del mes en
+   medio. Los 97 días seguidos no cabían y obligaban a deslizar; el mes que viene
+   sale apagado porque son días que todavía no pasan. */
+.rd-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin:11px 0 9px}
+.rd-flecha{width:30px;height:30px;flex:none;border-radius:9px;cursor:pointer;
+  border:1px solid rgba(255,120,40,.25);background:rgba(255,255,255,.03);
+  color:var(--ember-soft);font:700 15px Manrope;line-height:1;display:grid;
+  place-items:center;transition:.15s}
+.rd-flecha:disabled{opacity:.25;cursor:default}
+.rd-flecha:not(:disabled):active{background:rgba(255,110,30,.18)}
+.rd-mtit{flex:1;text-align:center;font:700 13.5px Manrope;color:var(--cream);
+  text-transform:capitalize}
+.rd-mtit span{color:var(--cream-45);font-weight:600}
+.rd-sem-l{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:5px}
+.rd-sem-l span{text-align:center;font:700 9px Manrope;color:var(--cream-45);
+  letter-spacing:.5px}
+.rd-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.rd-hueco{aspect-ratio:1}
+.rd-dia{aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:0;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.05)}
+.rd-dia b{font:700 11px "Space Grotesk";color:var(--cream-60);line-height:1}
+.rd-dia i{font:800 9px Manrope;font-style:normal;color:var(--cream);opacity:.85;
+  margin-top:1px}
+.rd-dia.n1{background:rgba(255,122,46,.22);border-color:rgba(255,122,46,.3)}
+.rd-dia.n2{background:rgba(255,122,46,.42);border-color:rgba(255,122,46,.45)}
+.rd-dia.n3{background:rgba(255,122,46,.66);border-color:rgba(255,122,46,.6)}
+.rd-dia.n4{background:linear-gradient(140deg,#ff7a4d,#f3d27a);border-color:#f3d27a}
+.rd-dia.n3 b,.rd-dia.n4 b{color:#2a0f06}
+.rd-dia.n3 i,.rd-dia.n4 i{color:#2a0f06}
+.rd-dia.n1 b,.rd-dia.n2 b{color:var(--cream)}
+/* los días que todavía no llegan: apagados y en punteado */
+.rd-dia.fut{background:rgba(255,255,255,.015);border-style:dashed;
+  border-color:rgba(255,255,255,.07)}
+.rd-dia.fut b{color:rgba(246,241,231,.28)}
+.rd-dia.hoy{box-shadow:0 0 0 2px var(--ember)}
+.rd-dia.ev{background:linear-gradient(140deg,#c81e3a,#ff7a4d);border-color:#f3d27a;
+  border-style:solid;box-shadow:0 0 10px rgba(243,210,122,.45)}
+.rd-dia.ev b{color:#fff}
+.rd-leyenda{display:flex;align-items:center;gap:4px;margin-top:10px;
   font:600 9.5px Manrope;color:var(--cream-45);flex-wrap:wrap}
 .rd-leyenda i{width:11px;height:11px;border-radius:3px;display:inline-block}
 .rd-leyenda i.n0{background:rgba(255,255,255,.05)}
-.rd-leyenda i.n1{background:rgba(255,122,46,.3)}
-.rd-leyenda i.n2{background:rgba(255,122,46,.55)}
-.rd-leyenda i.n3{background:rgba(255,122,46,.8)}
+.rd-leyenda i.n1{background:rgba(255,122,46,.22)}
+.rd-leyenda i.n2{background:rgba(255,122,46,.42)}
+.rd-leyenda i.n3{background:rgba(255,122,46,.66)}
 .rd-leyenda i.n4{background:linear-gradient(140deg,#ff7a4d,#f3d27a)}
 .rd-leyenda i.ev{background:linear-gradient(140deg,#c81e3a,#ff7a4d);border:1px solid #f3d27a}
-.rd-lev{margin-left:8px;display:flex;align-items:center;gap:4px}
+.rd-lev{display:flex;align-items:center;gap:4px}
 
 .rd-filtros{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:8px 0 10px}
 .rd-f{cursor:pointer;border-radius:10px;padding:7px 3px;font:700 10.5px Manrope;
@@ -989,3 +1041,19 @@ details.card>summary:active{transform:scale(.99)}
 .rd-ceros>summary::before{content:'▸ ';color:var(--ember-soft)}
 .rd-ceros[open]>summary::before{content:'▾ '}
 .rd-ceros>div{font:500 10.5px/1.6 Manrope;color:var(--cream-45);padding:3px 0 2px 11px}
+
+/* ---------- la curva de la venta ----------
+   Boletos acumulados, un punto por día. El total a secas siempre sube y no dice
+   nada; lo que importa es la PENDIENTE, y eso solo se ve dibujado. */
+.rd-curva{margin-top:12px}
+.rd-curva-top{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.rd-curva-top b{font:800 22px "Space Grotesk";color:var(--cream);line-height:1}
+.rd-curva-top span{display:block;font:600 9.5px Manrope;color:var(--cream-45);margin-top:2px}
+.rd-tend{font:800 13px "Space Grotesk";text-align:right}
+.rd-tend.sube{color:#7ee0a0}
+.rd-tend.baja{color:#ff8a8a}
+.rd-tend span{color:var(--cream-45);font:600 9px Manrope}
+.rd-svg{width:100%;height:96px;display:block;margin-top:6px;overflow:visible}
+.rd-curva-pie{display:flex;justify-content:space-between;align-items:center;gap:8px;
+  font:600 9.5px Manrope;color:var(--cream-45);margin-top:3px}
+.rd-pico{color:#f3d27a}
