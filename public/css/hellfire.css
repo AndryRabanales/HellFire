@@ -1057,3 +1057,26 @@ details.card>summary:active{transform:scale(.99)}
 .rd-curva-pie{display:flex;justify-content:space-between;align-items:center;gap:8px;
   font:600 9.5px Manrope;color:var(--cream-45);margin-top:3px}
 .rd-pico{color:#f3d27a}
+
+/* ---------- avisos: en la fila y en su ventana ---------- */
+.rd-avisos{display:inline-block;font:800 9px Manrope;border-radius:20px;
+  padding:1px 6px;margin-right:5px;vertical-align:middle}
+.rd-avisos.critico{color:#ff8a8a;background:rgba(232,112,106,.16);
+  border:1px solid rgba(232,112,106,.4)}
+.rd-avisos.atencion{color:#f3d27a;background:rgba(243,210,122,.13);
+  border:1px solid rgba(243,210,122,.35)}
+button.rd-p{cursor:pointer;font-family:Manrope}
+button.rd-p:active{transform:scale(.97)}
+.rd-alt{margin-bottom:14px}
+.rd-altt{font:700 10.5px Manrope;letter-spacing:.5px;text-transform:uppercase;
+  margin-bottom:7px}
+.rd-altt.roj{color:#ff8a8a}
+.rd-altt.amb{color:#f3d27a}
+.rd-alv{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.12);
+  border-radius:11px;padding:9px 11px;margin-bottom:6px;cursor:pointer}
+.rd-alv:active{transform:scale(.997)}
+.rd-alnom{font:700 12.5px Manrope;color:var(--cream)}
+.rd-alnom span{display:block;font:600 10px Manrope;color:var(--cream-45);margin-top:1px}
+/* la lista larga desliza dentro de su ventana, no arrastra la página entera */
+.rd-scroll{max-height:58vh;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding-right:3px;margin-right:-3px}

@@ -1814,12 +1814,15 @@ async function loadRendimiento(silent) {
       </div>
     </div>
     <div class="rd-sem">
-      <span class="rd-p critico">${AN.criticos} en rojo</span>
-      <span class="rd-p atencion">${AN.atencion} por atender</span>
+      <button type="button" class="rd-p critico" id="rd-ver-rojo">${AN.criticos} en rojo ›</button>
+      <button type="button" class="rd-p atencion" id="rd-ver-ambar">${AN.atencion} por atender ›</button>
       <span class="rd-p bien">${AN.bien} bien</span>
       ${T.inactivos ? `<span class="rd-p neutro">${T.inactivos} sin vender</span>` : ''}
       <span class="rd-p neutro">top 3 = ${AN.pct_top3 || 0}%</span>
     </div>`;
+  const vr = $('#rd-ver-rojo'), va = $('#rd-ver-ambar');
+  if (vr) vr.onclick = () => verAlertas('critico');
+  if (va) va.onclick = () => verAlertas('atencion');
 
   RD_PROM = T.prom_boletos;
   RD_VEND = r.vendedores || [];
@@ -1859,13 +1862,50 @@ function pintarRendVendedores() {
         <div class="rd-vbar"><i style="width:${Math.round(v.monto / tope * 100)}%"></i></div>
       </div>
       <div class="rd-vm">${fmtMoney(Math.round(v.monto))}
-        <small>${v.debe > 0.005
+        <small>${(v.señales || []).length
+          ? `<span class="rd-avisos ${v.estado}">▲ ${v.señales.length}</span>`
+          : ''}${v.debe > 0.005
           ? '<span class="rd-debe">debe ' + fmtMoney(Math.round(v.debe)) + '</span>'
           : '<span class="rd-alcorriente" style="font-size:9.5px">al día</span>'}</small></div>
     </div>`).join('') || `<div class="muted" style="padding:14px 2px">${
       q ? 'Nadie con ese nombre.' : 'Nadie en este grupo.'}</div>`;
   $$('#rd-lista .rd-v').forEach(f => {
     f.onclick = () => verVendedor(RD_VIS[Number(f.dataset.i)]);
+  });
+}
+
+/* Todas las alertas juntas, en una sola ventana. Antes había que abrir vendedor por
+   vendedor para enterarse de quién trae qué; esto es la lista de pendientes del día:
+   quién está parado, quién vende poco y quién debe dinero, con su número al lado. */
+function verAlertas(quePrender) {
+  const conAviso = RD_VEND.filter(v => (v.señales || []).length);
+  const rojos = conAviso.filter(v => v.estado === 'critico');
+  const ambar = conAviso.filter(v => v.estado === 'atencion');
+  const bloque = (titulo, lista, clase) => !lista.length ? '' : `
+    <div class="rd-alt">
+      <div class="rd-altt ${clase}">${titulo} · ${lista.length}</div>
+      ${lista.map(v => `
+        <div class="rd-alv" data-n="${esc(v.name)}">
+          <div class="rd-alnom">${esc(v.name)}
+            <span>${v.boletos} bol · ${fmtMoney(Math.round(v.monto))}${
+              v.debe > 0.005 ? ' · debe ' + fmtMoney(Math.round(v.debe)) : ''}</span></div>
+          ${v.señales.map(x => `<div class="rd-sen ojo">▲ ${esc(x)}</div>`).join('')}
+        </div>`).join('')}
+    </div>`;
+  modal(`
+    <div class="h1" style="font-size:18px">Pendientes</div>
+    <div class="muted" style="font-size:11.5px;margin-top:3px">
+      ${conAviso.length} vendedor(es) con algo que atender. Toca a cualquiera para ver su ficha.</div>
+    <!-- la lista desliza dentro de la ventana: si crece, el título y el botón de
+         cerrar siguen a la vista en vez de irse fuera de la pantalla -->
+    <div class="mt16 rd-scroll">
+      ${quePrender === 'atencion' ? bloque('Por atender', ambar, 'amb') + bloque('En rojo', rojos, 'roj')
+                                  : bloque('En rojo', rojos, 'roj') + bloque('Por atender', ambar, 'amb')}
+      ${conAviso.length ? '' : '<div class="muted" style="font-size:12px">Nadie tiene alertas. Todo en orden.</div>'}
+    </div>
+    <button class="btn mt16" onclick="closeModal()">Cerrar</button>`);
+  $$('#modal .rd-alv').forEach(f => {
+    f.onclick = () => verVendedor(RD_VEND.find(v => v.name === f.dataset.n));
   });
 }
 
