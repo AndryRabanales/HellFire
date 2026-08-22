@@ -268,66 +268,116 @@ function bloqueCL(t, n, monto, extra) {
   </div>`;
 }
 
+/* Con seis colíderes, una tarjeta enorme por cada uno convierte la pestaña en un
+   pasillo. En la lista va lo que se mira a diario —cuánto trae el grupo y en qué va
+   su corte— y el detalle completo, con su gente, se abre en su ventana. */
+let CL_GRUPOS = [];
+
 async function loadColideres() {
   const r = await API.get('/api/admin/grupos');
-  if (!r.grupos.length) {
+  // de mayor a menor: con seis grupos, el orden alfabético no dice nada
+  CL_GRUPOS = (r.grupos || []).slice().sort((a, b) => b.total.monto - a.total.monto);
+  if (!CL_GRUPOS.length) {
     $('#cl-lista').innerHTML = `<div class="card"><div class="label">Sin colíderes</div>
       <div class="muted mt8">Todavía no hay ninguno. Se crean desde <b style="color:var(--cream)">Ajustes → Administradores del panel</b>, eligiendo «Colíder».</div></div>`;
     return;
   }
-  $('#cl-lista').innerHTML = r.grupos.map(g => `
-    <div class="card mt12" style="max-width:none">
-      <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <div>
-          <div style="font:800 17px Manrope;color:var(--cream)">${esc(g.nombre)}</div>
-          <div class="muted" style="font-size:11.5px">Colíder · ${g.equipo.vendedores} vendedor${g.equipo.vendedores === 1 ? '' : 'es'} en su equipo</div>
-        </div>
-        <div style="text-align:right">
-          <div class="muted" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em">Total del grupo</div>
-          <div style="font:800 22px Manrope;color:var(--fire)">${fmtMoney(g.total.monto)}</div>
-          <div class="muted" style="font-size:11px">${g.total.boletos} boletos · cobrado ${fmtMoney(g.total.cobrado)}</div>
-        </div>
+  const tope = Math.max(1, ...CL_GRUPOS.map(g => g.total.monto));
+  $('#cl-lista').innerHTML = CL_GRUPOS.map((g, i) => {
+    const pctEl = g.total.monto ? Math.round(100 * g.propio.monto / g.total.monto) : 0;
+    const activos = (g.miembros || []).filter(m => m.boletos > 0).length;
+    return `
+    <div class="cl-fila" data-g="${i}">
+      <div class="cl-top">
+        <div class="cl-nom">${esc(g.nombre)}
+          <span>${activos} de ${g.miembros.length} vendiendo · ${g.total.boletos} boleto(s)</span></div>
+        <div class="cl-monto">${fmtMoney(g.total.monto)}
+          <small>${g.pct}% de la venta</small></div>
       </div>
-      <div class="row mt12" style="gap:10px;flex-wrap:wrap">
-        ${bloqueCL('Vendió él', g.propio.boletos, g.propio.monto, g.propio.code ? 'código ' + g.propio.code : '')}
-        ${bloqueCL('Vendió su equipo', g.equipo.boletos, g.equipo.monto, 'cobrado ' + fmtMoney(g.equipo.cobrado))}
+      <div class="cl-bar" title="Naranja: lo que vendió él · gris: su equipo">
+        <span class="el" style="width:${(g.total.monto ? g.propio.monto / g.total.monto : 0) * 100}%"></span>
+        <span class="eq" style="width:${(g.total.monto ? g.equipo.monto / g.total.monto : 0) * 100}%"></span>
+        <span class="resto" style="width:${100 - (g.total.monto / tope * 100)}%"></span>
       </div>
-      <!-- El corte con el colíder: su porcentaje se calcula sobre lo que junta TODO
-           el grupo, no boleto por boleto. Su gente entrega el 100%; de aquí sale lo
-           que él reparta, si decide repartir. -->
-      <div class="cl-corte mt12">
-        <div class="cl-ct">Su corte · ${g.comision_pct}% del grupo</div>
-        <div class="cl-cg">
-          <div><i>Ya juntó el grupo</i><b>${fmtMoney(g.comision_base)}</b></div>
-          <div class="gana"><i>Le toca a él</i><b>${fmtMoney(g.comision_ganada)}</b></div>
-          <div><i>Te entrega</i><b>${fmtMoney(g.entrega_al_admin)}</b></div>
-        </div>
-        <!-- En qué va su bolsa: cuánto ya repartió entre los suyos y cuánto le
-             queda. Sin esto, "le toca $1,000" no dice si ya cumplió con su gente. -->
-        <div class="cl-reparto">
-          <span>Repartió a su equipo <b>${fmtMoney(g.repartido)}</b></span>
-          <span class="cl-queda">Le quedan <b>${fmtMoney(g.le_queda)}</b></span>
-        </div>
-        <div class="cl-nota">Sus vendedores entregan el 100%: lo que les dé sale de
-          este monto, y se registra en la cuenta de cada uno.</div>
+      <div class="cl-chips">
+        <span>Él ${pctEl}%</span>
+        <span>Equipo ${100 - pctEl}%</span>
+        <span class="oro">Su corte ${g.comision_pct}% · ${fmtMoney(g.comision_ganada)}</span>
+        ${g.le_queda > 0.005 ? `<span class="verde">Por repartir ${fmtMoney(g.le_queda)}</span>` : ''}
+        <span class="ver">ver grupo ›</span>
       </div>
-      <details class="mt12">
-        <summary class="muted" style="cursor:pointer;font-size:12px">Ver uno por uno (${g.miembros.length})</summary>
-        <div class="mt8" style="display:flex;flex-direction:column;gap:6px">
-          ${g.miembros.map(m => `<div class="row" style="justify-content:space-between;gap:8px;
-              padding:7px 0;border-bottom:1px solid rgba(255,120,40,.09)">
-            <div style="min-width:0">
-              <div style="font:700 13px Manrope;color:var(--cream)">${esc(m.name)}${m.es_lider ? ' <span class="badge active">él mismo</span>' : ''}${m.deleted ? ' <span class="muted">(eliminado)</span>' : ''}</div>
-              <div class="muted" style="font-size:11px">código ${esc(m.code)} · ${m.boletos} boletos</div>
-            </div>
-            <div style="text-align:right;white-space:nowrap">
-              <div style="font:700 13px Manrope;color:var(--cream)">${fmtMoney(m.monto)}</div>
-              <div class="muted" style="font-size:11px">cobrado ${fmtMoney(m.cobrado)}</div>
-            </div>
-          </div>`).join('')}
-        </div>
-      </details>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  $$('#cl-lista .cl-fila').forEach(f => {
+    f.onclick = () => verColider(CL_GRUPOS[Number(f.dataset.g)]);
+  });
+}
+
+/* La ventana del grupo: su corte, en qué va el reparto, y su gente uno por uno.
+   Desde cada nombre se abre su cuenta, que es donde se le cobra y se le paga. */
+function verColider(g) {
+  if (!g) return;
+  const venden = (g.miembros || []).filter(m => m.boletos > 0);
+  const ceros = (g.miembros || []).filter(m => !m.boletos);
+  const tope = Math.max(1, ...venden.map(m => m.monto));
+  const pctEl = g.total.monto ? Math.round(100 * g.propio.monto / g.total.monto) : 0;
+  modal(`
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
+      <div style="min-width:0">
+        <div class="h1" style="font-size:18px;line-height:1.2">${esc(g.nombre)}</div>
+        <div class="muted" style="font-size:11.5px;margin-top:2px">Colíder ·
+          ${g.miembros.length} en su equipo · ${g.pct}% de toda la venta</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font:800 21px 'Space Grotesk';color:var(--cream)">${fmtMoney(g.total.monto)}</div>
+        <div class="muted" style="font-size:10px">${g.total.boletos} boleto(s)</div>
+      </div>
+    </div>
+
+    <div class="rd-dos mt16">
+      <div><i>Vendió él</i><b>${fmtMoney(g.propio.monto)}</b>
+        <span>${g.propio.boletos} boleto(s) · ${pctEl}%</span></div>
+      <div><i>Vendió su equipo</i><b>${fmtMoney(g.equipo.monto)}</b>
+        <span>${g.equipo.boletos} boleto(s) · ${100 - pctEl}%</span></div>
+    </div>
+    <div class="rd-split">
+      <span class="rd-el" style="width:${pctEl}%"></span>
+      <span class="rd-eq2" style="width:${100 - pctEl}%"></span>
+    </div>
+
+    <div class="cl-corte mt16">
+      <div class="cl-ct">Su corte · ${g.comision_pct}% del grupo</div>
+      <div class="cl-cg">
+        <div><i>Ya juntó el grupo</i><b>${fmtMoney(g.comision_base)}</b></div>
+        <div class="gana"><i>Le toca a él</i><b>${fmtMoney(g.comision_ganada)}</b></div>
+        <div><i>Te entrega</i><b>${fmtMoney(g.entrega_al_admin)}</b></div>
+      </div>
+      <div class="cl-reparto">
+        <span>Repartió a su equipo <b>${fmtMoney(g.repartido)}</b></span>
+        <span class="cl-queda">Le quedan <b>${fmtMoney(g.le_queda)}</b></span>
+      </div>
+    </div>
+
+    <div class="label mt16" style="margin-bottom:6px">Su gente</div>
+    <div class="rd-scroll">
+      ${venden.length ? `<div class="rd-eq" style="border:none;padding-top:0">${venden.map(m => `
+        <div class="rd-m cl-m" data-id="${m.id}" data-n="${esc(m.name)}" data-t="${m.monto}">
+          <span class="rd-mn">${m.es_lider ? '<b class="rd-est">★</b> ' : ''}${esc(m.name)}</span>
+          <span class="rd-mb"><i style="width:${Math.round(m.monto / tope * 100)}%"></i></span>
+          <span class="rd-mv">${fmtMoney(m.monto)}<em>${m.boletos}</em></span>
+        </div>`).join('')}</div>`
+        : '<div class="muted" style="font-size:12px">Nadie del grupo ha vendido todavía.</div>'}
+      ${ceros.length ? `<div class="rd-cerosbox">
+        <div class="rd-cerost">${ceros.length} sin vender</div>
+        <div>${ceros.map(m => esc(m.name)).join(' · ')}</div></div>` : ''}
+    </div>
+    <div class="muted" style="font-size:10.5px;margin-top:8px">Toca a cualquiera para
+      abrir su cuenta: ahí se le cobra y se le paga.</div>
+    <button class="btn mt16" onclick="closeModal()">Cerrar</button>`);
+  $$('#modal .cl-m').forEach(f => {
+    f.onclick = () => paySeller({ id: Number(f.dataset.id), name: f.dataset.n,
+                                  total: Number(f.dataset.t) });
+  });
 }
 
 /* ---------------- cortesías: los invitados del día del evento ----------------

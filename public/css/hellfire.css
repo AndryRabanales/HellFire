@@ -1104,7 +1104,10 @@ button.rd-p:active{transform:scale(.97)}
   white-space:nowrap}
 .cl-cg>div.gana b{color:#f3d27a}
 .cl-nota{font:500 10.5px/1.5 Manrope;color:var(--cream-45);margin-top:8px}
-@media(max-width:400px){ .cl-cg{grid-template-columns:1fr 1fr} .cl-cg>div.gana{grid-column:span 2} }
+/* en pantalla angosta los tres siguen en fila: son cifras cortas y partirlos hacía
+   ver "le toca" como si fuera otra cosa */
+@media(max-width:400px){ .cl-cg{gap:5px} .cl-cg>div{padding:7px 7px} .cl-cg b{font-size:13.5px}
+  .cl-cg i{font-size:7.5px;letter-spacing:.2px} }
 
 /* ---------- lo del vendedor, dentro de su historial ----------
    Dos números suyos y nada más: lo que ya le pagaron y cuántos boletos colocó. No
@@ -1133,3 +1136,30 @@ button.rd-p:active{transform:scale(.97)}
   border-top:1px dashed rgba(243,210,122,.22);font:600 11px Manrope;color:var(--cream-45)}
 .cl-reparto b{font:800 13px "Space Grotesk";color:#7ee0a0;margin-left:3px}
 .cl-queda b{color:#f3d27a}
+
+/* ---------- colíderes: una fila por grupo ----------
+   Con seis colíderes, una tarjeta entera por cada uno convertía la pestaña en un
+   pasillo. Aquí va lo que se mira a diario y el detalle se abre en su ventana. */
+.cl-fila{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.14);
+  border-radius:14px;padding:12px 14px;margin-bottom:8px;cursor:pointer;
+  transition:border-color .15s}
+.cl-fila:active{transform:scale(.997)}
+.cl-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cl-nom{font:800 15px Manrope;color:var(--cream);min-width:0}
+.cl-nom span{display:block;font:600 10.5px Manrope;color:var(--cream-45);margin-top:2px}
+.cl-monto{text-align:right;font:800 19px "Space Grotesk";color:var(--cream);white-space:nowrap}
+.cl-monto small{display:block;font:600 9.5px Manrope;color:var(--cream-45)}
+/* naranja lo que vendió él, gris su equipo, y el resto hasta el grupo más grande */
+.cl-bar{display:flex;height:6px;border-radius:4px;overflow:hidden;margin-top:10px;
+  background:rgba(255,255,255,.05)}
+.cl-bar .el{background:linear-gradient(90deg,#ff7a4d,#f3d27a)}
+.cl-bar .eq{background:rgba(255,255,255,.18)}
+.cl-bar .resto{background:transparent}
+.cl-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+.cl-chips span{font:700 9.5px Manrope;color:var(--cream-45);border-radius:20px;
+  padding:3px 9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,120,40,.14)}
+.cl-chips .oro{color:#f3d27a;border-color:rgba(243,210,122,.35);background:rgba(243,210,122,.08)}
+.cl-chips .verde{color:#7ee0a0;border-color:rgba(126,224,160,.3);background:rgba(126,224,160,.08)}
+.cl-chips .ver{color:var(--ember-soft);border:none;background:none;margin-left:auto;padding-right:0}
+.cl-m{cursor:pointer;border-radius:8px}
+.cl-m:active{background:rgba(255,255,255,.04)}

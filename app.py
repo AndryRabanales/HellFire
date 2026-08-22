@@ -3677,6 +3677,9 @@ def grupos_colider():
         salida.append(dict(
             id=l["id"], nombre=l["username"],
             comision_pct=pct,
+            # cuánto pesa este grupo dentro de toda la venta: con seis colíderes es
+            # lo primero que se compara
+            pct=0,
             comision_ganada=money(gana),
             comision_base=money(cobrado_grupo),
             entrega_al_admin=money(cobrado_grupo - gana),
@@ -3695,6 +3698,13 @@ def grupos_colider():
                            boletos=r["n"] or 0, monto=money(r["cents"] or 0),
                            cobrado=money(r["paid_cents"] or 0)) for r in filas],
         ))
+    # el peso de cada grupo se calcula al final, cuando ya se conoce el total vendido
+    total_evento = db.execute(
+        f"SELECT COALESCE(SUM(price_cents),0) c FROM tickets "
+        f"WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}").fetchone()["c"]
+    for g in salida:
+        g["pct"] = (round(100.0 * g["total"]["monto"] / money(total_evento), 1)
+                    if total_evento else 0)
     return jsonify(grupos=salida, soy_colider=bool(duenio))
 
 @app.get("/api/admin/cortesias")
