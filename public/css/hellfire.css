@@ -1086,3 +1086,22 @@ button.rd-p:active{transform:scale(.97)}
 .rd-vb{border:none;background:none;cursor:pointer;border-radius:8px;padding:5px 9px;
   font:700 10px Manrope;color:var(--cream-45)}
 .rd-vb.sel{background:rgba(255,110,30,.2);color:var(--cream)}
+
+/* ---------- el corte del colíder ----------
+   Su porcentaje va sobre lo que junta TODO su grupo, no boleto por boleto: por eso
+   se muestra como un bloque aparte y no como una columna más de la tabla. */
+.cl-corte{border:1px solid rgba(243,210,122,.3);border-radius:13px;padding:11px 13px;
+  background:linear-gradient(180deg,rgba(243,210,122,.07),transparent 70%)}
+.cl-ct{font:700 11px Manrope;color:#f3d27a;letter-spacing:.5px;text-transform:uppercase}
+.cl-cg{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:9px}
+.cl-cg>div{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.13);
+  border-radius:10px;padding:8px 9px;min-width:0}
+.cl-cg>div.gana{border-color:rgba(243,210,122,.45);background:rgba(243,210,122,.08)}
+.cl-cg i{display:block;font:700 8.5px Manrope;color:var(--cream-45);font-style:normal;
+  letter-spacing:.4px;text-transform:uppercase;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.cl-cg b{display:block;font:800 16px "Space Grotesk";color:var(--cream);margin-top:2px;
+  white-space:nowrap}
+.cl-cg>div.gana b{color:#f3d27a}
+.cl-nota{font:500 10.5px/1.5 Manrope;color:var(--cream-45);margin-top:8px}
+@media(max-width:400px){ .cl-cg{grid-template-columns:1fr 1fr} .cl-cg>div.gana{grid-column:span 2} }

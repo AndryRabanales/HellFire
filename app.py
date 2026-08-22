@@ -2935,18 +2935,45 @@ def comision_general(db):
     except (TypeError, ValueError):
         return 10.0
 
-def comision_pct(db, sid=None):
-    """La comisión de ESTE vendedor.
+COMISION_COLIDER_MIN = 20.0   # el trato con un colíder nunca baja de aquí
 
-    No todos llevan lo mismo: a unos se les da 10%, a otros 15 y a otros nada. El
-    valor propio manda; si no tiene, se usa el general. Un 0 explícito es "sin
-    comisión" y NO cae al general —por eso se compara contra None y no por verdadero
-    o falso, que trataría el 0 como "sin definir"—."""
+def es_de_colider(db, sid):
+    """¿Este vendedor pertenece al grupo de un colíder? (incluye la ficha del propio
+    colíder, que también vende en persona)."""
+    r = db.execute("""SELECT a.role FROM sellers s JOIN admins a ON a.id=s.owner_admin_id
+                      WHERE s.id=?""", (sid,)).fetchone()
+    return bool(r and r["role"] == "colider")
+
+
+def comision_pct(db, sid=None):
+    """La comisión de ESTE vendedor sobre lo que entrega.
+
+    En el grupo de un colíder es CERO, y no es un castigo: ahí el trato es otro. Su
+    gente entrega el 100% —si vendió $500, entran $500 completos—, el colíder cobra
+    su porcentaje sobre lo que junte TODO el grupo, y de ahí reparte a los suyos si
+    quiere. Si además cada vendedor se quedara su 10%, esas ventas pagarían 30%.
+
+    Fuera de un grupo: el valor propio manda y, si no tiene, la general. Un 0
+    explícito es "sin comisión" y NO cae al general —por eso se compara contra None y
+    no por verdadero o falso, que trataría el 0 como "sin definir"—."""
     if sid is not None:
+        if es_de_colider(db, sid):
+            return 0.0
         r = db.execute("SELECT commission_pct FROM sellers WHERE id=?", (sid,)).fetchone()
         if r is not None and r["commission_pct"] is not None:
             return max(0.0, min(100.0, float(r["commission_pct"])))
     return comision_general(db)
+
+
+def comision_colider(db, admin_id):
+    """El porcentaje del colíder sobre lo que junta su grupo. Se guarda en su propia
+    ficha de vendedor (que es donde el panel ya lo pone) y nunca baja de 20."""
+    r = db.execute("""SELECT commission_pct FROM sellers
+                      WHERE owner_admin_id=? AND es_lider=1 AND deleted=0
+                      ORDER BY id LIMIT 1""", (admin_id,)).fetchone()
+    if r is not None and r["commission_pct"] is not None:
+        return max(COMISION_COLIDER_MIN, min(100.0, float(r["commission_pct"])))
+    return COMISION_COLIDER_MIN
 
 def vendido_cents(db, sid):
     return db.execute("""SELECT COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS c
@@ -2991,6 +3018,10 @@ def estado_cuenta(db, sid):
             "balance": money(vendido - abonado),
             "settled": vendido > 0 and abonado >= vendido,
             "commission_pct": comision_pct(db, sid),
+            # Para explicar el 0% en pantalla: en un grupo la comisión no es de cada
+            # vendedor, es del colíder sobre el total. Sin esta nota, un 0% se lee
+            # como un error o como un castigo.
+            "en_grupo": es_de_colider(db, sid),
             "commission_general": comision_general(db),
             "commission_propia": (lambda r: r and r["commission_pct"] is not None)(
                 db.execute("SELECT commission_pct FROM sellers WHERE id=?", (sid,)).fetchone()),
@@ -3310,6 +3341,21 @@ def edit_seller(sid):
                 nueva = max(0.0, min(100.0, float(crudo)))
             except (TypeError, ValueError):
                 return jsonify(error="La comisión debe ser un número entre 0 y 100"), 400
+        # Dentro de un grupo el porcentaje no es de cada vendedor: es del colíder,
+        # sobre lo que junte todo el grupo. Ponerle uno propio a alguien de su equipo
+        # rompería el trato —esas ventas pagarían dos veces— así que se rechaza con
+        # su explicación en vez de guardarse a medias.
+        if es_de_colider(db, sid):
+            if sel["es_lider"]:
+                if nueva is None or nueva < COMISION_COLIDER_MIN:
+                    return jsonify(error=f"La comisión de un colíder no puede bajar de "
+                                         f"{COMISION_COLIDER_MIN:g}%. Es sobre lo que junta "
+                                         f"todo su grupo, y de ahí él reparte."), 400
+            else:
+                return jsonify(error=f"{sel['name']} es del grupo de "
+                                     f"{sel['owner_admin_name']}. En un grupo la comisión la "
+                                     f"lleva el colíder sobre el total, y él decide qué le da "
+                                     f"a su gente."), 400
         if nueva != sel["commission_pct"]:
             db.execute("UPDATE sellers SET commission_pct=? WHERE id=?", (nueva, sid))
             audit(db, s["admin"]["username"], "usuarios",
@@ -3494,8 +3540,18 @@ def grupos_colider():
         equipo = [r for r in filas if not r["es_lider"]]
         def suma(rs, campo):
             return sum(r[campo] or 0 for r in rs)
+        # Lo que le toca a ÉL: su porcentaje sobre lo que ya juntó todo el grupo (lo
+        # entregado, no lo vendido: la comisión nace cuando el dinero llega). De ahí
+        # sale lo que reparta a su gente, si decide repartir.
+        pct = comision_colider(db, l["id"])
+        cobrado_grupo = suma(filas, "paid_cents")
+        gana = int(round(cobrado_grupo * pct / 100))
         salida.append(dict(
             id=l["id"], nombre=l["username"],
+            comision_pct=pct,
+            comision_ganada=money(gana),
+            comision_base=money(cobrado_grupo),
+            entrega_al_admin=money(cobrado_grupo - gana),
             propio=dict(boletos=suma(propio, "n"), monto=money(suma(propio, "cents")),
                         cobrado=money(suma(propio, "paid_cents")),
                         code=(propio[0]["code"] if propio else None)),

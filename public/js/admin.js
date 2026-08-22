@@ -292,6 +292,19 @@ async function loadColideres() {
         ${bloqueCL('Vendió él', g.propio.boletos, g.propio.monto, g.propio.code ? 'código ' + g.propio.code : '')}
         ${bloqueCL('Vendió su equipo', g.equipo.boletos, g.equipo.monto, 'cobrado ' + fmtMoney(g.equipo.cobrado))}
       </div>
+      <!-- El corte con el colíder: su porcentaje se calcula sobre lo que junta TODO
+           el grupo, no boleto por boleto. Su gente entrega el 100%; de aquí sale lo
+           que él reparta, si decide repartir. -->
+      <div class="cl-corte mt12">
+        <div class="cl-ct">Su corte · ${g.comision_pct}% del grupo</div>
+        <div class="cl-cg">
+          <div><i>Ya juntó el grupo</i><b>${fmtMoney(g.comision_base)}</b></div>
+          <div class="gana"><i>Le toca a él</i><b>${fmtMoney(g.comision_ganada)}</b></div>
+          <div><i>Te entrega</i><b>${fmtMoney(g.entrega_al_admin)}</b></div>
+        </div>
+        <div class="cl-nota">Sus vendedores entregan el 100%: la comisión de su equipo
+          la reparte él de este monto.</div>
+      </div>
       <details class="mt12">
         <summary class="muted" style="cursor:pointer;font-size:12px">Ver uno por uno (${g.miembros.length})</summary>
         <div class="mt8" style="display:flex;flex-direction:column;gap:6px">
@@ -1253,7 +1266,11 @@ async function descargarEstadoCuenta(s, c) {
   // cabeza, y si el monto no le cuadra es lo primero contra lo que compara.
   linea('Boletos vendidos', String(c.sold_tickets || 0), '#f6f1e7');
   linea('Vendió en boletos', fmtMoney(c.sold), '#f6f1e7');
-  linea(`Su comisión (${c.commission_pct}%)`, '− ' + fmtMoney(comisionTotal), '#f3d27a');
+  // En un grupo la comisión no es de cada vendedor: es del colíder sobre el total.
+  // Sin decirlo, un 0% en la ficha se lee como un error o como un castigo.
+  linea(c.en_grupo ? 'Su comisión · la lleva su colíder'
+                   : `Su comisión (${c.commission_pct}%)`,
+        '− ' + fmtMoney(comisionTotal), '#f3d27a');
   x.strokeStyle = 'rgba(255,120,40,.3)'; x.lineWidth = 1;
   x.beginPath(); x.moveTo(pad, y - 22); x.lineTo(W - pad, y - 22); x.stroke();
   linea('Debe entregar en total', fmtMoney(debeEntregar), '#ff7a2e', true);
@@ -1440,6 +1457,11 @@ async function editSeller(s) {
     <div class="muted mt8">Si cambias el código, su sesión actual se cierra.</div>
 
     <div class="label mt16">Su comisión</div>
+    ${cta.en_grupo ? `<div class="muted" style="font-size:11.5px;line-height:1.5;
+      border:1px dashed rgba(243,210,122,.3);border-radius:10px;padding:9px 11px">
+      Es del grupo de <b style="color:var(--cream)">${esc(s.owner_admin_name || 'su colíder')}</b>.
+      Ahí la comisión la lleva el colíder sobre el total que junta el grupo, y él
+      decide qué le da a su gente: por eso este vendedor entrega el 100%.</div>` : `
     <label class="row" style="gap:8px;cursor:pointer">
       <input type="checkbox" id="es-com-on" ${propia ? 'checked' : ''}>
       <span style="font:600 13px Manrope;color:var(--cream)">Ponerle un porcentaje distinto</span></label>
@@ -1456,7 +1478,7 @@ async function editSeller(s) {
           value="${propia ? cta.commission_pct : general}" style="width:110px">
         <span style="font:700 15px Manrope;color:var(--cream-60)">%</span>
       </div>
-    </div>
+    </div>`}
     <div class="muted mt8" style="font-size:11px" id="es-com-hint"></div>
     <div class="err mt8" id="es-err"></div>
     <div class="row mt16">
@@ -1464,6 +1486,7 @@ async function editSeller(s) {
       <button class="btn grow" id="es-save">Guardar</button>
     </div>`);
   const sincroniza = () => {
+    if (!$('#es-com-on')) return;   // en un grupo no hay porcentaje que ajustar
     const on = $('#es-com-on').checked;
     $('#es-com-box').style.display = on ? '' : 'none';
     const v = parseFloat($('#es-com').value);
