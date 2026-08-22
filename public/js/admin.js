@@ -41,6 +41,14 @@ async function enter(name) {
 }
 
 /* ---------------- tabs ---------------- */
+/* Un error de JavaScript ya no se queda callado. Un tropiezo en una pantalla dejaba
+   botones sin función y secciones vacías, y desde fuera parecía que "no funciona"
+   sin ninguna pista de por qué. */
+window.addEventListener('error', e => {
+  console.error('fallo en pantalla:', e.error || e.message);
+  if (typeof toast === 'function') toast('Algo falló en la pantalla: ' + (e.message || ''));
+});
+
 const loaders = {
   resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
   vendedores: loadSellers, ranking: loadRanking, rendimiento: loadRendimiento,
@@ -1740,6 +1748,14 @@ async function loadRendimiento(silent) {
   const sig = JSON.stringify(r);
   if (silent && sig === _sigRend) return;
   _sigRend = sig;
+  // La lista y sus filtros se pintan PRIMERO y aparte. Estaban al final, así que
+  // cualquier tropiezo en lo de arriba —una gráfica, un desglose— los dejaba sin
+  // número y sin hacer nada, que es justo lo que pasó.
+  RD_PROM = (r.totales || {}).prom_boletos || 0;
+  RD_VEND = r.vendedores || [];
+  try { pintarRendVendedores(); }
+  catch (e) { console.error('lista de vendedores:', e); }
+
   const T = r.totales;
   // El acumulado siempre sube y por eso nunca preocupa: lo que dice si la venta se
   // movió es HOY y esta semana, así que van arriba con lo demás.
@@ -1752,7 +1768,7 @@ async function loadRendimiento(silent) {
     <div class="rk-st"><i>Boleto prom.</i><b>${fmtMoney(Math.round(T.ticket_prom))}</b></div>`;
 
   // ----- la curva: cuánto se lleva acumulado, día a día -----
-  pintarCurva(r.calendario || []);
+  try { pintarCurva(r.calendario || []); } catch (e) { console.error('la gráfica:', e); }
 
   // ----- el calendario, mes por mes -----
   // Un mes a la vez, con flechas. Los 97 días seguidos no cabían y obligaban a
@@ -1762,7 +1778,7 @@ async function loadRendimiento(silent) {
   RD_EVENTO = r.evento;
   RD_FALTAN = r.dias_faltan;
   RD_MES = null;   // null = el mes de hoy
-  pintarCalendario();
+  try { pintarCalendario(); } catch (e) { console.error('el calendario:', e); }
 
   $('#rd-tipos').innerHTML = (r.por_tipo || []).map(t => `
     <div class="rd-tipo">
@@ -1838,9 +1854,6 @@ async function loadRendimiento(silent) {
   if (vr) vr.onclick = () => verAlertas('critico');
   if (va) va.onclick = () => verAlertas('atencion');
 
-  RD_PROM = T.prom_boletos;
-  RD_VEND = r.vendedores || [];
-  pintarRendVendedores();
 }
 
 /* El buscador: con muchos vendedores, encontrar a uno era deslizar hasta hallarlo.
