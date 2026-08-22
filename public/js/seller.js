@@ -647,20 +647,24 @@ let _searchTimer = null;
    nada. Si tiene forma de botón, que lo sea — ordena al revés. */
 let H_VIEJOS_PRIMERO = false;
 
-/* Lo suyo, en corto: cuánto lleva ganado y cuántos boletos colocó. Solo aparece
-   cuando ya ganó algo —un "$0" grande el primer día desanima más de lo que informa—
-   y vive dentro del historial, no en la pantalla de vender. */
+/* Lo suyo, en corto: cuánto lleva ganado y cuántos boletos colocó.
+
+   Se enseña SIEMPRE, aunque vaya en cero. Lo escondí primero pensando que un "$0"
+   desanimaba, pero el que ya vendió y todavía no cobra es justo el que entra a
+   buscar este dato: no encontrarlo se siente peor que ver el cero. Cuando aún no
+   hay pago, el número va apagado y manda el conteo de boletos, que sí es suyo. */
 function pintarMio() {
   const caja = $('#h-mio');
   if (!caja) return;
   const ganado = (CATALOG && CATALOG.mi_ganado) || 0;
   const boletos = (CATALOG && CATALOG.mi_boletos) || 0;
-  if (ganado <= 0) { caja.innerHTML = ''; return; }
+  if (!boletos && !ganado) { caja.innerHTML = ''; return; }   // aún no vende nada
   caja.innerHTML = `
-    <div class="mio">
+    <div class="mio${ganado > 0 ? '' : ' sinpago'}">
       <div class="mio-l">
-        <i>Ya te pagaron</i>
+        <i>${ganado > 0 ? 'Ya te pagaron' : 'Te han pagado'}</i>
         <b>${fmtMoney(ganado)}</b>
+        ${ganado > 0 ? '' : '<u>tu corte se te entrega al hacer cuentas</u>'}
       </div>
       <div class="mio-sep"></div>
       <div class="mio-r">
