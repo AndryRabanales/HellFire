@@ -1722,7 +1722,21 @@ let _sigRend = null;
 async function loadRendimiento(silent) {
   let r;
   try { r = await API.get('/api/admin/rendimiento'); }
-  catch (e) { return; }
+  catch (e) {
+    // Antes se salía en silencio: si la primera carga fallaba —un 401 al entrar, la
+    // señal que se cae— la pestaña se quedaba EN BLANCO sin decir por qué, y solo
+    // se arreglaba recargando la página.
+    if (guard(e)) return;
+    const c = $('#rd-analisis');
+    if (c && !RD_VEND.length) {
+      c.innerHTML = `<div class="muted" style="font-size:12px">No se pudo cargar:
+        ${esc(e.message || 'sin conexión')}.</div>
+        <button class="btn sm mt8" id="rd-reintentar" style="width:auto">Reintentar</button>`;
+      const b = $('#rd-reintentar');
+      if (b) b.onclick = () => loadRendimiento();
+    }
+    return;
+  }
   const sig = JSON.stringify(r);
   if (silent && sig === _sigRend) return;
   _sigRend = sig;
@@ -1835,6 +1849,14 @@ let RD_VEND = [], RD_PROM = 0, RD_EST = 'todos', RD_COLS = [], RD_VIS = [];
 document.addEventListener('input', e => {
   if (e.target && e.target.id === 'rd-q') pintarRendVendedores();
 });
+// delegado a propósito: el filtro sigue funcionando aunque los botones se vuelvan a
+// dibujar, y no depende de que alguien se acuerde de reconectarlos
+document.addEventListener('click', e => {
+  const b = e.target && e.target.closest && e.target.closest('#rd-filtros .rd-f');
+  if (!b) return;
+  RD_EST = b.dataset.est;
+  pintarRendVendedores();
+});
 
 function inicialesDe(nombre) {
   const p = String(nombre || '?').trim().split(/\s+/);
@@ -1849,7 +1871,16 @@ function pintarRendVendedores() {
   let vis = RD_VEND;
   if (RD_EST !== 'todos') vis = vis.filter(v => v.estado === RD_EST);
   if (q) vis = vis.filter(v => (v.name || '').toLowerCase().includes(q));
-  $$('#rd-filtros .rd-f').forEach(b => b.classList.toggle('sel', b.dataset.est === RD_EST));
+  // El estado marcado Y el número de cada filtro se ponen aquí, donde ya está la
+  // lista: el bloque que los ponía vivía en el cargador y se perdió al reacomodar
+  // esta pantalla —los botones quedaron sin cuenta y sin hacer nada—.
+  $$('#rd-filtros .rd-f').forEach(b => {
+    b.classList.toggle('sel', b.dataset.est === RD_EST);
+    const n = b.dataset.est === 'todos' ? RD_VEND.length
+      : RD_VEND.filter(v => v.estado === b.dataset.est).length;
+    const c = b.querySelector('b');
+    if (c) c.textContent = n;
+  });
   const tope = Math.max(1, ...RD_VEND.map(v => v.monto));
   RD_VIS = vis;
   $('#rd-lista').innerHTML = vis.map((v, i) => `
@@ -2009,60 +2040,89 @@ function bloqueEquipo(miembros) {
   </div>`;
 }
 
-/* La curva de la venta: boletos acumulados, un punto por día. Es la única forma de
-   ver de un vistazo si la cosa sube, se aplana o se frenó —el total a secas siempre
-   sube, y las barras de un día no dicen hacia dónde va—. */
+/* La gráfica de la venta. Por día se ven los PICOS y los bajones —un día de 12 y
+   otro de 0 no se distinguen en el acumulado, que solo sabe subir—; el acumulado
+   queda como segunda vista para saber a dónde va el total. */
+let RD_VISTA = 'dia';   // 'dia' | 'acum'
+let RD_PTOS = [];
+
 function pintarCurva(cal) {
   const cont = $('#rd-curva');
   if (!cont) return;
   const hoy = new Date().toLocaleDateString('en-CA');
-  const pasados = cal.filter(d => d.dia <= hoy);
+  RD_PTOS = cal.filter(d => d.dia <= hoy);
+  dibujarCurva();
+}
+
+function dibujarCurva() {
+  const cont = $('#rd-curva');
+  const pasados = RD_PTOS;
+  if (!cont) return;
   if (pasados.length < 2) { cont.innerHTML = ''; return; }
+  const porDia = RD_VISTA === 'dia';
+  // por día se miran los últimos 30: más atrás los picos se aplastan y no se leen
+  const base = porDia ? pasados.slice(-30) : pasados;
   let acum = 0;
-  const pts = pasados.map(d => ({ dia: d.dia, y: (acum += d.boletos), dia_n: d.boletos }));
-  const W = 300, H = 96, PB = 14, PT = 8;
-  const maxY = Math.max(1, pts[pts.length - 1].y);
+  const total = pasados.reduce((a, d) => a + d.boletos, 0);
+  const previos = porDia ? pasados.slice(0, -30).reduce((a, d) => a + d.boletos, 0) : 0;
+  acum = previos;
+  const pts = base.map(d => ({ dia: d.dia, n: d.boletos, y: porDia ? d.boletos : (acum += d.boletos) }));
+  const W = 300, H = 104, PB = 16, PT = 10;
+  const maxY = Math.max(1, ...pts.map(p => p.y));
+  const minY = porDia ? 0 : Math.min(...pts.map(p => p.y));
   const x = i => (i / (pts.length - 1)) * W;
-  const y = v => PT + (H - PT - PB) * (1 - v / maxY);
+  const y = v => PT + (H - PT - PB) * (1 - (v - minY) / Math.max(1, maxY - minY));
   const linea = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.y).toFixed(1)}`).join('');
   const area = `${linea}L${W},${H - PB}L0,${H - PB}Z`;
-  // el día de más venta, para poder señalarlo
-  let pico = 0;
-  pts.forEach((p, i) => { if (p.dia_n > pts[pico].dia_n) pico = i; });
+  let pico = 0, valle = 0;
+  pts.forEach((p, i) => { if (p.n > pts[pico].n) pico = i; if (p.n < pts[valle].n) valle = i; });
   const corto = d => d.slice(8) + ' ' + ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][Number(d.slice(5,7)) - 1];
-  // los últimos 7 días contra los 7 previos: la pendiente reciente en un número
   const n = pts.length;
-  const ult = pts[n - 1].y - (n > 7 ? pts[n - 8].y : 0);
-  const prev = n > 8 ? (pts[n - 8].y - (n > 15 ? pts[n - 15].y : 0)) : 0;
+  // la pendiente reciente: últimos 7 días contra los 7 anteriores
+  const ult = pasados.slice(-7).reduce((a, d) => a + d.boletos, 0);
+  const prev = pasados.slice(-14, -7).reduce((a, d) => a + d.boletos, 0);
   const sube = prev ? Math.round(100 * (ult - prev) / prev) : null;
+  const hoyN = pasados[pasados.length - 1].boletos;
   cont.innerHTML = `
     <div class="rd-curva">
       <div class="rd-curva-top">
-        <div><b>${pts[n - 1].y}</b><span>boletos acumulados</span></div>
-        ${sube === null ? '' : `<div class="rd-tend ${sube >= 0 ? 'sube' : 'baja'}">
-          ${sube >= 0 ? '▲' : '▼'} ${Math.abs(sube)}%<span>últimos 7 días</span></div>`}
+        <div>
+          <b>${porDia ? hoyN : total}</b>
+          <span>${porDia ? 'boletos hoy · ' + total + ' en total' : 'boletos acumulados'}</span>
+        </div>
+        <div class="rd-vistas">
+          <button type="button" class="rd-vb ${porDia ? 'sel' : ''}" data-v="dia">Por día</button>
+          <button type="button" class="rd-vb ${porDia ? '' : 'sel'}" data-v="acum">Acumulado</button>
+        </div>
       </div>
       <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="rd-svg">
         <defs>
           <linearGradient id="gcurva" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#ff7a4d" stop-opacity=".45"/>
+            <stop offset="0%" stop-color="#ff7a4d" stop-opacity=".42"/>
             <stop offset="100%" stop-color="#ff7a4d" stop-opacity="0"/>
           </linearGradient>
         </defs>
         <path d="${area}" fill="url(#gcurva)"/>
         <path d="${linea}" fill="none" stroke="#ff8a4d" stroke-width="2"
               stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-        ${pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.y).toFixed(1)}" r="1.6"
-            fill="${i === pico ? '#f3d27a' : '#ffb27a'}"/>`).join('')}
+        ${porDia ? `<circle cx="${x(pico).toFixed(1)}" cy="${y(pts[pico].y).toFixed(1)}" r="3.2"
+              fill="#f3d27a" stroke="#2a0f06" stroke-width="1" vector-effect="non-scaling-stroke"/>` : ''}
+        ${pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.y).toFixed(1)}" r="1.5"
+            fill="#ffb27a"/>`).join('')}
         <circle cx="${x(n - 1).toFixed(1)}" cy="${y(pts[n - 1].y).toFixed(1)}" r="3.4"
                 fill="#fff" stroke="#ff7a4d" stroke-width="2" vector-effect="non-scaling-stroke"/>
       </svg>
       <div class="rd-curva-pie">
         <span>${corto(pts[0].dia)}</span>
-        <span class="rd-pico">pico ${corto(pts[pico].dia)} · ${pts[pico].dia_n} bol</span>
+        <span class="rd-pico">${porDia
+          ? '▲ pico ' + corto(pts[pico].dia) + ' · ' + pts[pico].n + ' bol'
+          : (sube === null ? '' : (sube >= 0 ? '▲ ' : '▼ ') + Math.abs(sube) + '% en 7 días')}</span>
         <span>${corto(pts[n - 1].dia)}</span>
       </div>
     </div>`;
+  $$('#rd-curva .rd-vb').forEach(b => {
+    b.onclick = () => { RD_VISTA = b.dataset.v; dibujarCurva(); };
+  });
 }
 
 /* El calendario, un mes a la vez. */
