@@ -2515,9 +2515,8 @@ def rendimiento():
         SELECT s.id, s.name,
                COUNT(t.id) AS boletos,
                COALESCE(SUM(t.price_cents),0) AS monto,
-               -- lo que HABRÍAN costado sin oferta: para juzgar si alguien coloca
-               -- boleto barato hay que mirar QUÉ tipo vendió, no cuánto le rebajó
-               -- una venta flash que no decidió él
+               -- lo que habrían costado sin oferta: sirve para reconocer a quien
+               -- coloca boleto caro sin que una venta flash le baje el promedio
                COALESCE(SUM(COALESCE(t.normal_price_cents, t.price_cents)),0) AS lista,
                COALESCE(MAX(s.paid_cents),0) AS pagado,
                MIN(SUBSTR(t.created_at,1,10)) AS primera,
@@ -2563,9 +2562,8 @@ def rendimiento():
 
     prom_boletos = (total_boletos / activos) if activos else 0
     prom_monto = (total_monto / activos) if activos else 0
-    # El promedio contra el que se compara el "boleto barato" también va a precio de
-    # lista: si se comparara el precio de flash de uno contra el precio normal del
-    # resto, cualquiera que haya vendido durante la oferta saldría señalado.
+    # El promedio va a precio de lista: comparar el precio de flash de uno contra el
+    # precio normal del resto hace ver "barato" a quien vendió durante la oferta.
     total_lista = sum(v["lista"] for v in vendedores)
     prom_ticket_grupo = (total_lista / total_boletos) if total_boletos else 0
 
@@ -2589,9 +2587,11 @@ def rendimiento():
             señales.append(f"vende poco: {v['boletos']} boleto{'' if v['boletos'] == 1 else 's'} "
                            f"y ${v['monto']/100:,.0f} (el promedio es {prom_boletos:.0f} "
                            f"y ${prom_monto/100:,.0f})")
-        if prom_ticket_grupo and suyo_lista < prom_ticket_grupo * 0.75 and v["boletos"] >= 2:
-            señales.append(f"coloca boleto barato (${suyo_lista/100:,.0f} de promedio, "
-                           f"contra ${prom_ticket_grupo/100:,.0f})")
+        # NO existe un aviso por "vender barato". El precio no lo decide el vendedor:
+        # lo pone la fase, la venta flash o el tipo que el comprador quiso. Quien
+        # coloca UADY a $150 en oferta está vendiendo igual que quien coloca un VIP,
+        # y señalarlo castiga justo a quien sí trabaja. Lo que sí importa —si está
+        # parado o si vende muy poco— ya tiene su aviso.
         # "no ha vuelto" solo si de verdad no ha vuelto: quien vendió todo HOY o ayer
         # apenas está arrancando, y salía señalado como si llevara semanas parado.
         if v["dias_con_venta"] == 1 and v["boletos"] >= 3 and sin_vender >= 3:
