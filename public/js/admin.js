@@ -1737,19 +1737,51 @@ async function loadRendimiento(silent) {
     <div class="rk-st"><i>Vendiendo</i><b>${T.activos}<small>+${T.inactivos} en 0</small></b></div>
     <div class="rk-st"><i>Boleto prom.</i><b>${fmtMoney(Math.round(T.ticket_prom))}</b></div>`;
 
-  // Los últimos días como barras: si la venta se cayó, se ve sin leer un número.
-  const dias = r.por_dia || [];
-  const tope = Math.max(1, ...dias.map(d => d.boletos));
-  $('#rd-dias').innerHTML = dias.length ? `
-    <div class="rd-barras">${dias.map(d => `
-      <div class="rd-b" title="${esc(d.dia)} · ${d.boletos} boleto(s) · ${fmtMoney(d.monto)}">
-        <span style="height:${Math.max(4, Math.round(d.boletos / tope * 100))}%"></span>
-        <i>${esc(d.dia.slice(8))}</i>
-      </div>`).join('')}</div>
-    <div class="muted" style="font-size:10.5px;margin-top:6px">
-      Día más fuerte: <b style="color:var(--cream)">${esc(mejorDia(dias).dia)}</b>
-      con ${mejorDia(dias).boletos} boleto(s) · ${fmtMoney(mejorDia(dias).monto)}</div>`
-    : '<div class="muted" style="font-size:12px">Todavía no hay ventas.</div>';
+  // ----- el calendario, de la primera venta al día del evento -----
+  // Un cuadro por día, más encendido cuanto más se vendió. En barras no cabían dos
+  // meses y en lista no se lee: así se ve de un golpe dónde hubo movimiento, dónde
+  // no, y cuánto falta para el evento.
+  const cal = r.calendario || [];
+  const topDia = Math.max(1, ...cal.map(d => d.boletos));
+  const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  const conVenta = cal.filter(d => d.boletos > 0).length;
+  const pasados = cal.filter(d => !d.futuro).length;
+  $('#rd-cal-sub').textContent = cal.length
+    ? `${conVenta} de ${pasados} días con venta · faltan ${r.dias_faltan}`
+    : '';
+  if (!cal.length) {
+    $('#rd-cal').innerHTML = '<div class="muted" style="font-size:12px">Todavía no hay ventas.</div>';
+  } else {
+    // se agrupa por mes para poder etiquetarlos
+    const meses = [];
+    cal.forEach(d => {
+      const m = d.dia.slice(0, 7);
+      if (!meses.length || meses[meses.length - 1].m !== m) meses.push({ m, dias: [] });
+      meses[meses.length - 1].dias.push(d);
+    });
+    $('#rd-cal').innerHTML = `
+      <div class="rd-cal">${meses.map(g => `
+        <div class="rd-mes">
+          <div class="rd-mes-t">${MES[Number(g.m.slice(5, 7)) - 1]}</div>
+          <div class="rd-dias">${g.dias.map(d => {
+            const n = d.boletos;
+            const nivel = n === 0 ? 0 : n >= topDia * 0.75 ? 4 : n >= topDia * 0.5 ? 3
+              : n >= topDia * 0.25 ? 2 : 1;
+            const ev = d.dia === r.evento;
+            return `<span class="rd-d n${nivel}${d.futuro ? ' fut' : ''}${ev ? ' ev' : ''}"
+              title="${esc(d.dia)}: ${n} boleto(s)${n ? ' · ' + fmtMoney(d.monto) : ''}"></span>`;
+          }).join('')}</div>
+        </div>`).join('')}</div>
+      <div class="rd-leyenda">
+        <span>menos</span>
+        <i class="n0"></i><i class="n1"></i><i class="n2"></i><i class="n3"></i><i class="n4"></i>
+        <span>más</span>
+        <span class="rd-lev"><i class="ev"></i> el evento</span>
+      </div>
+      ${mejorDia(r.por_dia || []) ? `<div class="muted" style="font-size:10.5px;margin-top:7px">
+        Día más fuerte: <b style="color:var(--cream)">${esc(mejorDia(r.por_dia).dia)}</b>
+        con ${mejorDia(r.por_dia).boletos} boleto(s) · ${fmtMoney(mejorDia(r.por_dia).monto)}</div>` : ''}`;
+  }
 
   $('#rd-tipos').innerHTML = (r.por_tipo || []).map(t => `
     <div class="rd-tipo">
@@ -1787,22 +1819,40 @@ async function loadRendimiento(silent) {
         <div><i>Él vendió</i><b>${fmtMoney(Math.round(c.propio.monto))}</b><span>${c.propio.boletos} boleto(s)</span></div>
         <div><i>Su equipo</i><b>${fmtMoney(Math.round(c.equipo.monto))}</b><span>${c.equipo.boletos} boleto(s)</span></div>
       </div>
-      ${c.miembros.length ? `<div class="rd-eq">${c.miembros.map(m => `
-        <div class="rd-m${m.boletos ? '' : ' cero'}">
-          <span>${m.es_lider ? '★ ' : ''}${esc(m.name)}</span>
-          <b>${m.boletos}</b><i>${fmtMoney(Math.round(m.monto))}</i></div>`).join('')}</div>` : ''}
+      ${bloqueEquipo(c.miembros)}
     </div>`).join('') : '<div class="muted" style="font-size:12px">No hay colíderes todavía.</div>';
 
   // ----- el analizador -----
+  // En la tarjeta van los tres puntos que más pesan; el resto se lee en su ventana.
+  // Puesto todo aquí, empujaba el calendario y la lista media pantalla abajo.
   const AN = r.analisis || { lectura: [] };
+  RD_ANALISIS = AN;
+  const ICONO = { bien: '✓', ojo: '▲', neutro: '•' };
+  const punto = p => `
+    <div class="rd-lee ${p.tono}">
+      <span class="rd-ic">${ICONO[p.tono] || '•'}</span>
+      <div><b>${esc(p.titulo)}</b><span>${esc(p.detalle)}</span></div>
+    </div>`;
+  const L = AN.lectura || [];
   $('#rd-analisis').innerHTML = `
-    <div class="label" style="margin:0 0 8px">Cómo lo leo</div>
-    ${(AN.lectura || []).map(x => `<div class="rd-lee">${esc(x)}</div>`).join('')}
+    <div class="row" style="justify-content:space-between;align-items:center;gap:8px">
+      <div class="label" style="margin:0">Cómo lo leo</div>
+      ${L.length > 3 ? '<button class="btn sm ghost" id="rd-vertodo" style="width:auto;padding:6px 12px;font-size:11px">Leer todo · ' + L.length + '</button>' : ''}
+    </div>
+    <div class="mt8">${L.slice(0, 3).map(punto).join('')}</div>
     <div class="rd-sem">
-      <span class="rd-p critico">${AN.criticos} críticos</span>
+      <span class="rd-p critico">${AN.criticos} crítico(s)</span>
       <span class="rd-p atencion">${AN.atencion} por atender</span>
       <span class="rd-p bien">${AN.bien} bien</span>
     </div>`;
+  const vt = $('#rd-vertodo');
+  if (vt) vt.onclick = () => modal(`
+    <div class="h1" style="font-size:18px">Cómo va la venta</div>
+    <div class="muted" style="font-size:11.5px;margin-top:3px">Lectura de los números de
+      hoy${AN.dias_faltan ? ' · faltan ' + AN.dias_faltan + ' días para el evento' : ''}</div>
+    <div class="mt16">${L.map(punto).join('')}</div>
+    <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
+
   $$('#rd-filtros .rd-f').forEach(b => {
     const n = b.dataset.est === 'todos' ? (r.vendedores || []).length
       : (r.vendedores || []).filter(v => v.estado === b.dataset.est).length;
@@ -1817,7 +1867,7 @@ async function loadRendimiento(silent) {
 
 /* El buscador: con muchos vendedores, encontrar a uno era deslizar hasta hallarlo.
    Filtra sobre lo ya cargado, sin volver a preguntarle al servidor. */
-let RD_VEND = [], RD_PROM = 0, RD_EST = 'todos';
+let RD_VEND = [], RD_PROM = 0, RD_EST = 'todos', RD_ANALISIS = null;
 document.addEventListener('input', e => {
   if (e.target && e.target.id === 'rd-q') pintarRendVendedores();
 });
@@ -1862,6 +1912,30 @@ function pintarRendVendedores() {
       ${(v.señales || []).map(x => `<div class="rd-sen ojo">▲ ${esc(x)}</div>`).join('')}
     </div>`).join('') || `<div class="muted" style="padding:14px 2px">${
       q ? 'Nadie con ese nombre.' : 'Nadie en este grupo.'}</div>`;
+}
+
+/* La gente del colíder. Antes salían todos en fila y los que no han vendido —que
+   suelen ser la mayoría— se comían el bloque entero con una lista de ceros. Ahora
+   arriba van los que venden, con su barra, y los de cero se resumen en una línea
+   que se abre si de verdad se quieren ver. */
+function bloqueEquipo(miembros) {
+  const ms = miembros || [];
+  if (!ms.length) return '';
+  const venden = ms.filter(m => m.boletos > 0);
+  const ceros = ms.filter(m => !m.boletos);
+  const tope = Math.max(1, ...venden.map(m => m.monto));
+  return `<div class="rd-eq">
+    ${venden.map(m => `
+      <div class="rd-m">
+        <span class="rd-mn">${m.es_lider ? '<b class="rd-est">★</b> ' : ''}${esc(m.name)}</span>
+        <span class="rd-mb"><i style="width:${Math.round(m.monto / tope * 100)}%"></i></span>
+        <span class="rd-mv">${fmtMoney(Math.round(m.monto))}<em>${m.boletos}</em></span>
+      </div>`).join('')}
+    ${ceros.length ? `<details class="rd-ceros">
+      <summary>${ceros.length} sin vender todavía</summary>
+      <div>${ceros.map(m => esc(m.name)).join(' · ')}</div>
+    </details>` : ''}
+  </div>`;
 }
 
 function mejorDia(dias) {

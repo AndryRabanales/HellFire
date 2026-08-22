@@ -326,6 +326,9 @@ DEFAULT_SETTINGS = {
     "event_name": "HELLFIRE",
     "event_subtitle": "Noche de brujas",
     "event_date_text": "",
+    # La fecha real del evento (AAAA-MM-DD). event_date_text es el texto bonito del
+    # boleto ("Sáb 31 OCT"); esta es la que sirve para contar días.
+    "event_date": "2026-10-31",
     "folio_prefix": "HF-",
     # Cierre de ventas: la noche de la fiesta se apaga la boletera para poder cortar
     # cuentas con los vendedores sabiendo que el número ya no se mueve. El ESCÁNER y
@@ -2677,6 +2680,54 @@ def rendimiento():
         })
     colideres.sort(key=lambda c: -c["total"]["monto"])
 
+    # ---- el calendario: día por día desde la primera venta hasta el evento ----
+    # Un mes entero de barras no cabe, y una lista de fechas no se lee. En cuadros se
+    # ve de un golpe dónde hubo movimiento, dónde no, y cuánto falta.
+    primera = db.execute(f"""SELECT MIN(SUBSTR(created_at,1,10)) d FROM tickets
+                             WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}{dentro}""",
+                         par).fetchone()["d"]
+    evento = setting(db, "event_date") or "2026-10-31"
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", evento):
+        evento = "2026-10-31"
+    ventas_dia = {d["dia"]: d for d in [dict(r) for r in db.execute(f"""
+        SELECT SUBSTR(created_at,1,10) AS dia, COUNT(*) AS boletos, SUM(price_cents) AS monto
+        FROM tickets WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}{dentro}
+        GROUP BY SUBSTR(created_at,1,10)""", par).fetchall()]}
+    calendario = []
+    if primera:
+        try:
+            d0 = datetime.strptime(primera, "%Y-%m-%d")
+            dfin = datetime.strptime(evento, "%Y-%m-%d")
+            if dfin < d0:
+                dfin = d0
+            # tope de seguridad: nadie mira 400 cuadros, y si la fecha estuviera mal
+            # escrita esto evita construir una lista interminable
+            for i in range((dfin - d0).days + 1):
+                if i > 200:
+                    break
+                dia = (d0 + timedelta(days=i)).strftime("%Y-%m-%d")
+                v = ventas_dia.get(dia)
+                calendario.append({"dia": dia,
+                                   "boletos": v["boletos"] if v else 0,
+                                   "monto": money(v["monto"]) if v else 0,
+                                   "futuro": dia > hoy})
+        except ValueError:
+            calendario = []
+    dias_faltan = 0
+    try:
+        dias_faltan = max(0, (datetime.strptime(evento, "%Y-%m-%d")
+                              - datetime.strptime(hoy, "%Y-%m-%d")).days)
+    except ValueError:
+        pass
+
+    # ---- comparación con la semana anterior: si subió o bajó ----
+    hace14 = (now_dt() - timedelta(days=13)).strftime("%Y-%m-%d")
+    previa = db.execute(f"""
+        SELECT COUNT(*) n, COALESCE(SUM(price_cents),0) m FROM tickets
+        WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}{dentro}
+          AND SUBSTR(created_at,1,10)>=? AND SUBSTR(created_at,1,10)<?""",
+        par + (hace14, hace7)).fetchone()
+
     # El analizador: las dos o tres frases que uno saca a mano cada vez que mira esto.
     criticos = [v for v in salida if v["estado"] == "critico"]
     atencion = [v for v in salida if v["estado"] == "atencion"]
@@ -2684,30 +2735,95 @@ def rendimiento():
     top3 = sorted(salida, key=lambda x: -x["monto"])[:3]
     pct_top3 = round(100.0 * sum(v["monto"] for v in top3) / money(total_monto), 1) if total_monto else 0
     por_cobrar = sum(v["debe"] for v in salida)
+    ritmo_dia = pulso["sem_n"] / 7.0
+    proyeccion = int(total_boletos + ritmo_dia * dias_faltan)
+    mejor = max(por_dia, key=lambda d: d["boletos"]) if por_dia else None
+
+    # Cada punto lleva TÍTULO y explicación aparte: el título es lo que se alcanza a
+    # leer de paso, y la explicación es para cuando se quiere entender de dónde sale.
+    # Antes era una lista de frases sueltas y había que interpretarlas cada vez.
     lectura = []
+    def punto(tono, titulo, detalle):
+        lectura.append({"tono": tono, "titulo": titulo, "detalle": detalle})
+
     if total_boletos == 0:
-        lectura.append("Todavía no hay ventas que analizar.")
+        punto("neutro", "Todavía no hay ventas",
+              "En cuanto se venda el primer boleto, aquí aparece el análisis.")
     else:
-        if pct_top3 >= 60 and len(salida) >= 4:
-            lectura.append(f"La venta está concentrada: {len(top3)} personas traen el "
-                           f"{pct_top3:.0f}% del dinero. Si uno de ellos se frena, se nota.")
-        elif len(salida) >= 4:
-            lectura.append(f"La venta está repartida: los 3 de arriba traen el {pct_top3:.0f}%.")
-        if criticos:
-            lectura.append(f"{len(criticos)} vendedor(es) en rojo: o llevan una semana sin "
-                           f"vender, o venden muy por debajo del resto.")
-        if inactivos:
-            lectura.append(f"{inactivos} con cuenta abierta que no han vendido ni un boleto.")
-        if por_cobrar > 0:
-            lectura.append(f"Falta entregar ${por_cobrar:,.0f} de lo ya vendido.")
-        if pulso["hoy_n"] == 0:
-            lectura.append("Hoy no se ha vendido nada todavía.")
+        # 1. el ritmo y a dónde lleva
+        if dias_faltan > 0:
+            punto("bien" if ritmo_dia >= 1 else "ojo",
+                  f"Vas a {ritmo_dia:.1f} boletos por día",
+                  f"Es el promedio de los últimos 7 días. Faltan {dias_faltan} días para el "
+                  f"evento: a este ritmo llegarías a unos {proyeccion} boletos vendidos "
+                  f"(hoy llevas {total_boletos}).")
         else:
-            lectura.append(f"Hoy van {pulso['hoy_n']} boleto(s) por ${pulso['hoy_m']/100:,.0f}.")
+            punto("neutro", f"{total_boletos} boletos vendidos",
+                  f"Por ${total_monto/100:,.0f} en total.")
+        # 2. ¿subió o bajó respecto a la semana pasada?
+        if previa["n"]:
+            dif = pulso["sem_n"] - previa["n"]
+            pc = round(100.0 * dif / previa["n"])
+            if dif > 0:
+                punto("bien", f"La venta subió {pc}% esta semana",
+                      f"{pulso['sem_n']} boletos en los últimos 7 días, contra "
+                      f"{previa['n']} de la semana anterior.")
+            elif dif < 0:
+                punto("ojo", f"La venta bajó {abs(pc)}% esta semana",
+                      f"{pulso['sem_n']} boletos en los últimos 7 días, contra "
+                      f"{previa['n']} de la semana anterior. Vale la pena mover algo.")
+            else:
+                punto("neutro", "La venta va igual que la semana pasada",
+                      f"{pulso['sem_n']} boletos las dos semanas.")
+        # 3. cómo va hoy
+        if pulso["hoy_n"] == 0:
+            punto("ojo", "Hoy no se ha vendido nada",
+                  "Puede ser normal si es temprano, pero si al cerrar el día sigue en "
+                  "cero son dos días seguidos sin movimiento.")
+        else:
+            punto("bien", f"Hoy van {pulso['hoy_n']} boletos",
+                  f"Por ${pulso['hoy_m']/100:,.0f}. El mejor día hasta ahora fue "
+                  f"{mejor['dia']} con {mejor['boletos']}." if mejor else
+                  f"Por ${pulso['hoy_m']/100:,.0f}.")
+        # 4. de dónde viene el dinero
+        if len(salida) >= 4:
+            quienes = ", ".join(v["name"] for v in top3)
+            if pct_top3 >= 60:
+                punto("ojo", f"El {pct_top3:.0f}% del dinero lo traen 3 personas",
+                      f"{quienes}. Si uno de ellos se frena, la venta se siente de "
+                      f"inmediato: conviene levantar a los de en medio.")
+            else:
+                punto("bien", f"La venta está repartida",
+                      f"Los tres de arriba ({quienes}) traen el {pct_top3:.0f}%; el resto "
+                      f"lo aporta el grupo. No dependes de una sola persona.")
+        # 5. quién necesita atención
+        if criticos:
+            punto("ojo", f"{len(criticos)} vendedor(es) en rojo",
+                  "Llevan una semana o más sin vender, o venden muy por debajo del "
+                  "resto. Están en el filtro 🔴 de abajo.")
+        if inactivos:
+            punto("ojo", f"{inactivos} con cuenta abierta y cero boletos",
+                  "Nunca han vendido. Si no piensan hacerlo, su código sigue activo "
+                  "sin necesidad.")
+        if not criticos and not inactivos:
+            punto("bien", "Todos están vendiendo",
+                  "Nadie lleva una semana parado ni está muy por debajo del resto.")
+        # 6. el dinero que falta juntar
+        if por_cobrar > 0:
+            pc_cob = round(100.0 * por_cobrar / money(total_monto)) if total_monto else 0
+            punto("ojo" if pc_cob >= 50 else "neutro",
+                  f"Falta entregar ${por_cobrar:,.0f}",
+                  f"Es el {pc_cob}% de lo vendido. Cada vendedor trae su pendiente en "
+                  f"su ficha, en rojo.")
+        else:
+            punto("bien", "Todo lo vendido ya está entregado",
+                  "Ningún vendedor debe dinero.")
 
     return jsonify(
         analisis={"criticos": len(criticos), "atencion": len(atencion), "bien": len(bien),
-                  "pct_top3": pct_top3, "por_cobrar": por_cobrar, "lectura": lectura},
+                  "pct_top3": pct_top3, "por_cobrar": por_cobrar, "lectura": lectura,
+                  "ritmo_dia": round(ritmo_dia, 1), "proyeccion": proyeccion,
+                  "dias_faltan": dias_faltan},
         totales={
             "boletos": total_boletos, "monto": money(total_monto),
             "activos": activos, "inactivos": inactivos,
@@ -2720,6 +2836,7 @@ def rendimiento():
         },
         por_tipo=por_tipo, por_dia=por_dia, vendedores=salida,
         por_admin=admins, colideres=colideres, soy_colider=bool(duenio),
+        calendario=calendario, evento=evento, dias_faltan=dias_faltan,
     )
 
 

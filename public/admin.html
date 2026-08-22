@@ -145,34 +145,45 @@
   <!-- ===== Vendedores (RF-82..88) ===== -->
   <!-- ===== Rendimiento: cómo se está moviendo la venta (solo lectura) ===== -->
   <section id="tab-rendimiento" class="mt16 hidden">
+
+    <!-- 1. CÓMO VA — los números de un vistazo -->
     <div class="card rk-card">
       <div class="label" style="margin:0">Cómo va la venta</div>
       <div class="muted rk-nota">Solo lo vendido: sin anulados y sin cortesías.</div>
       <div class="rk-stats" id="rd-stats"></div>
     </div>
-    <div class="card mt12">
-      <div class="label" style="margin:0 0 8px">Últimos días</div>
-      <div id="rd-dias"></div>
+
+    <!-- 2. CÓMO LO LEO — el análisis. Va aquí porque es la conclusión de lo de
+         arriba; lo largo se lee en su ventana para no empujar todo lo demás. -->
+    <div class="card mt12" id="rd-analisis"></div>
+
+    <!-- 3. CUÁNDO — el calendario hasta el día del evento -->
+    <div class="rd-sec">Cuándo se ha vendido</div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between;align-items:baseline;gap:8px">
+        <div class="label" style="margin:0">Calendario</div>
+        <div class="muted" id="rd-cal-sub" style="font-size:10.5px"></div>
+      </div>
+      <div id="rd-cal"></div>
     </div>
-    <div class="card mt12">
-      <div class="label" style="margin:0 0 8px">Qué se está vendiendo</div>
-      <div id="rd-tipos"></div>
-    </div>
-    <!-- Los desgloses van CERRADOS: son mucho dato y abiertos taparían lo de arriba,
-         que es lo que se mira todos los días. Se abre el que se necesite. -->
-    <details class="rd-det mt12">
-      <summary>Por administrador · quién trae qué<span id="rd-nadm"></span></summary>
+
+    <!-- 4. QUÉ — el tipo de boleto -->
+    <div class="rd-sec">Qué se está vendiendo</div>
+    <div class="card"><div id="rd-tipos"></div></div>
+
+    <!-- 5. DE QUIÉN VIENE — desgloses, cerrados por ser mucho dato -->
+    <div class="rd-sec">De dónde viene la venta</div>
+    <details class="rd-det">
+      <summary>Por administrador<span id="rd-nadm"></span></summary>
       <div id="rd-admins" class="rd-cuerpo"></div>
     </details>
     <details class="rd-det mt8">
       <summary>Colíderes y su equipo<span id="rd-ncol"></span></summary>
       <div id="rd-colideres" class="rd-cuerpo"></div>
     </details>
-    <!-- El analizador: la lectura en una frase de lo que dicen todos los números de
-         arriba, para no tener que sacarla a mano cada vez. -->
-    <div class="card mt12" id="rd-analisis"></div>
 
-    <div class="label mt16" style="margin-bottom:6px">Vendedor por vendedor</div>
+    <!-- 6. QUIÉN — vendedor por vendedor -->
+    <div class="rd-sec">Vendedor por vendedor</div>
     <input class="input" id="rd-q" placeholder="⌕ Buscar vendedor…" style="padding:10px;font-size:14px">
     <div class="rd-filtros" id="rd-filtros">
       <button type="button" class="rd-f sel" data-est="todos">Todos<b></b></button>
