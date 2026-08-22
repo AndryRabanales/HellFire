@@ -1400,7 +1400,7 @@ def catalog():
     # Lo que YA LE PAGARON. Va discreto y solo si hay algo: el vendedor tiene derecho
     # a ver lo suyo sin tener que preguntarlo, y así un "a mí nunca me dieron nada"
     # se resuelve mirando la pantalla en vez de discutiendo.
-    mi_ganado = mi_boletos = 0
+    mi_ganado = mi_boletos = mi_vendido = 0
     if s.get("seller"):
         sid_mio = s["seller"]["id"]
         r = db.execute("SELECT tutorial_seen, hidden FROM sellers WHERE id=?",
@@ -1414,6 +1414,7 @@ def catalog():
                                 (sid_mio,)).fetchone()["c"]
                      + pagado_a(db, sid_mio))
         mi_boletos = boletos_de(db, sid_mio)
+        mi_vendido = vendido_cents(db, sid_mio)
     return jsonify(types=types, faculties=facs, group=group_info,
                    ventas_cerradas=ventas_cerradas(db),
                    # una flash prendida a mano no tiene hora de fin: el panel del
@@ -1421,6 +1422,7 @@ def catalog():
                    flash_manual=flash_manual(db),
                    tutorial_pendiente=pendiente,
                    mi_ganado=money(mi_ganado), mi_boletos=mi_boletos,
+                   mi_vendido=money(mi_vendido),
                    event_name=setting(db, "event_name"),
                    event_subtitle=setting(db, "event_subtitle"),
                    event_date_text=setting(db, "event_date_text"),

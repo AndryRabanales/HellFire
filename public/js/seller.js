@@ -658,6 +658,7 @@ function pintarMio() {
   if (!caja) return;
   const ganado = (CATALOG && CATALOG.mi_ganado) || 0;
   const boletos = (CATALOG && CATALOG.mi_boletos) || 0;
+  const vendido = (CATALOG && CATALOG.mi_vendido) || 0;
   if (!boletos && !ganado) { caja.innerHTML = ''; return; }   // aún no vende nada
   caja.innerHTML = `
     <div class="mio${ganado > 0 ? '' : ' sinpago'}">
@@ -670,6 +671,7 @@ function pintarMio() {
       <div class="mio-r">
         <i>Has vendido</i>
         <b>${boletos}<span>boleto${boletos === 1 ? '' : 's'}</span></b>
+        <u>${fmtMoney(vendido)} en total</u>
       </div>
     </div>`;
 }

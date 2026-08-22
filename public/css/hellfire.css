@@ -1125,8 +1125,9 @@ button.rd-p:active{transform:scale(.97)}
 .mio-r b{color:var(--cream);display:flex;align-items:baseline;gap:5px;justify-content:flex-end}
 .mio-r b span{font:600 10px Manrope;color:var(--cream-45)}
 .mio-l{flex:1;min-width:0}
-.mio-l u{display:block;font:600 9.5px/1.35 Manrope;color:var(--cream-45);
-  text-decoration:none;margin-top:3px;max-width:150px}
+.mio-l u,.mio-r u{display:block;font:600 9.5px/1.35 Manrope;color:var(--cream-45);
+  text-decoration:none;margin-top:3px}
+.mio-l u{max-width:150px}
 /* todavía sin cobrar: el número va apagado y el peso se lo lleva lo que sí hizo */
 .mio.sinpago{border-color:rgba(255,120,40,.2);
   background:linear-gradient(135deg,rgba(255,110,30,.06),transparent 70%)}
