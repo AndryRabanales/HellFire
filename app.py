@@ -2491,23 +2491,30 @@ def rendimiento():
     Los boletos anulados y las cortesías quedan fuera: los primeros no son venta y
     las segundas no son dinero, y mezclarlas haría ver a quien reparte invitaciones
     como si estuviera vendiendo."""
-    s = require_admin()
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
     hoy = now_dt().strftime("%Y-%m-%d")
+    # El colíder ve la misma pantalla, pero SOLO su equipo: los promedios con los que
+    # se compara a su gente salen de su propio grupo, no del evento entero. Medir a
+    # sus vendedores contra el total le enseñaría de rebote cuánto vende el resto.
+    duenio = mi_ambito(s)
+    ambito = " AND s.owner_admin_id=?" if duenio else ""
+    par = (duenio,) if duenio else ()
 
     filas = db.execute(f"""
         SELECT s.id, s.name,
                COUNT(t.id) AS boletos,
                COALESCE(SUM(t.price_cents),0) AS monto,
+               COALESCE(MAX(s.paid_cents),0) AS pagado,
                MIN(SUBSTR(t.created_at,1,10)) AS primera,
                MAX(SUBSTR(t.created_at,1,10)) AS ultima,
                COUNT(DISTINCT SUBSTR(t.created_at,1,10)) AS dias_con_venta
         FROM sellers s
         JOIN tickets t ON t.seller_id=s.id AND t.status!='void' AND t.es_cortesia=0
-        WHERE s.hidden=0 AND s.deleted=0
-        GROUP BY s.id, s.name""").fetchall()
+        WHERE s.hidden=0 AND s.deleted=0{ambito}
+        GROUP BY s.id, s.name""", par).fetchall()
     vendedores = [dict(r) for r in filas]
 
     total_boletos = sum(v["boletos"] for v in vendedores)
@@ -2517,10 +2524,12 @@ def rendimiento():
 
     # Qué tipo se está vendiendo. Sirve para decidir dónde empujar: si el Ultra VIP
     # no se mueve, no es lo mismo que si no se mueve el Externo.
+    dentro = (" AND seller_id IN (SELECT id FROM sellers WHERE owner_admin_id=?)"
+              if duenio else "")
     por_tipo = [dict(r) for r in db.execute(f"""
         SELECT type_name AS nombre, COUNT(*) AS boletos, SUM(price_cents) AS monto
-        FROM tickets WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}
-        GROUP BY type_name ORDER BY SUM(price_cents) DESC""").fetchall()]
+        FROM tickets WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}{dentro}
+        GROUP BY type_name ORDER BY SUM(price_cents) DESC""", par).fetchall()]
     for t in por_tipo:
         t["monto"] = money(t["monto"])
         t["pct"] = round(100.0 * t["boletos"] / total_boletos, 1) if total_boletos else 0
@@ -2528,8 +2537,8 @@ def rendimiento():
     # Los últimos 14 días, para ver si la venta sube, se aplana o se cayó.
     por_dia = [dict(r) for r in db.execute(f"""
         SELECT SUBSTR(created_at,1,10) AS dia, COUNT(*) AS boletos, SUM(price_cents) AS monto
-        FROM tickets WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}
-        GROUP BY SUBSTR(created_at,1,10) ORDER BY dia DESC LIMIT 14""").fetchall()]
+        FROM tickets WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}{dentro}
+        GROUP BY SUBSTR(created_at,1,10) ORDER BY dia DESC LIMIT 14""", par).fetchall()]
     por_dia.reverse()
     for d in por_dia:
         d["monto"] = money(d["monto"])
@@ -2586,24 +2595,131 @@ def rendimiento():
             "primera": v["primera"], "ultima": v["ultima"],
             "sin_vender": sin_vender,
             "pct_monto": round(100.0 * v["monto"] / total_monto, 1) if total_monto else 0,
+            # Lo que todavía no entrega. Para un colíder es EL dato: él cobra a su
+            # equipo, y un vendedor que vende mucho y no entrega nada es un problema
+            # distinto —y más urgente— que uno que vende poco.
+            "debe": money(max(0, v["monto"] - (v["pagado"] or 0))),
             "señales": señales, "buenas": buenas,
+            # El estado se decide AQUÍ y no en la pantalla, para que el filtro y el
+            # resumen cuenten exactamente lo mismo que se ve en cada ficha.
+            "estado": ("critico" if (sin_vender >= 7 or any("vende poco" in x for x in señales))
+                       else "atencion" if señales else "bien"),
         })
     salida.sort(key=lambda x: -x["monto"])
 
-    inactivos = db.execute("""
-        SELECT COUNT(*) c FROM sellers s WHERE s.hidden=0 AND s.deleted=0
+    inactivos = db.execute(f"""
+        SELECT COUNT(*) c FROM sellers s WHERE s.hidden=0 AND s.deleted=0{ambito}
         AND NOT EXISTS (SELECT 1 FROM tickets t WHERE t.seller_id=s.id
-                        AND t.status!='void' AND t.es_cortesia=0)""").fetchone()["c"]
+                        AND t.status!='void' AND t.es_cortesia=0)""", par).fetchone()["c"]
+
+    # El pulso corto: hoy y la última semana. El total acumulado siempre sube y por
+    # eso nunca preocupa; lo que dice si la cosa se movió es lo de estos días.
+    hace7 = (now_dt() - timedelta(days=6)).strftime("%Y-%m-%d")
+    pulso = db.execute(f"""
+        SELECT
+          COALESCE(SUM(CASE WHEN SUBSTR(created_at,1,10)=? THEN 1 ELSE 0 END),0) AS hoy_n,
+          COALESCE(SUM(CASE WHEN SUBSTR(created_at,1,10)=? THEN price_cents ELSE 0 END),0) AS hoy_m,
+          COALESCE(SUM(CASE WHEN SUBSTR(created_at,1,10)>=? THEN 1 ELSE 0 END),0) AS sem_n,
+          COALESCE(SUM(CASE WHEN SUBSTR(created_at,1,10)>=? THEN price_cents ELSE 0 END),0) AS sem_m
+        FROM tickets WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}{dentro}""",
+        (hoy, hoy, hace7, hace7) + par).fetchone()
+
+    # Por administrador: cada quien con SU gente. El total general no dice de quién
+    # viene, y a la hora de repartir o de pedir cuentas eso es justo lo que hace falta.
+    admins = [] if duenio else [dict(r) for r in db.execute(f"""
+        SELECT COALESCE(s.owner_admin_name,'(sin admin)') AS admin,
+               COUNT(DISTINCT s.id) AS vendedores,
+               COUNT(t.id) AS boletos,
+               COALESCE(SUM(t.price_cents),0) AS monto
+        FROM sellers s
+        LEFT JOIN tickets t ON t.seller_id=s.id AND t.status!='void' AND t.es_cortesia=0
+        WHERE s.hidden=0 AND s.deleted=0
+        GROUP BY COALESCE(s.owner_admin_name,'(sin admin)')
+        ORDER BY SUM(t.price_cents) DESC""").fetchall()]
+    for a in admins:
+        a["monto"] = money(a["monto"])
+        a["pct"] = round(100.0 * a["monto"] / money(total_monto), 1) if total_monto else 0
+        a["ticket_prom"] = money(round(a["monto"] * 100 / a["boletos"])) if a["boletos"] else 0
+
+    # Por colíder, partido en dos: lo que vendió ÉL y lo que vendió su equipo. Un solo
+    # número esconde justo lo que se quiere saber —si trabaja o solo administra—.
+    colideres = []
+    lideres_q = ("SELECT id, username FROM admins WHERE role='colider' AND id=? "
+                 if duenio else
+                 "SELECT id, username FROM admins WHERE role='colider' ORDER BY username")
+    for l in db.execute(lideres_q, par).fetchall():
+        filas_c = db.execute(f"""
+            SELECT s.id, s.name, s.es_lider,
+                   COUNT(t.id) AS boletos,
+                   COALESCE(SUM(t.price_cents),0) AS monto,
+                   MAX(SUBSTR(t.created_at,1,10)) AS ultima
+            FROM sellers s
+            LEFT JOIN tickets t ON t.seller_id=s.id AND t.status!='void' AND t.es_cortesia=0
+            WHERE s.hidden=0 AND s.deleted=0 AND s.owner_admin_id=?
+            GROUP BY s.id, s.name, s.es_lider
+            ORDER BY SUM(t.price_cents) DESC""", (l["id"],)).fetchall()
+        propio = [r for r in filas_c if r["es_lider"]]
+        equipo = [r for r in filas_c if not r["es_lider"]]
+        sm = lambda rs, c: sum(r[c] or 0 for r in rs)
+        activos_eq = len([r for r in equipo if (r["boletos"] or 0) > 0])
+        colideres.append({
+            "nombre": l["username"],
+            "propio": {"boletos": sm(propio, "boletos"), "monto": money(sm(propio, "monto"))},
+            "equipo": {"boletos": sm(equipo, "boletos"), "monto": money(sm(equipo, "monto")),
+                       "vendedores": len(equipo), "activos": activos_eq,
+                       "sin_vender": len(equipo) - activos_eq},
+            "total": {"boletos": sm(filas_c, "boletos"), "monto": money(sm(filas_c, "monto"))},
+            "pct": (round(100.0 * money(sm(filas_c, "monto")) / money(total_monto), 1)
+                    if total_monto else 0),
+            "miembros": [{"name": r["name"], "es_lider": bool(r["es_lider"]),
+                          "boletos": r["boletos"] or 0, "monto": money(r["monto"] or 0),
+                          "ultima": r["ultima"]} for r in filas_c],
+        })
+    colideres.sort(key=lambda c: -c["total"]["monto"])
+
+    # El analizador: las dos o tres frases que uno saca a mano cada vez que mira esto.
+    criticos = [v for v in salida if v["estado"] == "critico"]
+    atencion = [v for v in salida if v["estado"] == "atencion"]
+    bien = [v for v in salida if v["estado"] == "bien"]
+    top3 = sorted(salida, key=lambda x: -x["monto"])[:3]
+    pct_top3 = round(100.0 * sum(v["monto"] for v in top3) / money(total_monto), 1) if total_monto else 0
+    por_cobrar = sum(v["debe"] for v in salida)
+    lectura = []
+    if total_boletos == 0:
+        lectura.append("Todavía no hay ventas que analizar.")
+    else:
+        if pct_top3 >= 60 and len(salida) >= 4:
+            lectura.append(f"La venta está concentrada: {len(top3)} personas traen el "
+                           f"{pct_top3:.0f}% del dinero. Si uno de ellos se frena, se nota.")
+        elif len(salida) >= 4:
+            lectura.append(f"La venta está repartida: los 3 de arriba traen el {pct_top3:.0f}%.")
+        if criticos:
+            lectura.append(f"{len(criticos)} vendedor(es) en rojo: o llevan una semana sin "
+                           f"vender, o venden muy por debajo del resto.")
+        if inactivos:
+            lectura.append(f"{inactivos} con cuenta abierta que no han vendido ni un boleto.")
+        if por_cobrar > 0:
+            lectura.append(f"Falta entregar ${por_cobrar:,.0f} de lo ya vendido.")
+        if pulso["hoy_n"] == 0:
+            lectura.append("Hoy no se ha vendido nada todavía.")
+        else:
+            lectura.append(f"Hoy van {pulso['hoy_n']} boleto(s) por ${pulso['hoy_m']/100:,.0f}.")
 
     return jsonify(
+        analisis={"criticos": len(criticos), "atencion": len(atencion), "bien": len(bien),
+                  "pct_top3": pct_top3, "por_cobrar": por_cobrar, "lectura": lectura},
         totales={
             "boletos": total_boletos, "monto": money(total_monto),
             "activos": activos, "inactivos": inactivos,
             "prom_boletos": round(prom_boletos, 1),
             "prom_monto": money(round(total_monto / activos)) if activos else 0,
             "ticket_prom": money(round(ticket_prom)),
+            "hoy_boletos": pulso["hoy_n"], "hoy_monto": money(pulso["hoy_m"]),
+            "sem_boletos": pulso["sem_n"], "sem_monto": money(pulso["sem_m"]),
+            "prom_dia": round(pulso["sem_n"] / 7.0, 1),
         },
         por_tipo=por_tipo, por_dia=por_dia, vendedores=salida,
+        por_admin=admins, colideres=colideres, soy_colider=bool(duenio),
     )
 
 

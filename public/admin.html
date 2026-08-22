@@ -158,8 +158,28 @@
       <div class="label" style="margin:0 0 8px">Qué se está vendiendo</div>
       <div id="rd-tipos"></div>
     </div>
+    <!-- Los desgloses van CERRADOS: son mucho dato y abiertos taparían lo de arriba,
+         que es lo que se mira todos los días. Se abre el que se necesite. -->
+    <details class="rd-det mt12">
+      <summary>Por administrador · quién trae qué<span id="rd-nadm"></span></summary>
+      <div id="rd-admins" class="rd-cuerpo"></div>
+    </details>
+    <details class="rd-det mt8">
+      <summary>Colíderes y su equipo<span id="rd-ncol"></span></summary>
+      <div id="rd-colideres" class="rd-cuerpo"></div>
+    </details>
+    <!-- El analizador: la lectura en una frase de lo que dicen todos los números de
+         arriba, para no tener que sacarla a mano cada vez. -->
+    <div class="card mt12" id="rd-analisis"></div>
+
     <div class="label mt16" style="margin-bottom:6px">Vendedor por vendedor</div>
-    <div class="muted" style="font-size:11px;margin-bottom:8px">De mayor a menor dinero. Cada observación trae su número al lado para que la puedas comprobar.</div>
+    <input class="input" id="rd-q" placeholder="⌕ Buscar vendedor…" style="padding:10px;font-size:14px">
+    <div class="rd-filtros" id="rd-filtros">
+      <button type="button" class="rd-f sel" data-est="todos">Todos<b></b></button>
+      <button type="button" class="rd-f" data-est="critico">🔴 Críticos<b></b></button>
+      <button type="button" class="rd-f" data-est="atencion">🟡 Atención<b></b></button>
+      <button type="button" class="rd-f" data-est="bien">🟢 Bien<b></b></button>
+    </div>
     <div id="rd-lista"></div>
   </section>
 

@@ -228,9 +228,7 @@ function aplicarColider(esCo) {
   document.body.classList.toggle('es-colider', !!esCo);
   // Se ESCONDE, no se borra: si en la misma pestaña entra después un admin, tiene que
   // recuperar su panel completo sin recargar. Borrar nodos deja el panel mutilado.
-  // Rendimiento compara a un vendedor contra TODOS los demás: un colíder vería ahí
-  // el desempeño de gente que no es suya y el promedio con el que se les mide.
-  const VEDADAS = ['grupos', 'gastos', 'catalogos', 'ajustes', 'cortesias', 'rendimiento'];
+  const VEDADAS = ['grupos', 'gastos', 'catalogos', 'ajustes', 'cortesias'];
   VEDADAS.forEach(t => {
     const b = document.querySelector(`#tabs .tab[data-tab="${t}"]`);
     if (b) b.classList.toggle('hidden', esCo);
@@ -1729,9 +1727,13 @@ async function loadRendimiento(silent) {
   if (silent && sig === _sigRend) return;
   _sigRend = sig;
   const T = r.totales;
+  // El acumulado siempre sube y por eso nunca preocupa: lo que dice si la venta se
+  // movió es HOY y esta semana, así que van arriba con lo demás.
   $('#rd-stats').innerHTML = `
     <div class="rk-st"><i>Vendido</i><b>${fmtMoney(Math.round(T.monto))}</b></div>
     <div class="rk-st"><i>Boletos</i><b>${T.boletos}</b></div>
+    <div class="rk-st"><i>Hoy</i><b>${T.hoy_boletos}<small>${fmtMoney(Math.round(T.hoy_monto))}</small></b></div>
+    <div class="rk-st"><i>7 días</i><b>${T.sem_boletos}<small>${fmtMoney(Math.round(T.sem_monto))}</small></b></div>
     <div class="rk-st"><i>Vendiendo</i><b>${T.activos}<small>+${T.inactivos} en 0</small></b></div>
     <div class="rk-st"><i>Boleto prom.</i><b>${fmtMoney(Math.round(T.ticket_prom))}</b></div>`;
 
@@ -1756,24 +1758,112 @@ async function loadRendimiento(silent) {
       <div class="rd-tv">${t.boletos}<small>${fmtMoney(t.monto)}</small></div>
     </div>`).join('') || '<div class="muted" style="font-size:12px">Sin ventas todavía.</div>';
 
-  const prom = T.prom_boletos;
-  $('#rd-lista').innerHTML = (r.vendedores || []).map(v => `
-    <div class="rd-v">
-      <div class="rd-vtop">
-        <div class="rd-vn">${esc(v.name)}
-          <span class="rd-vsub">${v.boletos} boleto(s) · ${v.dias_con_venta} día(s) con venta ·
-            ${v.sin_vender === 0 ? 'vendió hoy' : 'hace ' + v.sin_vender + ' día(s)'}</span></div>
-        <div class="rd-vm">${fmtMoney(v.monto)}<small>${v.pct_monto}% del total</small></div>
+  // ----- por administrador -----
+  // Al colíder no se le enseña: son los números del evento entero y de gente que no
+  // es suya. Él ve su grupo y nada más, así que la sección ni aparece.
+  const adms = r.por_admin || [];
+  const cajaAdm = $('#rd-admins') && $('#rd-admins').closest('details');
+  if (cajaAdm) cajaAdm.classList.toggle('hidden', !adms.length);
+  $('#rd-nadm').textContent = adms.length ? ' · ' + adms.length : '';
+  $('#rd-admins').innerHTML = adms.map(a => `
+    <div class="rd-fila">
+      <div class="rd-fn">${esc(a.admin)}
+        <span class="rd-fsub">${a.vendedores} vendedor(es) · boleto prom. ${fmtMoney(Math.round(a.ticket_prom))}</span></div>
+      <div class="rd-fv">${fmtMoney(Math.round(a.monto))}<small>${a.boletos} bol · ${a.pct}%</small></div>
+    </div>`).join('') || '<div class="muted" style="font-size:12px">Sin datos.</div>';
+
+  // ----- colíderes: lo suyo y lo de su equipo, siempre separado -----
+  const cols = r.colideres || [];
+  $('#rd-ncol').textContent = cols.length ? ' · ' + cols.length : '';
+  $('#rd-colideres').innerHTML = cols.length ? cols.map(c => `
+    <div class="rd-col">
+      <div class="rd-fila" style="border:none;padding-bottom:2px">
+        <div class="rd-fn">${esc(c.nombre)}
+          <span class="rd-fsub">${c.equipo.activos} de ${c.equipo.vendedores} vendiendo${
+            c.equipo.sin_vender ? ' · ' + c.equipo.sin_vender + ' en cero' : ''}</span></div>
+        <div class="rd-fv">${fmtMoney(Math.round(c.total.monto))}<small>${c.total.boletos} bol · ${c.pct}%</small></div>
       </div>
-      <div class="rd-vdatos">
-        <span>Boleto prom. <b>${fmtMoney(Math.round(v.ticket_prom))}</b></span>
-        <span>Ritmo <b>${v.ritmo}</b>/día</span>
-        <span>vs promedio <b>${prom ? (v.boletos / prom).toFixed(1) : '—'}×</b></span>
+      <div class="rd-dos">
+        <div><i>Él vendió</i><b>${fmtMoney(Math.round(c.propio.monto))}</b><span>${c.propio.boletos} boleto(s)</span></div>
+        <div><i>Su equipo</i><b>${fmtMoney(Math.round(c.equipo.monto))}</b><span>${c.equipo.boletos} boleto(s)</span></div>
+      </div>
+      ${c.miembros.length ? `<div class="rd-eq">${c.miembros.map(m => `
+        <div class="rd-m${m.boletos ? '' : ' cero'}">
+          <span>${m.es_lider ? '★ ' : ''}${esc(m.name)}</span>
+          <b>${m.boletos}</b><i>${fmtMoney(Math.round(m.monto))}</i></div>`).join('')}</div>` : ''}
+    </div>`).join('') : '<div class="muted" style="font-size:12px">No hay colíderes todavía.</div>';
+
+  // ----- el analizador -----
+  const AN = r.analisis || { lectura: [] };
+  $('#rd-analisis').innerHTML = `
+    <div class="label" style="margin:0 0 8px">Cómo lo leo</div>
+    ${(AN.lectura || []).map(x => `<div class="rd-lee">${esc(x)}</div>`).join('')}
+    <div class="rd-sem">
+      <span class="rd-p critico">${AN.criticos} críticos</span>
+      <span class="rd-p atencion">${AN.atencion} por atender</span>
+      <span class="rd-p bien">${AN.bien} bien</span>
+    </div>`;
+  $$('#rd-filtros .rd-f').forEach(b => {
+    const n = b.dataset.est === 'todos' ? (r.vendedores || []).length
+      : (r.vendedores || []).filter(v => v.estado === b.dataset.est).length;
+    b.querySelector('b').textContent = n;
+    b.onclick = () => { RD_EST = b.dataset.est; pintarRendVendedores(); };
+  });
+
+  RD_PROM = T.prom_boletos;
+  RD_VEND = r.vendedores || [];
+  pintarRendVendedores();
+}
+
+/* El buscador: con muchos vendedores, encontrar a uno era deslizar hasta hallarlo.
+   Filtra sobre lo ya cargado, sin volver a preguntarle al servidor. */
+let RD_VEND = [], RD_PROM = 0, RD_EST = 'todos';
+document.addEventListener('input', e => {
+  if (e.target && e.target.id === 'rd-q') pintarRendVendedores();
+});
+
+function inicialesDe(nombre) {
+  const p = String(nombre || '?').trim().split(/\s+/);
+  return ((p[0] || '?')[0] + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
+}
+
+/* La ficha de cada vendedor. Antes era una línea de texto corrido con tres datos
+   pegados; ahora cada número va en su casilla, con su etiqueta encima, y el estado
+   se ve por el color del borde antes de leer nada. */
+function pintarRendVendedores() {
+  const q = ($('#rd-q') && $('#rd-q').value || '').trim().toLowerCase();
+  let vis = RD_VEND;
+  if (RD_EST !== 'todos') vis = vis.filter(v => v.estado === RD_EST);
+  if (q) vis = vis.filter(v => (v.name || '').toLowerCase().includes(q));
+  $$('#rd-filtros .rd-f').forEach(b => b.classList.toggle('sel', b.dataset.est === RD_EST));
+  const prom = RD_PROM;
+  const maxMonto = Math.max(1, ...RD_VEND.map(v => v.monto));
+  const ETQ = { critico: '🔴 Crítico', atencion: '🟡 Por atender', bien: '🟢 Bien' };
+  $('#rd-lista').innerHTML = vis.map(v => `
+    <div class="rd-v ${v.estado}">
+      <div class="rd-vtop">
+        <div class="rd-ini">${esc(inicialesDe(v.name))}</div>
+        <div class="rd-vn">${esc(v.name)}
+          <span class="rd-vsub">${ETQ[v.estado]} · ${v.pct_monto}% del total ·
+            ${v.sin_vender === 0 ? 'vendió hoy' : 'hace ' + v.sin_vender + ' día(s)'}</span></div>
+        <div class="rd-vm">${fmtMoney(Math.round(v.monto))}<small>${v.boletos} boleto(s)</small></div>
+      </div>
+      <div class="rd-prog"><span style="width:${Math.round(v.monto / maxMonto * 100)}%"></span></div>
+      <div class="rd-chips">
+        <div><i>Boleto prom.</i><b>${fmtMoney(Math.round(v.ticket_prom))}</b></div>
+        <div><i>Ritmo</i><b>${v.ritmo}<span>/día</span></b></div>
+        <div><i>vs promedio</i><b>${prom ? (v.boletos / prom).toFixed(1) : '—'}<span>×</span></b></div>
+        <div><i>Días con venta</i><b>${v.dias_con_venta}</b></div>
+        <div class="ancho"><i>Falta entregar</i>${v.debe > 0.005
+          ? `<b class="rd-debe">${fmtMoney(Math.round(v.debe))}</b>`
+          : '<b class="rd-alcorriente">✓ al día</b>'}</div>
       </div>
       ${(v.buenas || []).map(x => `<div class="rd-sen buena">✓ ${esc(x)}</div>`).join('')}
       ${(v.señales || []).map(x => `<div class="rd-sen ojo">▲ ${esc(x)}</div>`).join('')}
-    </div>`).join('') || '<div class="muted">Nadie ha vendido todavía.</div>';
+    </div>`).join('') || `<div class="muted" style="padding:14px 2px">${
+      q ? 'Nadie con ese nombre.' : 'Nadie en este grupo.'}</div>`;
 }
+
 function mejorDia(dias) {
   return dias.reduce((a, b) => (b.boletos > a.boletos ? b : a), dias[0]);
 }

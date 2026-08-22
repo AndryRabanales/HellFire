@@ -839,19 +839,102 @@ details.card>summary:active{transform:scale(.99)}
   background:linear-gradient(90deg,var(--ember),#f3d27a)}
 .rd-tv{text-align:right;font:800 13px "Space Grotesk";color:var(--cream)}
 .rd-tv small{display:block;font:600 9.5px Manrope;color:var(--cream-45)}
+/* La ficha del vendedor. El estado se ve por el borde ANTES de leer un número, y
+   cada dato va en su casilla con su etiqueta: antes iban los tres en una línea de
+   texto corrido y había que buscar cuál era cuál. */
 .rd-v{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.13);
-  border-radius:12px;padding:10px 12px;margin-bottom:7px}
-.rd-vtop{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
-.rd-vn{font:700 13px Manrope;color:var(--cream);min-width:0}
+  border-left:3px solid rgba(255,120,40,.2);
+  border-radius:13px;padding:11px 13px;margin-bottom:8px}
+.rd-v.critico{border-left-color:#e8706a;background:rgba(232,112,106,.05)}
+.rd-v.atencion{border-left-color:#f3d27a;background:rgba(243,210,122,.04)}
+.rd-v.bien{border-left-color:#7ee0a0}
+.rd-vtop{display:flex;gap:10px;align-items:center}
+.rd-ini{flex:none;width:34px;height:34px;border-radius:11px;display:grid;place-items:center;
+  font:800 12px "Space Grotesk";color:var(--cream);
+  background:linear-gradient(140deg,rgba(255,122,46,.35),rgba(200,30,58,.28));
+  border:1px solid rgba(255,120,40,.28)}
+.rd-vn{font:700 13.5px Manrope;color:var(--cream);min-width:0;flex:1}
 .rd-vsub{display:block;font:600 10.5px Manrope;color:var(--cream-45);margin-top:2px}
-.rd-vm{text-align:right;font:800 15px "Space Grotesk";color:var(--cream);white-space:nowrap}
+.rd-vm{text-align:right;font:800 16px "Space Grotesk";color:var(--cream);white-space:nowrap}
 .rd-vm small{display:block;font:600 9.5px Manrope;color:var(--cream-45)}
-.rd-vdatos{display:flex;gap:12px;flex-wrap:wrap;margin-top:7px;padding-top:7px;
-  border-top:1px dashed rgba(255,120,40,.15)}
-.rd-vdatos span{font:600 10.5px Manrope;color:var(--cream-45)}
-.rd-vdatos b{font:800 12px "Space Grotesk";color:var(--ember-soft)}
+/* barra: cuánto trae este contra el que más trae. Es la comparación de un vistazo */
+.rd-prog{height:4px;border-radius:3px;background:rgba(255,255,255,.06);margin:9px 0 8px;
+  overflow:hidden}
+.rd-prog span{display:block;height:100%;border-radius:3px;
+  background:linear-gradient(90deg,var(--ember),#f3d27a)}
+.rd-chips{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.rd-chips>div{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.12);
+  border-radius:9px;padding:6px 7px;min-width:0}
+.rd-chips>div.ancho{grid-column:span 4}
+.rd-chips i{display:block;font:700 8.5px Manrope;color:var(--cream-45);font-style:normal;
+  letter-spacing:.3px;text-transform:uppercase;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.rd-chips b{display:block;font:800 14px "Space Grotesk";color:var(--cream);margin-top:2px;
+  white-space:nowrap}
+.rd-chips b span{font:600 9.5px Manrope;color:var(--cream-45)}
+@media(max-width:380px){ .rd-chips{grid-template-columns:repeat(2,1fr)}
+  .rd-chips>div.ancho{grid-column:span 2} }
+
+/* el analizador y el filtro por estado */
+.rd-lee{font:600 12px/1.55 Manrope;color:var(--cream-60);padding:5px 0 5px 13px;
+  position:relative}
+.rd-lee::before{content:'';position:absolute;left:2px;top:11px;width:5px;height:5px;
+  border-radius:50%;background:var(--ember)}
+.rd-sem{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.rd-p{font:700 10.5px Manrope;border-radius:20px;padding:4px 10px}
+.rd-p.critico{color:#ff8a8a;background:rgba(232,112,106,.12);border:1px solid rgba(232,112,106,.35)}
+.rd-p.atencion{color:#f3d27a;background:rgba(243,210,122,.1);border:1px solid rgba(243,210,122,.3)}
+.rd-p.bien{color:#7ee0a0;background:rgba(126,224,160,.1);border:1px solid rgba(126,224,160,.3)}
+.rd-filtros{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:8px 0 10px}
+.rd-f{cursor:pointer;border-radius:10px;padding:7px 3px;font:700 10.5px Manrope;
+  color:var(--cream-60);background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,120,40,.15);display:flex;flex-direction:column;gap:1px;
+  align-items:center;line-height:1.2}
+.rd-f b{font:800 13px "Space Grotesk";color:var(--cream)}
+.rd-f.sel{border-color:var(--ember);background:rgba(255,110,30,.14);color:var(--cream)}
 .rd-sen{font:600 11px Manrope;border-radius:8px;padding:5px 9px;margin-top:5px}
 .rd-sen.buena{color:#7ee0a0;background:rgba(126,224,160,.08);
   border:1px solid rgba(126,224,160,.25)}
-.rd-sen.ojo{color:#f3d27a;background:rgba(243,210,122,.08);
-  border:1px solid rgba(243,210,122,.28)}
+/* Lo que hay que atender va en ROJO, no en dorado: el dorado es el color de la
+   venta flash y de lo bueno en este panel, y aquí se está señalando un problema. */
+.rd-sen.ojo{color:#ff8a8a;background:rgba(232,112,106,.1);
+  border:1px solid rgba(232,112,106,.35)}
+.rd-debe{color:#ff8a8a !important}
+.rd-alcorriente{color:#7ee0a0 !important;font:700 11px Manrope !important}
+
+/* ---------- rendimiento: desgloses ----------
+   Van cerrados porque son mucho dato: abiertos taparían el resumen de arriba, que es
+   lo que se mira a diario. Se abre el que se necesite en ese momento. */
+.rd-det{border:1px solid rgba(255,120,40,.16);border-radius:13px;
+  background:rgba(255,255,255,.02);overflow:hidden}
+.rd-det>summary{cursor:pointer;padding:12px 14px;font:700 12.5px Manrope;color:var(--cream);
+  list-style:none;display:flex;align-items:center;gap:6px}
+.rd-det>summary::-webkit-details-marker{display:none}
+.rd-det>summary::after{content:'▾';margin-left:auto;color:var(--ember-soft);font-size:11px;
+  transition:transform .15s}
+.rd-det[open]>summary::after{transform:rotate(180deg)}
+.rd-det>summary span{color:var(--cream-45);font-weight:600}
+.rd-cuerpo{padding:0 14px 12px}
+.rd-fila{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;
+  padding:8px 0;border-bottom:1px solid rgba(255,120,40,.1)}
+.rd-fila:last-child{border-bottom:none}
+.rd-fn{font:700 12.5px Manrope;color:var(--cream);min-width:0}
+.rd-fsub{display:block;font:600 10.5px Manrope;color:var(--cream-45);margin-top:2px}
+.rd-fv{text-align:right;font:800 14px "Space Grotesk";color:var(--cream);white-space:nowrap}
+.rd-fv small{display:block;font:600 9.5px Manrope;color:var(--cream-45)}
+.rd-col{padding:10px 0;border-bottom:1px solid rgba(255,120,40,.12)}
+.rd-col:last-child{border-bottom:none}
+/* lo suyo y lo de su equipo, lado a lado: es la comparación que importa */
+.rd-dos{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}
+.rd-dos>div{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.13);
+  border-radius:10px;padding:7px 9px}
+.rd-dos i{display:block;font:700 9px Manrope;color:var(--cream-45);font-style:normal;
+  letter-spacing:.4px;text-transform:uppercase}
+.rd-dos b{display:block;font:800 15px "Space Grotesk";color:var(--ember-soft);margin-top:2px}
+.rd-dos span{font:600 10px Manrope;color:var(--cream-45)}
+.rd-eq{margin-top:8px;border-top:1px dashed rgba(255,120,40,.18);padding-top:6px}
+.rd-m{display:grid;grid-template-columns:1fr auto 68px;gap:8px;align-items:center;
+  padding:3px 0;font:600 11px Manrope;color:var(--cream-60)}
+.rd-m.cero{opacity:.45}
+.rd-m b{font:800 12px "Space Grotesk";color:var(--cream)}
+.rd-m i{font-style:normal;text-align:right;font:600 10.5px Manrope;color:var(--cream-45)}
