@@ -1941,18 +1941,23 @@ def list_types():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
+    # El colíder necesita el catálogo para sus filtros, pero NO cuántos boletos de
+    # cada tipo se han vendido en TODO el evento: eso es de fuera de su grupo, y se
+    # colaba aquí sin que nadie lo pidiera.
+    duenio = mi_ambito(s)
     out = []
     for r in db.execute("SELECT * FROM ticket_types ORDER BY id").fetchall():
         price, phase, _n = effective_price(db, r)
         phases = [dict(p) for p in db.execute(
             "SELECT * FROM price_phases WHERE type_id=? ORDER BY starts_on, id",
             (r["id"],)).fetchall()]
-        vendidos = db.execute(
-            "SELECT COUNT(*) c FROM tickets WHERE type_id=? AND status!='void'",
-            (r["id"],)).fetchone()["c"]
-        out.append({**dict(r), "current_price_cents": price,
-                    "current_phase": phase, "phases": phases,
-                    "sold": vendidos})
+        fila = {**dict(r), "current_price_cents": price,
+                "current_phase": phase, "phases": phases}
+        if not duenio:
+            fila["sold"] = db.execute(
+                "SELECT COUNT(*) c FROM tickets WHERE type_id=? AND status!='void'",
+                (r["id"],)).fetchone()["c"]
+        out.append(fila)
     return jsonify(types=out)
 
 @app.post("/api/admin/ticket-types/<int:tid>/phases")
