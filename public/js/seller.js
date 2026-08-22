@@ -647,7 +647,31 @@ let _searchTimer = null;
    nada. Si tiene forma de botón, que lo sea — ordena al revés. */
 let H_VIEJOS_PRIMERO = false;
 
+/* Lo suyo, en corto: cuánto lleva ganado y cuántos boletos colocó. Solo aparece
+   cuando ya ganó algo —un "$0" grande el primer día desanima más de lo que informa—
+   y vive dentro del historial, no en la pantalla de vender. */
+function pintarMio() {
+  const caja = $('#h-mio');
+  if (!caja) return;
+  const ganado = (CATALOG && CATALOG.mi_ganado) || 0;
+  const boletos = (CATALOG && CATALOG.mi_boletos) || 0;
+  if (ganado <= 0) { caja.innerHTML = ''; return; }
+  caja.innerHTML = `
+    <div class="mio">
+      <div class="mio-l">
+        <i>Ya te pagaron</i>
+        <b>${fmtMoney(ganado)}</b>
+      </div>
+      <div class="mio-sep"></div>
+      <div class="mio-r">
+        <i>Has vendido</i>
+        <b>${boletos}<span>boleto${boletos === 1 ? '' : 's'}</span></b>
+      </div>
+    </div>`;
+}
+
 async function loadHistory() {
+  pintarMio();
   const q = $('#h-search').value.trim();
   try {
     const r = await API.get('/api/my-tickets' + (q ? '?q=' + encodeURIComponent(q) : ''));

@@ -302,8 +302,14 @@ async function loadColideres() {
           <div class="gana"><i>Le toca a él</i><b>${fmtMoney(g.comision_ganada)}</b></div>
           <div><i>Te entrega</i><b>${fmtMoney(g.entrega_al_admin)}</b></div>
         </div>
-        <div class="cl-nota">Sus vendedores entregan el 100%: la comisión de su equipo
-          la reparte él de este monto.</div>
+        <!-- En qué va su bolsa: cuánto ya repartió entre los suyos y cuánto le
+             queda. Sin esto, "le toca $1,000" no dice si ya cumplió con su gente. -->
+        <div class="cl-reparto">
+          <span>Repartió a su equipo <b>${fmtMoney(g.repartido)}</b></span>
+          <span class="cl-queda">Le quedan <b>${fmtMoney(g.le_queda)}</b></span>
+        </div>
+        <div class="cl-nota">Sus vendedores entregan el 100%: lo que les dé sale de
+          este monto, y se registra en la cuenta de cada uno.</div>
       </div>
       <details class="mt12">
         <summary class="muted" style="cursor:pointer;font-size:12px">Ver uno por uno (${g.miembros.length})</summary>
@@ -1022,6 +1028,14 @@ function pintaCuenta(s, c) {
         <div class="muted" style="font-size:12px">Vendi\u00f3 en boletos</div>
         <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${fmtMoney(c.sold)}</div>
       </div>
+      <!-- En un grupo el vendedor no se queda un porcentaje al entregar: el colíder
+           reparte de su comisión. Enseñarle "0%" ahí lo hace ver como si no ganara
+           nada; lo que importa es cuánto YA LE PAGARON. -->
+      ${c.en_grupo ? `
+      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
+        <div class="muted" style="font-size:12px">Ya le pagaron</div>
+        <div style="font:800 20px 'Space Grotesk';color:${c.recibido > 0 ? '#7ee0a0' : 'var(--cream-45)'}">${fmtMoney(c.recibido)}</div>
+      </div>` : `
       <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
         <div class="muted" style="font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
           <span>Se queda de comisi\u00f3n</span>${c.can_commission
@@ -1029,7 +1043,7 @@ function pintaCuenta(s, c) {
                  border-color:rgba(243,210,122,.5);color:#f3d27a">${c.commission_pct}% \u25be</button>`
             : `<b style="color:var(--cream)">${c.commission_pct}%</b>`}</div>
         <div style="font:700 15px 'Space Grotesk';color:#f3d27a">\u2212 ${fmtMoney(comisionTotal)}</div>
-      </div>
+      </div>`}
       <!-- Los porcentajes de un toque, plegados. Se abren solo cuando se van a usar,
            así la cuenta se sigue leyendo igual de limpia que antes. -->
       <div id="cta-com-box" class="row" style="display:none;gap:5px;flex-wrap:wrap;margin-top:8px">
@@ -1086,6 +1100,38 @@ function pintaCuenta(s, c) {
     ${c.sold_tickets ? `<button class="btn sm ghost mt8" id="pg-vertk" style="width:100%">
       \u25a4 Ver sus ${c.sold_tickets} boleto(s) \u00b7 a qui\u00e9n le vendi\u00f3</button>` : ''}
 
+    <!-- El reparto: en un grupo el vendedor entrega el 100% y el colíder le paga de
+         su comisión. Sin este botón el reparto se quedaba fuera del sistema y no
+         había forma de comprobar a quién se le dio cuánto. -->
+    ${c.en_grupo && c.can_edit ? `
+    <div class="card mt12" style="border-color:rgba(126,224,160,.35)">
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div class="label" style="margin:0">Pagarle de tu comisión</div>
+        <div style="font:800 17px 'Space Grotesk';color:#7ee0a0">${fmtMoney(c.recibido)}</div>
+      </div>
+      <div class="muted" style="font-size:10.5px;margin-top:2px">ya recibido en total</div>
+      <div class="row mt8" style="gap:6px;flex-wrap:wrap">
+        <button class="btn sm ghost tp-q" data-m="${(c.sold * 0.10).toFixed(2)}"
+          style="width:auto;flex:none;padding:8px 12px;font-size:12px">10% de lo que vendió
+          \u00b7 ${fmtMoney(c.sold * 0.10)}</button>
+        <button class="btn sm ghost tp-q" data-m="${(c.cash_total * 0.10).toFixed(2)}"
+          style="width:auto;flex:none;padding:8px 12px;font-size:12px">10% de lo que entregó
+          \u00b7 ${fmtMoney(c.cash_total * 0.10)}</button>
+      </div>
+      <div class="row mt8" style="gap:7px;align-items:center">
+        <input class="input" id="tp-monto" type="number" min="0" step="1" inputmode="decimal"
+          placeholder="Otro monto ($)" style="flex:1;padding:11px">
+        <button class="btn sm" id="tp-ok" style="width:auto;flex:none;padding:11px 16px">Pagar</button>
+      </div>
+      <div class="err mt8" id="tp-err"></div>
+      ${(c.recibidos || []).length ? `<div class="tp-hist">${c.recibidos.map(p => `
+        <div class="tp-row">
+          <span>${esc(String(p.created_at).slice(0, 16))}${p.note ? ' \u00b7 ' + esc(p.note) : ''}</span>
+          <b>${fmtMoney(p.amount)}</b>
+          <button class="tp-del" data-id="${p.id}" title="Deshacer este pago">\u2715</button>
+        </div>`).join('')}</div>` : ''}
+    </div>` : ''}
+
     ${c.can_edit && c.balance > 0.005 ? `
     <div class="card mt12">
       <div class="label">Registrar una entrega</div>
@@ -1112,6 +1158,37 @@ function pintaCuenta(s, c) {
     </div>
     <div class="scrolly" style="max-height:34dvh;overflow:auto">${filas}</div>
     <button class="btn ghost mt16" onclick="closeModal()">Cerrar</button>`);
+
+  // ----- pagarle a alguien del grupo, de la comisión del colíder -----
+  const tpOk = $('#tp-ok');
+  if (tpOk) {
+    const pagar = async (monto) => {
+      $('#tp-err').textContent = '';
+      if (!(monto > 0)) { $('#tp-err').textContent = 'Escribe cuánto le vas a dar'; return; }
+      tpOk.disabled = true;
+      try {
+        const fresca = await API.post(`/api/admin/sellers/${s.id}/team-pay`, { amount: monto });
+        toast(`Le pagaste ${fmtMoney(monto)} a ${s.name}`);
+        pintaCuenta(s, fresca);
+        loadSellers();
+      } catch (e) { if (!guard(e)) $('#tp-err').textContent = e.message; }
+      finally { tpOk.disabled = false; }
+    };
+    tpOk.onclick = () => pagar(parseFloat($('#tp-monto').value));
+    $$('.tp-q').forEach(b => b.onclick = () => { $('#tp-monto').value = b.dataset.m; });
+    $$('.tp-del').forEach(b => b.onclick = async () => {
+      const ok = await confirmModal({ title: 'Deshacer este pago', danger: true,
+        okLabel: 'Deshacer',
+        body: 'Se quita del registro y vuelve a su comisión por repartir. Queda anotado en Movimientos.' });
+      if (!ok) { pintaCuenta(s, c); return; }
+      try {
+        await API.del('/api/admin/team-pay/' + b.dataset.id);
+        const fresca = await API.get(`/api/admin/sellers/${s.id}/payments`);
+        toast('Pago deshecho');
+        pintaCuenta(s, fresca);
+      } catch (e) { if (!guard(e)) toast(e.message); }
+    });
+  }
 
   // cambiar la comisión sin salir de la cuenta: es donde se decide, viendo lo que
   // lleva vendido. Lo ya cobrado no se recalcula — cada pago guardó su porcentaje.

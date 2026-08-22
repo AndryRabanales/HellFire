@@ -310,6 +310,19 @@ CREATE TABLE IF NOT EXISTS seller_payments (
   created_by TEXT,                    -- admin que lo registró
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS team_payments (
+  -- lo que el colíder le PAGA a su gente, de su propia comisión. Va aparte de
+  -- seller_payments (que es dinero que ENTRA) porque aquí el dinero SALE, y
+  -- mezclarlos haría que un reparto se leyera como una venta cobrada.
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  seller_id INTEGER NOT NULL,
+  seller_name TEXT NOT NULL,          -- congelado, se conserva si borran al vendedor
+  colider_admin_id INTEGER,           -- de qué grupo salió el dinero
+  amount_cents INTEGER NOT NULL,
+  note TEXT,
+  created_by TEXT,                    -- quién lo registró
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS expenses (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,             -- ej. Local, Alcohol, DJ, Seguridad
@@ -558,8 +571,8 @@ def borrar_todo(db, admin_principal, motivo):
     pierde el acceso al instante). CONSERVA los flyers y ajustes (viven en settings),
     los precios, las facultades y el vendedor de invitados, que se recrea al arrancar
     desde GUEST_SELLER_CODE."""
-    for table in ("tickets", "groups", "sellers", "price_phases",
-                  "expenses", "audit_log", "login_attempts", "sessions"):
+    for table in ("tickets", "groups", "sellers", "price_phases", "seller_payments",
+                  "team_payments", "expenses", "audit_log", "login_attempts", "sessions"):
         db.execute(f"DELETE FROM {table}")
     db.execute("DELETE FROM admins WHERE username != ?", (admin_principal,))
     db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
@@ -1384,16 +1397,30 @@ def catalog():
     # vendedor recarga la página a media guía, con la sesión ya guardada no vuelve a
     # pasar por el login y se quedaría sin verla nunca.
     pendiente = False
+    # Lo que YA LE PAGARON. Va discreto y solo si hay algo: el vendedor tiene derecho
+    # a ver lo suyo sin tener que preguntarlo, y así un "a mí nunca me dieron nada"
+    # se resuelve mirando la pantalla en vez de discutiendo.
+    mi_ganado = mi_boletos = 0
     if s.get("seller"):
+        sid_mio = s["seller"]["id"]
         r = db.execute("SELECT tutorial_seen, hidden FROM sellers WHERE id=?",
-                       (s["seller"]["id"],)).fetchone()
+                       (sid_mio,)).fetchone()
         pendiente = bool(r and not r["tutorial_seen"] and not r["hidden"])
+        # Un solo número para los dos casos: el vendedor suelto se queda su comisión
+        # al entregar, y el de un grupo la recibe de su colíder. Los dos preguntan lo
+        # mismo —"¿cuánto llevo ganado?"— y no tienen por qué saber la diferencia.
+        mi_ganado = (db.execute("SELECT COALESCE(SUM(commission_cents),0) c "
+                                "FROM seller_payments WHERE seller_id=?",
+                                (sid_mio,)).fetchone()["c"]
+                     + pagado_a(db, sid_mio))
+        mi_boletos = boletos_de(db, sid_mio)
     return jsonify(types=types, faculties=facs, group=group_info,
                    ventas_cerradas=ventas_cerradas(db),
                    # una flash prendida a mano no tiene hora de fin: el panel del
                    # vendedor no puede prometer un cronómetro que no existe
                    flash_manual=flash_manual(db),
                    tutorial_pendiente=pendiente,
+                   mi_ganado=money(mi_ganado), mi_boletos=mi_boletos,
                    event_name=setting(db, "event_name"),
                    event_subtitle=setting(db, "event_subtitle"),
                    event_date_text=setting(db, "event_date_text"),
@@ -3022,6 +3049,17 @@ def estado_cuenta(db, sid):
             # vendedor, es del colíder sobre el total. Sin esta nota, un 0% se lee
             # como un error o como un castigo.
             "en_grupo": es_de_colider(db, sid),
+            # Lo que ya se le PAGÓ de la comisión del grupo. En un grupo el vendedor
+            # no se queda un porcentaje al entregar: se le paga aparte, y sin este
+            # número su ficha solo diría "0% de comisión", que se lee como que no
+            # gana nada.
+            "recibido": money(pagado_a(db, sid)),
+            "recibidos": [{"id": r["id"], "amount": money(r["amount_cents"]),
+                           "note": r["note"] or "", "created_by": r["created_by"],
+                           "created_at": r["created_at"]}
+                          for r in db.execute(
+                              "SELECT * FROM team_payments WHERE seller_id=? ORDER BY id DESC",
+                              (sid,)).fetchall()],
             "commission_general": comision_general(db),
             "commission_propia": (lambda r: r and r["commission_pct"] is not None)(
                 db.execute("SELECT commission_pct FROM sellers WHERE id=?", (sid,)).fetchone()),
@@ -3106,6 +3144,95 @@ def add_seller_payment(sid):
     out["seller_name"] = sel["name"]
     out["can_edit"] = True
     return jsonify(**out)
+
+# ------------------------------- lo que el colíder le reparte a su gente
+
+def pagado_a(db, sid):
+    """Cuánto se le ha PAGADO a este vendedor de la comisión de su colíder."""
+    return db.execute("SELECT COALESCE(SUM(amount_cents),0) c FROM team_payments "
+                      "WHERE seller_id=?", (sid,)).fetchone()["c"]
+
+
+def repartido_por(db, colider_admin_id):
+    """Cuánto lleva repartido un colíder entre los suyos."""
+    return db.execute("SELECT COALESCE(SUM(amount_cents),0) c FROM team_payments "
+                      "WHERE colider_admin_id=?", (colider_admin_id,)).fetchone()["c"]
+
+
+@app.post("/api/admin/sellers/<int:sid>/team-pay")
+def pagar_a_su_gente(sid):
+    """El colíder le paga a uno de los suyos, de su propia comisión.
+
+    Es dinero que SALE de su bolsa, no una venta: por eso vive en su propia tabla y
+    no toca ni el saldo del vendedor ni lo que el grupo le debe al organizador. Lo
+    registra el colíder —él es quien reparte— y un admin también, por si hay que
+    corregir algo."""
+    s = require_panel()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    sel = db.execute("SELECT * FROM sellers WHERE id=? AND hidden=0 AND deleted=0",
+                     (sid,)).fetchone()
+    if not sel:
+        return jsonify(error="no existe"), 404
+    if not es_de_colider(db, sid):
+        return jsonify(error=f"{sel['name']} no es de ningún grupo: su comisión se "
+                             f"la queda al entregar, no se le reparte aparte."), 400
+    # el colíder solo reparte dentro de SU grupo
+    if es_colider(s) and sel["owner_admin_id"] != s["admin"]["id"]:
+        return jsonify(error="no existe"), 404
+    b = request.json or {}
+    try:
+        monto = int(round(float(b.get("amount", 0)) * 100))
+    except (TypeError, ValueError):
+        return jsonify(error="Monto inválido"), 400
+    if monto <= 0:
+        return jsonify(error="El pago debe ser mayor a cero"), 400
+    # Nadie puede repartir más de lo que le tocó: si se pudiera, el número de "le
+    # queda" saldría en negativo y ya no serviría para nada.
+    duenio = sel["owner_admin_id"]
+    grupo_cobrado = db.execute(
+        "SELECT COALESCE(SUM(paid_cents),0) c FROM sellers WHERE owner_admin_id=? AND hidden=0",
+        (duenio,)).fetchone()["c"]
+    bolsa = int(round(grupo_cobrado * comision_colider(db, duenio) / 100))
+    ya = repartido_por(db, duenio)
+    if ya + monto > bolsa:
+        libre = (bolsa - ya) / 100
+        return jsonify(error=f"Se pasa de su comisión. De su corte le quedan "
+                             f"${libre:,.2f} por repartir."), 400
+    db.execute("""INSERT INTO team_payments
+        (seller_id, seller_name, colider_admin_id, amount_cents, note, created_by, created_at)
+        VALUES(?,?,?,?,?,?,?)""",
+        (sid, sel["name"], duenio, monto,
+         str(b.get("note", "")).strip()[:120] or None, s["admin"]["username"], now_iso()))
+    audit(db, s["admin"]["username"], "pago",
+          f"Le pagó ${monto/100:,.2f} a '{sel['name']}' de la comisión del grupo")
+    db.commit()
+    out = estado_cuenta(db, sid)
+    out["seller_name"] = sel["name"]
+    out["can_edit"] = True
+    return jsonify(**out)
+
+
+@app.delete("/api/admin/team-pay/<int:pid>")
+def borrar_pago_equipo(pid):
+    """Deshacer un reparto mal capturado. Queda en Movimientos: el dinero se
+    corrige, el rastro no se borra."""
+    s = require_panel()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    p = db.execute("SELECT * FROM team_payments WHERE id=?", (pid,)).fetchone()
+    if not p:
+        return jsonify(error="no existe"), 404
+    if es_colider(s) and p["colider_admin_id"] != s["admin"]["id"]:
+        return jsonify(error="no existe"), 404
+    db.execute("DELETE FROM team_payments WHERE id=?", (pid,))
+    audit(db, s["admin"]["username"], "pago",
+          f"Deshizo el pago de ${p['amount_cents']/100:,.2f} a '{p['seller_name']}'")
+    db.commit()
+    return jsonify(ok=True)
+
 
 @app.get("/api/admin/sellers/<int:sid>/payments.xlsx")
 def export_seller_payments(sid):
@@ -3546,12 +3673,15 @@ def grupos_colider():
         pct = comision_colider(db, l["id"])
         cobrado_grupo = suma(filas, "paid_cents")
         gana = int(round(cobrado_grupo * pct / 100))
+        repartido = repartido_por(db, l["id"])
         salida.append(dict(
             id=l["id"], nombre=l["username"],
             comision_pct=pct,
             comision_ganada=money(gana),
             comision_base=money(cobrado_grupo),
             entrega_al_admin=money(cobrado_grupo - gana),
+            repartido=money(repartido),
+            le_queda=money(gana - repartido),
             propio=dict(boletos=suma(propio, "n"), monto=money(suma(propio, "cents")),
                         cobrado=money(suma(propio, "paid_cents")),
                         code=(propio[0]["code"] if propio else None)),
