@@ -356,6 +356,16 @@ function verColider(g) {
         <span>Repartió a su equipo <b>${fmtMoney(g.repartido)}</b></span>
         <span class="cl-queda">Le quedan <b>${fmtMoney(g.le_queda)}</b></span>
       </div>
+      ${(g.repartos || []).length ? `
+      <details class="cl-reps">
+        <summary>Ver a quién le pagó (${g.repartos.length})</summary>
+        <div>${g.repartos.map(p => `
+          <div class="cl-rep">
+            <span>${esc(p.name)}</span>
+            <em>${esc(String(p.created_at).slice(5, 16))}</em>
+            <b>${fmtMoney(p.amount)}</b>
+          </div>`).join('')}</div>
+      </details>` : ''}
     </div>
 
     <div class="label mt16" style="margin-bottom:6px">Su gente</div>

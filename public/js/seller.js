@@ -659,19 +659,18 @@ function pintarMio() {
   const ganado = (CATALOG && CATALOG.mi_ganado) || 0;
   const boletos = (CATALOG && CATALOG.mi_boletos) || 0;
   const vendido = (CATALOG && CATALOG.mi_vendido) || 0;
-  if (!boletos && !ganado) { caja.innerHTML = ''; return; }   // aún no vende nada
+  if (!boletos && !ganado) { caja.innerHTML = ''; return; }
+  // Una sola cifra manda —lo suyo— y el resto la acompaña. Antes eran dos columnas
+  // partidas por una línea y ninguna de las dos se veía como la importante.
   caja.innerHTML = `
     <div class="mio${ganado > 0 ? '' : ' sinpago'}">
-      <div class="mio-l">
-        <i>${ganado > 0 ? 'Ya te pagaron' : 'Te han pagado'}</i>
-        <b>${fmtMoney(ganado)}</b>
-        ${ganado > 0 ? '' : '<u>tu corte se te entrega al hacer cuentas</u>'}
-      </div>
-      <div class="mio-sep"></div>
-      <div class="mio-r">
-        <i>Has vendido</i>
-        <b>${boletos}<span>boleto${boletos === 1 ? '' : 's'}</span></b>
-        <u>${fmtMoney(vendido)} en total</u>
+      <div class="mio-lab">Tu corte</div>
+      <div class="mio-big">${fmtMoney(ganado)}</div>
+      <div class="mio-sub">${ganado > 0 ? 'ya te lo pagaron'
+                                        : 'se te entrega cuando hagas cuentas'}</div>
+      <div class="mio-pie">
+        <span>${boletos} boleto${boletos === 1 ? '' : 's'} vendido${boletos === 1 ? '' : 's'}</span>
+        <b>${fmtMoney(vendido)}</b>
       </div>
     </div>`;
 }

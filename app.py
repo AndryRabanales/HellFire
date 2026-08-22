@@ -3687,6 +3687,14 @@ def grupos_colider():
             entrega_al_admin=money(cobrado_grupo - gana),
             repartido=money(repartido),
             le_queda=money(gana - repartido),
+            # el historial del reparto, junto: por vendedor ya se veía, pero para
+            # revisar un grupo hace falta ver todo lo que salió de su bolsa de un tiro
+            repartos=[{"id": r["id"], "name": r["seller_name"],
+                       "amount": money(r["amount_cents"]),
+                       "created_at": r["created_at"], "created_by": r["created_by"]}
+                      for r in db.execute(
+                          "SELECT * FROM team_payments WHERE colider_admin_id=? "
+                          "ORDER BY id DESC", (l["id"],)).fetchall()],
             propio=dict(boletos=suma(propio, "n"), monto=money(suma(propio, "cents")),
                         cobrado=money(suma(propio, "paid_cents")),
                         code=(propio[0]["code"] if propio else None)),

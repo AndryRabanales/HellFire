@@ -1109,30 +1109,29 @@ button.rd-p:active{transform:scale(.97)}
 @media(max-width:400px){ .cl-cg{gap:5px} .cl-cg>div{padding:7px 7px} .cl-cg b{font-size:13.5px}
   .cl-cg i{font-size:7.5px;letter-spacing:.2px} }
 
-/* ---------- lo del vendedor, dentro de su historial ----------
-   Dos números suyos y nada más: lo que ya le pagaron y cuántos boletos colocó. No
-   promete nada a futuro —lo que gane después lo decide quien le paga— y no aparece
-   hasta que hay un primer pago. */
-.mio{display:flex;align-items:stretch;gap:12px;margin:2px 0 14px;padding:13px 15px;
-  border-radius:15px;border:1px solid rgba(243,210,122,.28);
-  background:linear-gradient(135deg,rgba(243,210,122,.1),rgba(255,110,30,.05) 60%,transparent)}
-.mio i{display:block;font:700 9px Manrope;font-style:normal;letter-spacing:.6px;
-  text-transform:uppercase;color:var(--cream-45)}
-.mio b{display:block;font:800 24px "Space Grotesk";color:#f3d27a;margin-top:3px;
-  line-height:1;white-space:nowrap}
-.mio-sep{width:1px;background:linear-gradient(180deg,transparent,rgba(243,210,122,.3),transparent)}
-.mio-r{text-align:right}
-.mio-r b{color:var(--cream);display:flex;align-items:baseline;gap:5px;justify-content:flex-end}
-.mio-r b span{font:600 10px Manrope;color:var(--cream-45)}
-.mio-l{flex:1;min-width:0}
-.mio-l u,.mio-r u{display:block;font:600 9.5px/1.35 Manrope;color:var(--cream-45);
-  text-decoration:none;margin-top:3px}
-.mio-l u{max-width:150px}
-/* todavía sin cobrar: el número va apagado y el peso se lo lleva lo que sí hizo */
+/* ---------- el corte del vendedor, dentro de su historial ----------
+   Una cifra manda —lo que ganó— y lo demás la acompaña debajo. En dos columnas
+   partidas se peleaban por el ancho: el rótulo se partía en dos renglones y el
+   monto vendido salía recortado. */
+.mio{margin:2px 0 14px;padding:14px 16px 13px;border-radius:16px;
+  border:1px solid rgba(243,210,122,.26);
+  background:radial-gradient(130% 130% at 0% 0%,rgba(243,210,122,.12),transparent 60%),
+             rgba(255,255,255,.025)}
+.mio-lab{font:700 9.5px Manrope;letter-spacing:1px;text-transform:uppercase;color:#f3d27a}
+.mio-big{font:800 34px/1 "Space Grotesk";color:#f3d27a;letter-spacing:-.5px;margin-top:6px}
+.mio-sub{font:600 10.5px Manrope;color:var(--cream-45);margin-top:5px}
+.mio-pie{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+  margin-top:12px;padding-top:10px;border-top:1px dashed rgba(243,210,122,.2)}
+.mio-pie span{font:600 11px Manrope;color:var(--cream-60)}
+.mio-pie b{font:800 14px "Space Grotesk";color:var(--cream);white-space:nowrap}
+/* todavía sin cobrar: el número se apaga, pero el dato sigue a la vista */
 .mio.sinpago{border-color:rgba(255,120,40,.2);
-  background:linear-gradient(135deg,rgba(255,110,30,.06),transparent 70%)}
-.mio.sinpago .mio-l b{color:var(--cream-45)}
-/* el historial de repartos, dentro de la cuenta del vendedor */
+  background:radial-gradient(130% 130% at 0% 0%,rgba(255,110,30,.07),transparent 60%),
+             rgba(255,255,255,.02)}
+.mio.sinpago .mio-lab{color:var(--ember-soft)}
+.mio.sinpago .mio-big{color:var(--cream-45)}
+.mio.sinpago .mio-pie{border-top-color:rgba(255,120,40,.16)}
+
 .tp-hist{margin-top:10px;border-top:1px dashed rgba(126,224,160,.25);padding-top:7px}
 .tp-row{display:grid;grid-template-columns:1fr auto 26px;gap:8px;align-items:center;
   padding:5px 0;font:600 11px Manrope;color:var(--cream-45)}
@@ -1170,3 +1169,17 @@ button.rd-p:active{transform:scale(.97)}
 .cl-chips .ver{color:var(--ember-soft);border:none;background:none;margin-left:auto;padding-right:0}
 .cl-m{cursor:pointer;border-radius:8px}
 .cl-m:active{background:rgba(255,255,255,.04)}
+/* el reparto del colíder, junto: quién cobró, cuándo y cuánto */
+.cl-reps{margin-top:8px}
+.cl-reps>summary{cursor:pointer;list-style:none;font:600 10.5px Manrope;
+  color:var(--ember-soft);padding:4px 0}
+.cl-reps>summary::-webkit-details-marker{display:none}
+.cl-reps>summary::before{content:'▸ '}
+.cl-reps[open]>summary::before{content:'▾ '}
+.cl-rep{display:grid;grid-template-columns:1fr auto auto;gap:9px;align-items:baseline;
+  padding:4px 0;border-bottom:1px solid rgba(255,120,40,.08)}
+.cl-rep:last-child{border-bottom:none}
+.cl-rep span{font:600 11.5px Manrope;color:var(--cream);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.cl-rep em{font:600 9.5px Manrope;font-style:normal;color:var(--cream-45)}
+.cl-rep b{font:800 12.5px "Space Grotesk";color:#7ee0a0;white-space:nowrap}
