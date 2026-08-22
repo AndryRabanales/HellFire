@@ -43,7 +43,8 @@ async function enter(name) {
 /* ---------------- tabs ---------------- */
 const loaders = {
   resumen: loadSummary, boletos: loadTicketsTab, movimientos: loadMovements,
-  vendedores: loadSellers, ranking: loadRanking, grupos: loadGroups, gastos: loadExpenses,
+  vendedores: loadSellers, ranking: loadRanking, rendimiento: loadRendimiento,
+  grupos: loadGroups, gastos: loadExpenses,
   colideres: loadColideres, cortesias: loadCortesias,
   catalogos: loadCatalogs, ajustes: loadAjustes,
 };
@@ -227,7 +228,9 @@ function aplicarColider(esCo) {
   document.body.classList.toggle('es-colider', !!esCo);
   // Se ESCONDE, no se borra: si en la misma pestaña entra después un admin, tiene que
   // recuperar su panel completo sin recargar. Borrar nodos deja el panel mutilado.
-  const VEDADAS = ['grupos', 'gastos', 'catalogos', 'ajustes', 'cortesias'];
+  // Rendimiento compara a un vendedor contra TODOS los demás: un colíder vería ahí
+  // el desempeño de gente que no es suya y el promedio con el que se les mide.
+  const VEDADAS = ['grupos', 'gastos', 'catalogos', 'ajustes', 'cortesias', 'rendimiento'];
   VEDADAS.forEach(t => {
     const b = document.querySelector(`#tabs .tab[data-tab="${t}"]`);
     if (b) b.classList.toggle('hidden', esCo);
@@ -1708,6 +1711,71 @@ function editarFase(g, types) {
       closeModal(); toast('Fase actualizada'); loadCatalogs();
     } catch (e) { if (!guard(e)) $('#ef-err').textContent = e.message; }
   };
+}
+
+/* ---------------- rendimiento: cómo se está moviendo la venta ----------------
+
+   La idea es dejar de investigar: en vez de abrir cinco pantallas y comparar de
+   memoria, aquí está el promedio contra el que se mide cada quien y la observación
+   ya escrita —siempre con su número al lado, para poder comprobarla—.
+
+   Es una pantalla que SOLO LEE. No tiene un botón que cambie nada. */
+let _sigRend = null;
+async function loadRendimiento(silent) {
+  let r;
+  try { r = await API.get('/api/admin/rendimiento'); }
+  catch (e) { return; }
+  const sig = JSON.stringify(r);
+  if (silent && sig === _sigRend) return;
+  _sigRend = sig;
+  const T = r.totales;
+  $('#rd-stats').innerHTML = `
+    <div class="rk-st"><i>Vendido</i><b>${fmtMoney(Math.round(T.monto))}</b></div>
+    <div class="rk-st"><i>Boletos</i><b>${T.boletos}</b></div>
+    <div class="rk-st"><i>Vendiendo</i><b>${T.activos}<small>+${T.inactivos} en 0</small></b></div>
+    <div class="rk-st"><i>Boleto prom.</i><b>${fmtMoney(Math.round(T.ticket_prom))}</b></div>`;
+
+  // Los últimos días como barras: si la venta se cayó, se ve sin leer un número.
+  const dias = r.por_dia || [];
+  const tope = Math.max(1, ...dias.map(d => d.boletos));
+  $('#rd-dias').innerHTML = dias.length ? `
+    <div class="rd-barras">${dias.map(d => `
+      <div class="rd-b" title="${esc(d.dia)} · ${d.boletos} boleto(s) · ${fmtMoney(d.monto)}">
+        <span style="height:${Math.max(4, Math.round(d.boletos / tope * 100))}%"></span>
+        <i>${esc(d.dia.slice(8))}</i>
+      </div>`).join('')}</div>
+    <div class="muted" style="font-size:10.5px;margin-top:6px">
+      Día más fuerte: <b style="color:var(--cream)">${esc(mejorDia(dias).dia)}</b>
+      con ${mejorDia(dias).boletos} boleto(s) · ${fmtMoney(mejorDia(dias).monto)}</div>`
+    : '<div class="muted" style="font-size:12px">Todavía no hay ventas.</div>';
+
+  $('#rd-tipos').innerHTML = (r.por_tipo || []).map(t => `
+    <div class="rd-tipo">
+      <div class="rd-tn">${esc(t.nombre || '—')}</div>
+      <div class="rd-tbar"><span style="width:${t.pct}%"></span></div>
+      <div class="rd-tv">${t.boletos}<small>${fmtMoney(t.monto)}</small></div>
+    </div>`).join('') || '<div class="muted" style="font-size:12px">Sin ventas todavía.</div>';
+
+  const prom = T.prom_boletos;
+  $('#rd-lista').innerHTML = (r.vendedores || []).map(v => `
+    <div class="rd-v">
+      <div class="rd-vtop">
+        <div class="rd-vn">${esc(v.name)}
+          <span class="rd-vsub">${v.boletos} boleto(s) · ${v.dias_con_venta} día(s) con venta ·
+            ${v.sin_vender === 0 ? 'vendió hoy' : 'hace ' + v.sin_vender + ' día(s)'}</span></div>
+        <div class="rd-vm">${fmtMoney(v.monto)}<small>${v.pct_monto}% del total</small></div>
+      </div>
+      <div class="rd-vdatos">
+        <span>Boleto prom. <b>${fmtMoney(Math.round(v.ticket_prom))}</b></span>
+        <span>Ritmo <b>${v.ritmo}</b>/día</span>
+        <span>vs promedio <b>${prom ? (v.boletos / prom).toFixed(1) : '—'}×</b></span>
+      </div>
+      ${(v.buenas || []).map(x => `<div class="rd-sen buena">✓ ${esc(x)}</div>`).join('')}
+      ${(v.señales || []).map(x => `<div class="rd-sen ojo">▲ ${esc(x)}</div>`).join('')}
+    </div>`).join('') || '<div class="muted">Nadie ha vendido todavía.</div>';
+}
+function mejorDia(dias) {
+  return dias.reduce((a, b) => (b.boletos > a.boletos ? b : a), dias[0]);
 }
 
 /* ---------------- ranking: quién vende y quién no ----------------

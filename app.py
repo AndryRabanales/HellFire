@@ -2478,6 +2478,135 @@ def list_sellers():
         out.append(d)
     return jsonify(sellers=out)
 
+@app.get("/api/admin/rendimiento")
+def rendimiento():
+    """Cómo se está moviendo la venta, en números que se entienden sin analizarlos.
+
+    SOLO LEE. No escribe una línea en ninguna tabla, así que no puede tocar un
+    boleto, una cuenta ni un precio: es una foto de lo que ya existe.
+
+    Solo el admin. Un colíder vería aquí el desempeño de vendedores que no son suyos
+    y con qué los compara, que es justo lo que su ámbito no incluye.
+
+    Los boletos anulados y las cortesías quedan fuera: los primeros no son venta y
+    las segundas no son dinero, y mezclarlas haría ver a quien reparte invitaciones
+    como si estuviera vendiendo."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    hoy = now_dt().strftime("%Y-%m-%d")
+
+    filas = db.execute(f"""
+        SELECT s.id, s.name,
+               COUNT(t.id) AS boletos,
+               COALESCE(SUM(t.price_cents),0) AS monto,
+               MIN(SUBSTR(t.created_at,1,10)) AS primera,
+               MAX(SUBSTR(t.created_at,1,10)) AS ultima,
+               COUNT(DISTINCT SUBSTR(t.created_at,1,10)) AS dias_con_venta
+        FROM sellers s
+        JOIN tickets t ON t.seller_id=s.id AND t.status!='void' AND t.es_cortesia=0
+        WHERE s.hidden=0 AND s.deleted=0
+        GROUP BY s.id, s.name""").fetchall()
+    vendedores = [dict(r) for r in filas]
+
+    total_boletos = sum(v["boletos"] for v in vendedores)
+    total_monto = sum(v["monto"] for v in vendedores)
+    activos = len(vendedores)
+    ticket_prom = (total_monto / total_boletos) if total_boletos else 0
+
+    # Qué tipo se está vendiendo. Sirve para decidir dónde empujar: si el Ultra VIP
+    # no se mueve, no es lo mismo que si no se mueve el Externo.
+    por_tipo = [dict(r) for r in db.execute(f"""
+        SELECT type_name AS nombre, COUNT(*) AS boletos, SUM(price_cents) AS monto
+        FROM tickets WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}
+        GROUP BY type_name ORDER BY SUM(price_cents) DESC""").fetchall()]
+    for t in por_tipo:
+        t["monto"] = money(t["monto"])
+        t["pct"] = round(100.0 * t["boletos"] / total_boletos, 1) if total_boletos else 0
+
+    # Los últimos 14 días, para ver si la venta sube, se aplana o se cayó.
+    por_dia = [dict(r) for r in db.execute(f"""
+        SELECT SUBSTR(created_at,1,10) AS dia, COUNT(*) AS boletos, SUM(price_cents) AS monto
+        FROM tickets WHERE status!='void' AND es_cortesia=0 AND {NOT_GUEST}
+        GROUP BY SUBSTR(created_at,1,10) ORDER BY dia DESC LIMIT 14""").fetchall()]
+    por_dia.reverse()
+    for d in por_dia:
+        d["monto"] = money(d["monto"])
+
+    def dias_entre(a, b):
+        try:
+            return (datetime.strptime(b, "%Y-%m-%d") - datetime.strptime(a, "%Y-%m-%d")).days
+        except (TypeError, ValueError):
+            return 0
+
+    prom_boletos = (total_boletos / activos) if activos else 0
+    prom_monto = (total_monto / activos) if activos else 0
+    prom_ticket_grupo = ticket_prom
+
+    salida = []
+    for v in vendedores:
+        dias_desde_primera = max(1, dias_entre(v["primera"], hoy) + 1)
+        sin_vender = dias_entre(v["ultima"], hoy)
+        suyo_ticket = v["monto"] / v["boletos"] if v["boletos"] else 0
+        # Las señales son observaciones con su número al lado, no calificaciones:
+        # quien las lee tiene que poder verificarlas de un vistazo y decidir él.
+        señales = []
+        if sin_vender >= 3:
+            señales.append(f"{sin_vender} días sin vender")
+        # "Vende poco" solo si además trae poco dinero. Contar boletos a secas
+        # señalaba al que más dinero da: dos Ultra VIP son dos boletos y son $1,800,
+        # y salía marcado igual que quien no ha vendido. Lo que se paga es el dinero.
+        if (activos > 2 and v["boletos"] < prom_boletos * 0.5
+                and v["monto"] < prom_monto * 0.5):
+            señales.append(f"vende poco: {v['boletos']} boleto{'' if v['boletos'] == 1 else 's'} "
+                           f"y ${v['monto']/100:,.0f} (el promedio es {prom_boletos:.0f} "
+                           f"y ${prom_monto/100:,.0f})")
+        if prom_ticket_grupo and suyo_ticket < prom_ticket_grupo * 0.75 and v["boletos"] >= 2:
+            señales.append(f"coloca boleto barato (${suyo_ticket/100:,.0f} de promedio, "
+                           f"contra ${prom_ticket_grupo/100:,.0f})")
+        if v["dias_con_venta"] == 1 and v["boletos"] >= 3:
+            señales.append(f"sus {v['boletos']} boletos salieron en 1 solo día, no ha vuelto")
+        buenas = []
+        if v["monto"] >= prom_monto * 1.5 and activos > 2:
+            buenas.append(f"trae {v['monto']/prom_monto:.1f}× el dinero del promedio")
+        if v["boletos"] >= prom_boletos * 1.5 and activos > 2:
+            buenas.append(f"coloca {v['boletos']/prom_boletos:.1f}× los boletos del promedio")
+        if prom_ticket_grupo and suyo_ticket > prom_ticket_grupo * 1.25 and v["boletos"] >= 2:
+            buenas.append(f"coloca boleto caro (${suyo_ticket/100:,.0f} de promedio, "
+                          f"contra ${prom_ticket_grupo/100:,.0f})")
+        if v["dias_con_venta"] >= 5:
+            buenas.append(f"constante: vendió en {v['dias_con_venta']} días distintos")
+        salida.append({
+            "id": v["id"], "name": v["name"],
+            "boletos": v["boletos"], "monto": money(v["monto"]),
+            "ticket_prom": money(round(suyo_ticket)),
+            "dias_con_venta": v["dias_con_venta"],
+            "ritmo": round(v["boletos"] / dias_desde_primera, 2),
+            "primera": v["primera"], "ultima": v["ultima"],
+            "sin_vender": sin_vender,
+            "pct_monto": round(100.0 * v["monto"] / total_monto, 1) if total_monto else 0,
+            "señales": señales, "buenas": buenas,
+        })
+    salida.sort(key=lambda x: -x["monto"])
+
+    inactivos = db.execute("""
+        SELECT COUNT(*) c FROM sellers s WHERE s.hidden=0 AND s.deleted=0
+        AND NOT EXISTS (SELECT 1 FROM tickets t WHERE t.seller_id=s.id
+                        AND t.status!='void' AND t.es_cortesia=0)""").fetchone()["c"]
+
+    return jsonify(
+        totales={
+            "boletos": total_boletos, "monto": money(total_monto),
+            "activos": activos, "inactivos": inactivos,
+            "prom_boletos": round(prom_boletos, 1),
+            "prom_monto": money(round(total_monto / activos)) if activos else 0,
+            "ticket_prom": money(round(ticket_prom)),
+        },
+        por_tipo=por_tipo, por_dia=por_dia, vendedores=salida,
+    )
+
+
 @app.get("/api/admin/ranking")
 def ranking_vendedores():
     """Quién está vendiendo y quién no. Ordenado por boletos o por dinero.

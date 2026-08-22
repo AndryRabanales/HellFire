@@ -69,6 +69,7 @@
     <button class="tab" data-tab="boletos">Boletos</button>
     <button class="tab" data-tab="vendedores">Vendedores</button>
     <button class="tab" data-tab="ranking">Ranking</button>
+    <button class="tab" data-tab="rendimiento">Rendimiento</button>
     <button class="tab" data-tab="grupos">Grupos</button>
     <button class="tab" data-tab="colideres">Colíderes</button>
     <button class="tab" data-tab="cortesias">Cortesías</button>
@@ -142,6 +143,26 @@
   </section>
 
   <!-- ===== Vendedores (RF-82..88) ===== -->
+  <!-- ===== Rendimiento: cómo se está moviendo la venta (solo lectura) ===== -->
+  <section id="tab-rendimiento" class="mt16 hidden">
+    <div class="card rk-card">
+      <div class="label" style="margin:0">Cómo va la venta</div>
+      <div class="muted rk-nota">Solo lo vendido: sin anulados y sin cortesías.</div>
+      <div class="rk-stats" id="rd-stats"></div>
+    </div>
+    <div class="card mt12">
+      <div class="label" style="margin:0 0 8px">Últimos días</div>
+      <div id="rd-dias"></div>
+    </div>
+    <div class="card mt12">
+      <div class="label" style="margin:0 0 8px">Qué se está vendiendo</div>
+      <div id="rd-tipos"></div>
+    </div>
+    <div class="label mt16" style="margin-bottom:6px">Vendedor por vendedor</div>
+    <div class="muted" style="font-size:11px;margin-bottom:8px">De mayor a menor dinero. Cada observación trae su número al lado para que la puedas comprobar.</div>
+    <div id="rd-lista"></div>
+  </section>
+
   <!-- ===== Ranking: quién vende y quién no ===== -->
   <section id="tab-ranking" class="mt16 hidden">
     <div class="card rk-card">

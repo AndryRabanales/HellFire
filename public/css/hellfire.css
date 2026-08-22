@@ -772,6 +772,10 @@ details.card>summary:active{transform:scale(.99)}
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rk-st small{font-size:11px;color:var(--cream-45);font-weight:600}
 @media(max-width:400px){ .rk-st b{font-size:15px} }
+/* En Rendimiento las cifras son más largas ("$20,000") y en cuatro columnas se
+   cortaban: van de dos en dos hasta pantallas anchas. */
+#tab-rendimiento .rk-stats{grid-template-columns:1fr 1fr}
+@media(min-width:560px){ #tab-rendimiento .rk-stats{grid-template-columns:repeat(4,1fr)} }
 /* En pantallas muy angostas (iPhone SE) los cuatro en fila dejan celdas donde no
    cabe "$61,000" y el número sale cortado. Dos y dos: siguen sin huecos y se leen. */
 @media(max-width:360px){ .rk-stats{grid-template-columns:1fr 1fr} }
@@ -818,3 +822,36 @@ details.card>summary:active{transform:scale(.99)}
 #guardar-img .gi-cerrar{margin-top:13px;width:100%;padding:13px;border-radius:12px;
   border:none;cursor:pointer;font:800 14px Manrope;color:#fff;
   background:linear-gradient(135deg,var(--ember),#c81e3a)}
+
+/* ---------- rendimiento (solo lectura) ---------- */
+.rd-barras{display:flex;align-items:flex-end;gap:3px;height:86px}
+.rd-b{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
+  height:100%;min-width:0}
+.rd-b span{display:block;width:100%;border-radius:4px 4px 0 0;
+  background:linear-gradient(180deg,var(--ember),rgba(200,30,58,.55))}
+.rd-b i{font:600 8.5px Manrope;color:var(--cream-45);font-style:normal;margin-top:3px}
+.rd-tipo{display:grid;grid-template-columns:74px 1fr 78px;gap:8px;align-items:center;
+  padding:6px 0;border-bottom:1px solid rgba(255,120,40,.1)}
+.rd-tn{font:700 11.5px Manrope;color:var(--cream);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.rd-tbar{height:8px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden}
+.rd-tbar span{display:block;height:100%;border-radius:5px;
+  background:linear-gradient(90deg,var(--ember),#f3d27a)}
+.rd-tv{text-align:right;font:800 13px "Space Grotesk";color:var(--cream)}
+.rd-tv small{display:block;font:600 9.5px Manrope;color:var(--cream-45)}
+.rd-v{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.13);
+  border-radius:12px;padding:10px 12px;margin-bottom:7px}
+.rd-vtop{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.rd-vn{font:700 13px Manrope;color:var(--cream);min-width:0}
+.rd-vsub{display:block;font:600 10.5px Manrope;color:var(--cream-45);margin-top:2px}
+.rd-vm{text-align:right;font:800 15px "Space Grotesk";color:var(--cream);white-space:nowrap}
+.rd-vm small{display:block;font:600 9.5px Manrope;color:var(--cream-45)}
+.rd-vdatos{display:flex;gap:12px;flex-wrap:wrap;margin-top:7px;padding-top:7px;
+  border-top:1px dashed rgba(255,120,40,.15)}
+.rd-vdatos span{font:600 10.5px Manrope;color:var(--cream-45)}
+.rd-vdatos b{font:800 12px "Space Grotesk";color:var(--ember-soft)}
+.rd-sen{font:600 11px Manrope;border-radius:8px;padding:5px 9px;margin-top:5px}
+.rd-sen.buena{color:#7ee0a0;background:rgba(126,224,160,.08);
+  border:1px solid rgba(126,224,160,.25)}
+.rd-sen.ojo{color:#f3d27a;background:rgba(243,210,122,.08);
+  border:1px solid rgba(243,210,122,.28)}
