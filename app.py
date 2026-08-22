@@ -2515,6 +2515,10 @@ def rendimiento():
         SELECT s.id, s.name,
                COUNT(t.id) AS boletos,
                COALESCE(SUM(t.price_cents),0) AS monto,
+               -- lo que HABRÍAN costado sin oferta: para juzgar si alguien coloca
+               -- boleto barato hay que mirar QUÉ tipo vendió, no cuánto le rebajó
+               -- una venta flash que no decidió él
+               COALESCE(SUM(COALESCE(t.normal_price_cents, t.price_cents)),0) AS lista,
                COALESCE(MAX(s.paid_cents),0) AS pagado,
                MIN(SUBSTR(t.created_at,1,10)) AS primera,
                MAX(SUBSTR(t.created_at,1,10)) AS ultima,
@@ -2559,13 +2563,19 @@ def rendimiento():
 
     prom_boletos = (total_boletos / activos) if activos else 0
     prom_monto = (total_monto / activos) if activos else 0
-    prom_ticket_grupo = ticket_prom
+    # El promedio contra el que se compara el "boleto barato" también va a precio de
+    # lista: si se comparara el precio de flash de uno contra el precio normal del
+    # resto, cualquiera que haya vendido durante la oferta saldría señalado.
+    total_lista = sum(v["lista"] for v in vendedores)
+    prom_ticket_grupo = (total_lista / total_boletos) if total_boletos else 0
 
     salida = []
     for v in vendedores:
         dias_desde_primera = max(1, dias_entre(v["primera"], hoy) + 1)
         sin_vender = dias_entre(v["ultima"], hoy)
         suyo_ticket = v["monto"] / v["boletos"] if v["boletos"] else 0
+        # su boleto medio a precio de lista, sin el descuento de la venta flash
+        suyo_lista = v["lista"] / v["boletos"] if v["boletos"] else 0
         # Las señales son observaciones con su número al lado, no calificaciones:
         # quien las lee tiene que poder verificarlas de un vistazo y decidir él.
         señales = []
@@ -2579,18 +2589,21 @@ def rendimiento():
             señales.append(f"vende poco: {v['boletos']} boleto{'' if v['boletos'] == 1 else 's'} "
                            f"y ${v['monto']/100:,.0f} (el promedio es {prom_boletos:.0f} "
                            f"y ${prom_monto/100:,.0f})")
-        if prom_ticket_grupo and suyo_ticket < prom_ticket_grupo * 0.75 and v["boletos"] >= 2:
-            señales.append(f"coloca boleto barato (${suyo_ticket/100:,.0f} de promedio, "
+        if prom_ticket_grupo and suyo_lista < prom_ticket_grupo * 0.75 and v["boletos"] >= 2:
+            señales.append(f"coloca boleto barato (${suyo_lista/100:,.0f} de promedio, "
                            f"contra ${prom_ticket_grupo/100:,.0f})")
-        if v["dias_con_venta"] == 1 and v["boletos"] >= 3:
-            señales.append(f"sus {v['boletos']} boletos salieron en 1 solo día, no ha vuelto")
+        # "no ha vuelto" solo si de verdad no ha vuelto: quien vendió todo HOY o ayer
+        # apenas está arrancando, y salía señalado como si llevara semanas parado.
+        if v["dias_con_venta"] == 1 and v["boletos"] >= 3 and sin_vender >= 3:
+            señales.append(f"sus {v['boletos']} boletos salieron en 1 solo día, "
+                           f"hace {sin_vender}")
         buenas = []
         if v["monto"] >= prom_monto * 1.5 and activos > 2:
             buenas.append(f"trae {v['monto']/prom_monto:.1f}× el dinero del promedio")
         if v["boletos"] >= prom_boletos * 1.5 and activos > 2:
             buenas.append(f"coloca {v['boletos']/prom_boletos:.1f}× los boletos del promedio")
-        if prom_ticket_grupo and suyo_ticket > prom_ticket_grupo * 1.25 and v["boletos"] >= 2:
-            buenas.append(f"coloca boleto caro (${suyo_ticket/100:,.0f} de promedio, "
+        if prom_ticket_grupo and suyo_lista > prom_ticket_grupo * 1.25 and v["boletos"] >= 2:
+            buenas.append(f"coloca boleto caro (${suyo_lista/100:,.0f} de promedio, "
                           f"contra ${prom_ticket_grupo/100:,.0f})")
         if v["dias_con_venta"] >= 5:
             buenas.append(f"constante: vendió en {v['dias_con_venta']} días distintos")
