@@ -356,6 +356,9 @@ function verColider(g) {
         <span>Repartió a su equipo <b>${fmtMoney(g.repartido)}</b></span>
         <span class="cl-queda">Le quedan <b>${fmtMoney(g.le_queda)}</b></span>
       </div>
+      ${g.ya_cortado > 0.005 ? `<div class="cl-antes">
+        No entran ${fmtMoney(g.ya_cortado)} que ya se cortaron antes de que fuera
+        colíder: ese dinero ya pagó su comisión.</div>` : ''}
       ${(g.repartos || []).length ? `
       <details class="cl-reps">
         <summary>Ver a quién le pagó (${g.repartos.length})</summary>

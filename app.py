@@ -3155,6 +3155,21 @@ def pagado_a(db, sid):
                       "WHERE seller_id=?", (sid,)).fetchone()["c"]
 
 
+def cobrado_del_grupo(db, colider_admin_id):
+    """El dinero del grupo que TODAVÍA no ha pagado comisión a nadie.
+
+    Un vendedor que ya venía trabajando y luego se vuelve colíder tiene entregas
+    hechas con su 10% de entonces: ese dinero ya cobró lo suyo y no puede volver a
+    generar el 20% del grupo —sería pagar dos veces por la misma venta—. Se
+    reconocen por su comisión: la que quedó en cero es la que juega con las reglas
+    del grupo."""
+    return db.execute(
+        """SELECT COALESCE(SUM(p.amount_cents),0) c FROM seller_payments p
+           JOIN sellers s ON s.id=p.seller_id
+           WHERE s.owner_admin_id=? AND s.hidden=0 AND p.commission_cents=0""",
+        (colider_admin_id,)).fetchone()["c"]
+
+
 def repartido_por(db, colider_admin_id):
     """Cuánto lleva repartido un colíder entre los suyos."""
     return db.execute("SELECT COALESCE(SUM(amount_cents),0) c FROM team_payments "
@@ -3193,10 +3208,7 @@ def pagar_a_su_gente(sid):
     # Nadie puede repartir más de lo que le tocó: si se pudiera, el número de "le
     # queda" saldría en negativo y ya no serviría para nada.
     duenio = sel["owner_admin_id"]
-    grupo_cobrado = db.execute(
-        "SELECT COALESCE(SUM(paid_cents),0) c FROM sellers WHERE owner_admin_id=? AND hidden=0",
-        (duenio,)).fetchone()["c"]
-    bolsa = int(round(grupo_cobrado * comision_colider(db, duenio) / 100))
+    bolsa = int(round(cobrado_del_grupo(db, duenio) * comision_colider(db, duenio) / 100))
     ya = repartido_por(db, duenio)
     if ya + monto > bolsa:
         libre = (bolsa - ya) / 100
@@ -3673,7 +3685,10 @@ def grupos_colider():
         # entregado, no lo vendido: la comisión nace cuando el dinero llega). De ahí
         # sale lo que reparta a su gente, si decide repartir.
         pct = comision_colider(db, l["id"])
-        cobrado_grupo = suma(filas, "paid_cents")
+        cobrado_grupo = cobrado_del_grupo(db, l["id"])
+        # lo que ya se cortó antes de que existiera el grupo: se enseña aparte para
+        # que el número de abajo no parezca un error
+        ya_cortado = suma(filas, "paid_cents") - cobrado_grupo
         gana = int(round(cobrado_grupo * pct / 100))
         repartido = repartido_por(db, l["id"])
         salida.append(dict(
@@ -3684,6 +3699,7 @@ def grupos_colider():
             pct=0,
             comision_ganada=money(gana),
             comision_base=money(cobrado_grupo),
+            ya_cortado=money(max(0, ya_cortado)),
             entrega_al_admin=money(cobrado_grupo - gana),
             repartido=money(repartido),
             le_queda=money(gana - repartido),

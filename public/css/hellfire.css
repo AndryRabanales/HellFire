@@ -1183,3 +1183,6 @@ button.rd-p:active{transform:scale(.97)}
   overflow:hidden;text-overflow:ellipsis}
 .cl-rep em{font:600 9.5px Manrope;font-style:normal;color:var(--cream-45)}
 .cl-rep b{font:800 12.5px "Space Grotesk";color:#7ee0a0;white-space:nowrap}
+/* aviso del dinero que ya se cortó antes de existir el grupo */
+.cl-antes{margin-top:7px;font:600 10px/1.5 Manrope;color:var(--cream-45);
+  border-left:2px solid rgba(255,120,40,.35);padding-left:8px}
