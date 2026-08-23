@@ -1199,13 +1199,28 @@ def mi_ambito(s):
     return s["admin"]["id"] if es_colider(s) else None
 
 def rate_limited(db, key):
+    """¿Está bloqueado por intentos fallidos? Devuelve los SEGUNDOS que faltan (0 si
+    puede pasar).
+
+    Antes solo decía sí o no, y el aviso era "espera unos minutos": el que se quedó
+    fuera no sabía si ya habían pasado, así que reintentaba a ciegas o se rendía. La
+    espera corre desde el ÚLTIMO intento fallido, no desde el primero."""
     max_tries = int(setting(db, "max_login_attempts"))
     window = int(setting(db, "lockout_minutes")) * 60
     cutoff = time.time() - window
     db.execute("DELETE FROM login_attempts WHERE ts < ?", (cutoff,))
-    n = db.execute("SELECT COUNT(*) c FROM login_attempts WHERE key=? AND ts>=?",
-                   (key, cutoff)).fetchone()["c"]
-    return n >= max_tries
+    r = db.execute("SELECT COUNT(*) c, COALESCE(MAX(ts),0) ult FROM login_attempts "
+                   "WHERE key=? AND ts>=?", (key, cutoff)).fetchone()
+    if r["c"] < max_tries:
+        return 0
+    return max(1, int(r["ult"] + window - time.time()))
+
+
+def aviso_bloqueo(seg):
+    """El mensaje con el tiempo que falta, en la unidad que se entiende."""
+    if seg > 90:
+        return f"Demasiados intentos. Espera {round(seg / 60)} minutos y vuelve a intentar."
+    return f"Demasiados intentos. Espera {seg} segundos y vuelve a intentar." 
 
 def record_attempt(db, key):
     db.execute("INSERT INTO login_attempts(key, ts) VALUES(?,?)", (key, time.time()))
@@ -1227,8 +1242,9 @@ def login_code():
     db = get_db()
     ip = client_ip()
     key = f"code:{ip}"
-    if rate_limited(db, key):
-        return jsonify(error="Demasiados intentos. Espera unos minutos."), 429
+    espera = rate_limited(db, key)
+    if espera:
+        return jsonify(error=aviso_bloqueo(espera), espera=espera), 429
     # RF-28: mensaje genérico. El código de invitados usa ESTE MISMO texto en su
     # primer intento; si fuera distinto, delataría que ese código sí existe.
     BAD = "Código incorrecto. Intenta de nuevo."
@@ -1268,8 +1284,9 @@ def admin_login():
     body = request.json or {}
     username = str(body.get("username", "")).strip()
     key = f"admin:{ip}"
-    if rate_limited(db, key):
-        return jsonify(error="Demasiados intentos. Espera unos minutos."), 429
+    espera = rate_limited(db, key)
+    if espera:
+        return jsonify(error=aviso_bloqueo(espera), espera=espera), 429
     # Sin distinguir mayúsculas: el teclado del celular capitaliza la primera letra
     # solo, y "Mikeug" no entraba aunque la cuenta fuera "MikeUg" —con un mensaje que
     # decía "usuario o contraseña incorrectos" y mandaba a todos a buscar la clave—.
@@ -1752,8 +1769,9 @@ def scan_login():
     genera el día del evento. Con el mismo candado de intentos que los demás logins."""
     db = get_db()
     ip = client_ip()
-    if rate_limited(db, "door:" + ip):
-        return jsonify(error="Demasiados intentos. Espera unos minutos."), 429
+    espera = rate_limited(db, "door:" + ip)
+    if espera:
+        return jsonify(error=aviso_bloqueo(espera), espera=espera), 429
     codigo = str((request.json or {}).get("code", "")).strip()
     puerta = setting(db, "door_code")
     if not puerta or codigo != puerta:
