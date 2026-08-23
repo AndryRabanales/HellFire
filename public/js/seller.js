@@ -293,7 +293,13 @@ async function pulso() {
     }
     toast(c.flash_manual ? '\u26a1 Empez\u00f3 la venta flash: precios nuevos'
                          : 'Termin\u00f3 la venta flash: precios normales');
-  } catch (_) { /* se reintenta en el siguiente tick */ }
+  } catch (e) {
+    // Si le cerraron el código o pusieron su grupo en pausa, el latido es lo primero
+    // que se entera. Antes se lo tragaba y el vendedor seguía viendo su panel como si
+    // nada hasta que intentaba generar un boleto —y se enteraba con el cliente
+    // enfrente—. Cualquier otro error sí se reintenta en el siguiente tick.
+    if (e && e.data && e.data._unauthorized) sessionLost();
+  }
 }
 setInterval(pulso, 5000);
 // al volver a la pantalla se pregunta ya, sin esperar el tick: el teléfono estuvo

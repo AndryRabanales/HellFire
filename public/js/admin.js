@@ -78,6 +78,12 @@ let liveTimer = null;
 const LIVE = { resumen: loadSummary, boletos: loadTicketsTable,
                movimientos: loadMovements, vendedores: loadSellers,
                cortesias: loadCortesias, ranking: loadRanking,
+               rendimiento: loadRendimiento,
+               // Aquí se da de alta y de baja gente: si un colíder crea un vendedor o
+               // yo elimino a un colíder desde otro teléfono, esta pantalla no puede
+               // seguir enseñando a alguien que ya no está.
+               colideres: loadColideres, grupos: loadGroups, gastos: loadExpenses,
+               ajustes: liveAjustes,
                // Catálogos se mira solo por la venta flash: si otro admin la prende
                // desde su teléfono, esta pantalla no puede seguir diciendo "apagada"
                // y ofrecer un botón que hace lo contrario de lo que se lee.
@@ -88,10 +94,23 @@ function startLive() {
   if (!fn) return;
   liveTimer = setInterval(() => {
     if (document.hidden) return;
+    // Con una ventanilla abierta, no. Repintar por debajo mueve los botones a media
+    // decisión: le das a "Desactivar" y aprietas el "Eliminar" que acaba de ocupar
+    // ese sitio. La pantalla se pone al día en cuanto se cierra.
+    if (!$('#modal-bg').classList.contains('hidden')) return;
     fn(true).catch(() => {});   // true = silencioso (solo actualiza si cambió)
   }, 4000);
 }
 function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } }
+
+/* Después de crear o borrar algo, la pantalla entera se pone al día en el acto en vez
+   de esperar al siguiente latido. Eliminar un colíder no solo lo quita de la lista de
+   cuentas: también desaparece su grupo de arriba, y verlo ahí cuatro segundos más deja
+   dudando de si el botón funcionó. */
+function refrescarPantalla() {
+  const fn = loaders[currentTab];
+  if (fn) fn().catch(e => { if (!guard(e)) toast(e.message); });
+}
 document.addEventListener('visibilitychange', () => { if (!document.hidden) startLive(); });
 
 /* ---------------- modal ---------------- */
@@ -518,11 +537,15 @@ function bloqueCL(t, n, monto, extra) {
    su corte— y el detalle completo, con su gente, se abre en su ventana. */
 let CL_GRUPOS = [];
 
-async function loadColideres() {
+let _sigCol = '';
+async function loadColideres(silent) {
   // las cuentas van en la misma pestaña, plegadas al final; si fallan no se llevan
   // por delante los números de los grupos, que es a lo que se entra aquí
-  if (!_coliderAplicado) loadAdmins().catch(() => {});
+  if (!_coliderAplicado) loadAdmins(silent).catch(() => {});
   const r = await API.get('/api/admin/grupos');
+  const sig = JSON.stringify(r.grupos);
+  if (silent && sig === _sigCol) return;
+  _sigCol = sig;
   // de mayor a menor: con seis grupos, el orden alfabético no dice nada
   CL_GRUPOS = (r.grupos || []).slice().sort((a, b) => b.total.monto - a.total.monto);
   if (!CL_GRUPOS.length) {
@@ -1536,7 +1559,7 @@ function pintaCuenta(s, c) {
         const fresca = await API.post(`/api/admin/sellers/${s.id}/team-pay`, { amount: monto });
         toast(`Le pagaste ${fmtMoney(monto)} a ${s.name}`);
         pintaCuenta(s, fresca);
-        loadSellers();
+        refrescarPantalla();
       } catch (e) { if (!guard(e)) $('#tp-err').textContent = e.message; }
       finally { tpOk.disabled = false; }
     };
@@ -1567,7 +1590,7 @@ function pintaCuenta(s, c) {
         toast(valor === '' ? `${s.name} vuelve a la comisión general`
                            : `Comisión de ${s.name}: ${valor}%`);
         pintaCuenta(s, fresca);
-        loadSellers();
+        refrescarPantalla();
       } catch (e) { if (!guard(e)) toast(e.message); }
     };
     btnCom.onclick = () => {
@@ -1615,7 +1638,7 @@ function pintaCuenta(s, c) {
           { amount: v, note: $('#pg-note').value.trim() });
         toast(r.balance <= 0.005 ? `${s.name}: cuenta SALDADA \u2713` : `Registrado \u00b7 le faltan ${fmtMoney(r.balance)}`);
         pintaCuenta(s, r);
-        loadSellers();
+        refrescarPantalla();
       } catch (e) { if (!guard(e)) $('#pg-err').textContent = e.message; }
     };
   }
@@ -1660,7 +1683,7 @@ function pintaCuenta(s, c) {
       try {
         await API.del(`/api/admin/payments/${b.dataset.del}`);
         pintaCuenta(s, await API.get(`/api/admin/sellers/${s.id}/payments`));
-        loadSellers();
+        refrescarPantalla();
       } catch (e) { if (!guard(e)) toast(e.message); }
     };
   });
@@ -1803,7 +1826,7 @@ $('#btn-sl-create').addEventListener('click', async () => {
       <div class="muted mt8">Comparte su código de acceso. Es su identidad en el sistema:</div>
       <div style="text-align:center;margin:18px 0"><span class="codechip" style="font-size:30px;padding:12px 22px">${esc(r.code)}</span></div>
       <button class="btn" onclick="closeModal()">Listo</button>`);
-    loadSellers();
+    refrescarPantalla();
   } catch (e) { if (!guard(e)) $('#sl-err').textContent = e.message; }
   finally { btn.disabled = false; }
 });
@@ -1827,7 +1850,7 @@ María Chi" style="resize:vertical;line-height:1.6"></textarea>
     try {
       const r = await API.post('/api/admin/sellers/bulk', { names });
       mostrarCodigos(r.creados, r.repetidos);
-      loadSellers();
+      refrescarPantalla();
     } catch (e) { if (!guard(e)) $('#bk-err').textContent = e.message; }
     finally { $('#bk-go').disabled = false; }
   };
@@ -1956,7 +1979,7 @@ async function editSeller(s) {
         // "" devuelve al vendedor a la comisión general
         commission_pct: $('#es-com-on').checked ? $('#es-com').value : '',
       });
-      closeModal(); toast('Vendedor actualizado'); loadSellers();
+      closeModal(); toast('Vendedor actualizado'); refrescarPantalla();
     } catch (e) { if (!guard(e)) $('#es-err').textContent = e.message; }
   };
 }
@@ -1973,7 +1996,7 @@ async function toggleSeller(s) {
   try {
     await API.post(`/api/admin/sellers/${s.id}/toggle`);
     toast(s.active ? 'Vendedor desactivado, sesión cerrada' : 'Vendedor reactivado');
-    loadSellers();
+    refrescarPantalla();
   } catch (e) { if (!guard(e)) toast(e.message); }
 }
 
@@ -1990,7 +2013,7 @@ async function deleteSeller(s) {
   try {
     await API.del('/api/admin/sellers/' + s.id);
     toast('Cuenta eliminada; sus boletos se conservan');
-    loadSellers();
+    refrescarPantalla();
   } catch (e) { if (!guard(e)) toast(e.message); }
 }
 
@@ -2922,7 +2945,7 @@ function filaCuenta(a, esYo) {
     try {
       const res = await API.post('/api/admin/admins/' + a.id + '/toggle', {});
       toast(res.active ? 'Cuenta reactivada' : 'Cuenta en pausa');
-      loadAdmins();
+      refrescarPantalla();
     } catch (e) { if (!guard(e)) toast(e.message); }
   };
   caja.appendChild(t);
@@ -2942,7 +2965,7 @@ function filaCuenta(a, esYo) {
         + `<br><br>Si solo quieres que pare un rato, usa <b style="color:var(--cream)">Desactivar</b>.`,
     });
     if (!ok) return;
-    try { await API.del('/api/admin/admins/' + a.id); toast(quees[0].toUpperCase() + quees.slice(1) + ' eliminado'); loadAdmins(); }
+    try { await API.del('/api/admin/admins/' + a.id); toast(quees[0].toUpperCase() + quees.slice(1) + ' eliminado'); refrescarPantalla(); }
     catch (e) { if (!guard(e)) toast(e.message); }
   };
   caja.appendChild(b);
@@ -2950,8 +2973,12 @@ function filaCuenta(a, esYo) {
   return row;
 }
 
-async function loadAdmins() {
+let _sigAdm = '';
+async function loadAdmins(silent) {
   const r = await API.get('/api/admin/admins');
+  const sig = JSON.stringify(r.admins);
+  if (silent && sig === _sigAdm) return;
+  _sigAdm = sig;
   const ad = $('#ad-list'), co = $('#co-list');
   if (ad) ad.innerHTML = '';
   if (co) co.innerHTML = '';
@@ -3219,6 +3246,11 @@ async function renderFlyerPreview(variant) {
 async function loadAjustes() {
   await Promise.all([loadSettings(), loadAdmins().catch(() => {})]);
 }
+
+/* En vivo, de Ajustes solo se refrescan las CUENTAS. Lo de arriba son campos que se
+   escriben —el nombre del evento, la comisión, el folio— y repintarlos cada 4 segundos
+   le borraría a alguien lo que está tecleando. */
+function liveAjustes(silent) { return loadAdmins(silent); }
 
 /* Cerrar la boletera: se toca una sola vez, la noche de la fiesta, y con prisa.
    Por eso el botón dice qué va a pasar (no "Activado/Desactivado") y pide una
