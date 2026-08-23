@@ -1329,13 +1329,20 @@ def me():
                    admin_id=s["admin"]["id"], **info)
 
 def puede_gestionar(db, admin, sel):
-    """¿Este admin puede editar / desactivar / eliminar a este vendedor?
+    """¿Puede editar / desactivar / eliminar a este vendedor?
 
-    Igual que con anular y con cobrar: "cada admin con lo suyo" vale entre pares,
-    no hacia abajo. Sin esta excepción, el equipo de un colíder —y el colíder
-    mismo— no los podría tocar NADIE: el colíder porque no llega a estas rutas,
-    y el admin porque el dueño figuraba como otro."""
-    return owns_seller(admin, sel) or duenio_es_colider(db, sel)
+    "Cada admin con lo suyo" vale entre pares, no hacia abajo: un admin también
+    alcanza al equipo de un colíder, porque si no, esos vendedores no los podría
+    tocar nadie.
+
+    Un colíder NO: él solo dentro de su grupo. Sin este freno, la excepción de
+    arriba lo dejaba entrar al equipo de OTRO colíder —el dueño también es colíder,
+    y la condición se cumplía igual—."""
+    if owns_seller(admin, sel):
+        return True
+    if (admin.get("role") if isinstance(admin, dict) else admin["role"]) == "colider":
+        return False
+    return duenio_es_colider(db, sel)
 
 def puede_cobrar(db, sesion, sel):
     """¿Quién le registra pagos a este vendedor?
@@ -1944,27 +1951,28 @@ def admin_tickets():
         tp["owner_admin_id"] = t["owner_admin_id"]
         tp["owner_admin_name"] = t["owner_admin_name"]
         # el SERVIDOR decide si este admin puede anular este boleto (única verdad)
-        if t["seller_id"] is not None:
+        if es_colider(s):
+            # el colíder anula lo de SU grupo y nada más: mismo candado que la ruta
+            cv = t["owner_admin_id"] == me["id"]
+        elif t["seller_id"] is not None:
             cv = (t["owner_admin_id"] is None or t["owner_admin_id"] == me["id"]
                   or (t["owner_admin_id"] in colideres))
         else:   # boleto generado por un admin → solo ese mismo admin
             creator = (t["seller_name"] or "").replace("Admin: ", "", 1)
             cv = creator == me["username"]
-        # anular es de admins. Al colíder ni se le pinta el botón.
-        tp["can_void"] = cv and not es_colider(s)
+        tp["can_void"] = cv
         out.append(tp)
     return jsonify(tickets=out)
 
 def can_void(admin, db, t):
-    """Solo el admin dueño del vendedor puede anular sus boletos. Boletos generados
-    directamente por un admin: solo ese mismo admin. Vendedores sin dueño (legado):
-    cualquier admin."""
+    """Quién puede anular este boleto: el admin dueño del vendedor, o el colíder si el
+    boleto salió de SU grupo. Boletos generados directamente por un admin: solo ese
+    mismo admin. Vendedores sin dueño (legado): cualquier admin."""
     if t["seller_id"] is not None:
         sel = db.execute("SELECT * FROM sellers WHERE id=?", (t["seller_id"],)).fetchone()
         if sel and sel["owner_admin_id"] is not None and sel["owner_admin_id"] != admin["id"]:
-            # Los del equipo de un colíder son la excepción: él tiene prohibido anular,
-            # así que si el admin tampoco pudiera, esos boletos no los podría cancelar
-            # NADIE. La regla de "cada admin con lo suyo" es entre pares, no hacia abajo.
+            # Los del equipo de un colíder los puede anular también el admin: la regla
+            # de "cada admin con lo suyo" es entre pares, no hacia abajo.
             if not duenio_es_colider(db, sel):
                 return False, sel["owner_admin_name"]
         return True, None
@@ -1976,7 +1984,11 @@ def can_void(admin, db, t):
 
 @app.post("/api/admin/tickets/<int:tid>/void")
 def void_ticket(tid):
-    s = require_admin()
+    # El colíder también anula, pero SOLO lo de su grupo (el candado va abajo). Es
+    # quien está con el comprador cuando se cae una venta; mandarlo a pedir permiso
+    # para cada boleto equivocado le quita el trabajo a él y se lo pasa al
+    # organizador. Todo queda firmado con su nombre en Movimientos.
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -1991,9 +2003,17 @@ def void_ticket(tid):
         return jsonify(error="no existe"), 404
     if t["status"] == "void":
         return jsonify(error="Ya estaba anulado"), 400
-    ok, owner = can_void(s["admin"], db, t)
-    if not ok:
-        return jsonify(error=f"Solo {owner} (admin del vendedor) puede anular este boleto"), 403
+    duenio = mi_ambito(s)
+    if duenio:
+        # un colíder solo dentro de su grupo: ni los de otro grupo ni los del admin
+        sel = db.execute("SELECT owner_admin_id FROM sellers WHERE id=?",
+                         (t["seller_id"],)).fetchone() if t["seller_id"] else None
+        if not sel or sel["owner_admin_id"] != duenio:
+            return jsonify(error="Ese boleto no es de tu grupo"), 403
+    else:
+        ok, owner = can_void(s["admin"], db, t)
+        if not ok:
+            return jsonify(error=f"Solo {owner} (admin del vendedor) puede anular este boleto"), 403
     db.execute("UPDATE tickets SET status='void', voided_at=?, voided_by=?, void_reason=? WHERE id=?",
                (now_iso(), s["admin"]["username"], reason, tid))
     audit(db, s["admin"]["username"], "anulacion",
@@ -3497,6 +3517,10 @@ def edit_seller(sid):
         return jsonify(error="no existe"), 404
     if not puede_gestionar(db, s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede modificar a este vendedor"), 403
+    # su propia ficha no: se quedaría sin cuenta de vendedor y su grupo sin cabeza
+    if es_colider(s) and sel["es_lider"]:
+        return jsonify(error="Tu propia cuenta no la puedes dar de baja. "
+                             "Pídeselo al organizador."), 403
     name = str(b.get("name", sel["name"])).strip() or sel["name"]
     code = str(b.get("code", sel["code"])).strip()
     if code != sel["code"]:
@@ -3552,7 +3576,10 @@ def edit_seller(sid):
 
 @app.post("/api/admin/sellers/<int:sid>/toggle")
 def toggle_seller(sid):
-    s = require_admin()
+    # El colíder da de baja a los SUYOS: él los dio de alta y él sabe quién ya no
+    # está. El candado de abajo (puede_gestionar) es el que lo mantiene dentro de su
+    # grupo, y su nombre queda en Movimientos.
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -3564,6 +3591,10 @@ def toggle_seller(sid):
         return jsonify(error="no existe"), 404
     if not puede_gestionar(db, s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede modificar a este vendedor"), 403
+    # su propia ficha no: se quedaría sin cuenta de vendedor y su grupo sin cabeza
+    if es_colider(s) and sel["es_lider"]:
+        return jsonify(error="Tu propia cuenta no la puedes dar de baja. "
+                             "Pídeselo al organizador."), 403
     new = 0 if sel["active"] else 1
     db.execute("UPDATE sellers SET active=? WHERE id=?", (new, sid))
     if not new:
@@ -3576,7 +3607,10 @@ def toggle_seller(sid):
 
 @app.delete("/api/admin/sellers/<int:sid>")
 def delete_seller(sid):
-    s = require_admin()
+    # El colíder da de baja a los SUYOS: él los dio de alta y él sabe quién ya no
+    # está. El candado de abajo (puede_gestionar) es el que lo mantiene dentro de su
+    # grupo, y su nombre queda en Movimientos.
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -3588,6 +3622,10 @@ def delete_seller(sid):
         return jsonify(error="no existe"), 404
     if not puede_gestionar(db, s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede eliminar a este vendedor"), 403
+    # su propia ficha no: se quedaría sin cuenta de vendedor y su grupo sin cabeza
+    if es_colider(s) and sel["es_lider"]:
+        return jsonify(error="Tu propia cuenta no la puedes dar de baja. "
+                             "Pídeselo al organizador."), 403
     n = db.execute("SELECT COUNT(*) c FROM tickets WHERE seller_id=?", (sid,)).fetchone()["c"]
     # RF-87: se elimina la cuenta, los boletos se conservan con su nombre
     db.execute("UPDATE sellers SET deleted=1, active=0, code=NULL WHERE id=?", (sid,))

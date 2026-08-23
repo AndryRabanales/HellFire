@@ -171,7 +171,10 @@ select.input option{background:#160603;color:var(--cream)}
   50%    {box-shadow:0 0 0 9999px rgba(0,0,0,.8),0 0 0 2px var(--ember),0 0 44px rgba(255,110,30,.9)}
 }
 
-#tour .tr-globo{position:fixed;left:14px;right:14px;padding:15px 16px 14px;
+/* En pantalla ancha, un globo de borde a borde deja la frase perdida en medio de
+   un renglón larguísimo: se limita y se centra. */
+#tour .tr-globo{position:fixed;left:14px;right:14px;max-width:520px;margin:0 auto;
+  padding:15px 16px 14px;
   border-radius:16px;background:linear-gradient(160deg,#2a1209,#160704);
   border:1px solid rgba(255,122,46,.45);
   box-shadow:0 14px 40px rgba(0,0,0,.7);animation:pop .22s ease}
@@ -1200,3 +1203,7 @@ button.rd-p:active{transform:scale(.97)}
 .gu-x{font:500 12px/1.55 Manrope;color:var(--cream-60)}
 .gu-x b{color:var(--cream);font-weight:700}
 .gu-x s{color:var(--cream-45)}
+/* la salida de la guía: siempre visible, para que nadie quede encerrado */
+.tr-skip{position:absolute;top:10px;right:12px;border:none;background:none;cursor:pointer;
+  font:600 10px Manrope;color:var(--cream-45);padding:4px 6px}
+.tr-skip:active{color:var(--cream)}

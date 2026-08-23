@@ -293,9 +293,12 @@ function guiaEquipo() {
       'En esa misma cuenta hay un bloque verde para darles su parte, con el atajo del '
       + '10%. Sale de <b>tu</b> comisión y queda anotado, así nadie discute después '
       + 'quién cobró cuánto.')
+    + bloqueG('Anular y dar de baja',
+      'Puedes <b>anular boletos</b> de tu gente y <b>darlos de baja</b> cuando ya no '
+      + 'estén. Solo dentro de tu grupo, y queda firmado con tu nombre.')
     + bloqueG('Lo que NO puedes',
-      'Anular boletos, cambiar precios, poner porcentajes, escanear en la puerta ni '
-      + 'ver a vendedores de otro grupo. Eso es del organizador.');
+      'Cambiar precios, poner porcentajes, cambiarles el nombre o el código, '
+      + 'escanear en la puerta, ni ver a vendedores de otro grupo.');
 }
 
 function guiaCorte() {
@@ -417,20 +420,26 @@ const TOUR_CL = [
   { sel: '#sl-body', tab: 'vendedores',
     txt: 'En <b>Cuenta</b> le cobras lo que vendió. Tu gente entrega el <b>100%</b>: no se queda comisión.' },
   { sel: '#tabs .tab[data-tab="colideres"]',
-    txt: 'Aquí está <b>tu corte</b>: el <b>20%</b> de todo lo que junta tu grupo.' },
+    txt: 'Aquí est\u00e1 <b>tu grupo</b>: lo que vendiste t\u00fa, lo de tu gente y tu corte.' },
   { sel: '#cl-lista', tab: 'colideres',
-    txt: 'Crece cada vez que <b>cobras</b>, no cuando venden. De ahí le pagas a los tuyos si quieres.' },
+    txt: 'Tu corte es el <b>20%</b> de lo que junta el grupo. Sube cuando <b>cobras</b>, '
+       + 'no cuando ellos venden. De ah\u00ed sale lo que les pagues.' },
 ];
 
 function cerrarTourCL(marcar) {
   const c = $('#tour');
   if (c) c.remove();
   document.body.style.overflow = '';
+  startLive();                       // se reanuda el refresco que se pausó
   if (marcar) API.post('/api/admin/tutorial-visto').catch(() => {});
 }
 
 async function tourColider(i = 0) {
   if (i >= TOUR_CL.length) return cerrarTourCL(true);
+  // El panel se refresca solo cada 4 s. Con la guía encima, ese refresco volvía a
+  // dibujar la lista de abajo y el recuadro iluminado quedaba señalando un elemento
+  // que ya no existía: la pantalla se veía trabada. Se pausa mientras dure la guía.
+  stopLive();
   const paso = TOUR_CL[i];
   // el paso puede vivir en otra pestaña: se abre y se espera a que pinte
   if (paso.tab && currentTab !== paso.tab) {
@@ -462,7 +471,11 @@ async function tourColider(i = 0) {
         `<span class="tr-dot${k <= i ? ' on' : ''}"></span>`).join('')}</div>
       <button class="btn sm" id="tr-next" style="width:auto;padding:11px 20px">
         ${ultimo ? 'Listo' : 'Siguiente \u203a'}</button>
-    </div>`;
+    </div>
+    ${ultimo ? '' : '<button class="tr-skip" id="tr-skip">Saltar gu\u00eda</button>'}`;
+  // una salida siempre a la vista: si algo se atora, nadie se queda encerrado
+  const sk = $('#tr-skip');
+  if (sk) sk.onclick = () => cerrarTourCL(true);
   const alto = globo.offsetHeight || 150;
   const cabeAbajo = r.bottom + 16 + alto < window.innerHeight;
   globo.className = 'tr-globo ' + (cabeAbajo ? 'abajo' : 'arriba');
@@ -1793,19 +1806,20 @@ function menuVendedor(s) {
   modal(`<div class="h1" style="font-size:17px">${esc(s.name)}</div>
     <div class="muted mt8" style="font-size:12px">Código ${s.code ? esc(s.code) : 'privado'} \u00b7 ${s.tickets} boleto(s) vendidos</div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <!-- El colíder da de baja a los suyos: él los dio de alta y sabe quién ya no
+           está. Lo único que sigue siendo del organizador es cambiarles el nombre o
+           el código, que es identidad y no debe moverse dentro del grupo. -->
       ${_coliderAplicado ? `<div class="muted" style="font-size:12px;line-height:1.5">
-        Cambiar el nombre, quitarle el acceso o eliminarlo lo hace un administrador.
-        Pídeselo y lo resuelve.</div>` : `
-      <button class="btn ghost" id="mv-edit">Editar nombre</button>
+        Cambiarle el nombre o el código lo hace un administrador.</div>` : `
+      <button class="btn ghost" id="mv-edit">Editar nombre</button>`}
       <button class="btn ghost" id="mv-toggle">${s.active ? 'Desactivar' : 'Reactivar'} su acceso</button>
-      <button class="btn danger" id="mv-del">Eliminar vendedor</button>`}
+      <button class="btn danger" id="mv-del">Eliminar vendedor</button>
       <button class="btn quiet" onclick="closeModal()">Cancelar</button>
     </div>`);
-  if (!_coliderAplicado) {
-    $('#mv-edit').onclick = () => editSeller(s);
-    $('#mv-toggle').onclick = () => toggleSeller(s);
-    $('#mv-del').onclick = () => deleteSeller(s);
-  }
+  // editar el nombre sigue siendo del organizador; dar de baja, no
+  if (!_coliderAplicado) $('#mv-edit').onclick = () => editSeller(s);
+  $('#mv-toggle').onclick = () => toggleSeller(s);
+  $('#mv-del').onclick = () => deleteSeller(s);
 }
 
 async function editSeller(s) {
