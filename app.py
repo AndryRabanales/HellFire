@@ -1270,7 +1270,12 @@ def admin_login():
     key = f"admin:{ip}"
     if rate_limited(db, key):
         return jsonify(error="Demasiados intentos. Espera unos minutos."), 429
-    admin = db.execute("SELECT * FROM admins WHERE username=?", (username,)).fetchone()
+    # Sin distinguir mayúsculas: el teclado del celular capitaliza la primera letra
+    # solo, y "Mikeug" no entraba aunque la cuenta fuera "MikeUg" —con un mensaje que
+    # decía "usuario o contraseña incorrectos" y mandaba a todos a buscar la clave—.
+    # La contraseña sí distingue, como debe ser.
+    admin = db.execute("SELECT * FROM admins WHERE LOWER(username)=LOWER(?)",
+                       (username,)).fetchone()
     if not admin or not check_password(str(body.get("password", "")), admin["pass_hash"]):
         record_attempt(db, key); db.commit()
         return jsonify(error="Usuario o contraseña incorrectos"), 401
@@ -3597,8 +3602,12 @@ def create_admin():
     password = str(b.get("password", ""))
     if len(username) < 3 or len(password) < 8:
         return jsonify(error="Usuario mín. 3 caracteres y contraseña mín. 8"), 400
-    if db.execute("SELECT 1 FROM admins WHERE username=?", (username,)).fetchone():
-        return jsonify(error="Ese usuario ya existe"), 400
+    # también sin distinguir mayúsculas: si existieran "MikeUg" y "mikeug" a la vez,
+    # el login no sabría cuál es cuál
+    ya = db.execute("SELECT username FROM admins WHERE LOWER(username)=LOWER(?)",
+                    (username,)).fetchone()
+    if ya:
+        return jsonify(error=f"Ese usuario ya existe (está guardado como «{ya['username']}»)"), 400
     rol = "colider" if b.get("role") == "colider" else "admin"
     db.execute("INSERT INTO admins(username, pass_hash, created_at, role) VALUES(?,?,?,?)",
                (username, hash_password(password), now_iso(), rol))

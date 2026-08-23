@@ -44,7 +44,11 @@
     <div class="sub" style="margin-top:14px">Administración</div>
   </div>
   <div style="margin-top:auto;display:flex;flex-direction:column;gap:12px">
-    <input class="input" id="lg-user" placeholder="Usuario" autocomplete="username">
+    <!-- El teclado del celular pone mayúscula a la primera letra por su cuenta, y con
+         eso el usuario ya no coincidía. Se apaga aquí, y además el servidor compara
+         sin distinguir mayúsculas. -->
+    <input class="input" id="lg-user" placeholder="Usuario" autocomplete="username"
+           autocapitalize="none" autocorrect="off" spellcheck="false">
     <input class="input" id="lg-pass" type="password" placeholder="Contraseña" autocomplete="current-password">
     <div class="err" id="lg-err"></div>
     <button class="btn" id="btn-login">ENTRAR&nbsp;&nbsp;⟶</button>
