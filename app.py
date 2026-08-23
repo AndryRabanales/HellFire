@@ -196,7 +196,10 @@ CREATE TABLE IF NOT EXISTS admins (
   username TEXT NOT NULL UNIQUE,
   pass_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'admin',   -- admin | colider (el colíder ve solo su grupo)
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  last_login TEXT,                      -- la última vez que entró: sirve para saber
+                                        -- si un colíder ya está usando su cuenta
+  tutorial_seen INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS sellers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -624,6 +627,9 @@ def init_db():
                    "es_flash INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE price_phases ADD COLUMN IF NOT EXISTS flash_price_cents INTEGER")
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS flash_price_cents INTEGER")
+        db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS last_login TEXT")
+        db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
+                   "tutorial_seen INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS client_ref TEXT")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
@@ -682,6 +688,11 @@ def init_db():
         tcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
         if "flash_price_cents" not in tcols:
             db.execute("ALTER TABLE ticket_types ADD COLUMN flash_price_cents INTEGER")
+        acols = [r["name"] for r in db.execute("PRAGMA table_info(admins)").fetchall()]
+        if "last_login" not in acols:
+            db.execute("ALTER TABLE admins ADD COLUMN last_login TEXT")
+        if "tutorial_seen" not in acols:
+            db.execute("ALTER TABLE admins ADD COLUMN tutorial_seen INTEGER NOT NULL DEFAULT 0")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -1265,6 +1276,9 @@ def admin_login():
         return jsonify(error="Usuario o contraseña incorrectos"), 401
     clear_attempts(db, key)
     token = create_session(db, "admin", admin["id"])
+    # se apunta la entrada: es la única forma de saber si un colíder ya está usando
+    # su cuenta o si el usuario y la contraseña siguen en un papel sin abrir
+    db.execute("UPDATE admins SET last_login=? WHERE id=?", (now_iso(), admin["id"]))
     db.commit()
     return jsonify(token=token, username=admin["username"])
 
@@ -1833,9 +1847,16 @@ def admin_summary():
                "collected": money(r["paid_cents"]),
                "settled": r["sold_cents"] > 0 and r["paid_cents"] >= r["sold_cents"]}
               for r in by_admin]
+    # ¿le falta el tutorial? Solo al colíder: el admin ya conoce su panel, y a él la
+    # guía le taparía la pantalla cada vez que entra.
+    falta_tour = False
+    if duenio:
+        r = db.execute("SELECT tutorial_seen FROM admins WHERE id=?", (duenio,)).fetchone()
+        falta_tour = bool(r and not r["tutorial_seen"])
     return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0),
                    entered=tot["entered"] or 0, collected=money(paid), by_admin=admins,
-                   soy_colider=bool(duenio), yo=s["admin"]["username"])
+                   soy_colider=bool(duenio), yo=s["admin"]["username"],
+                   tutorial_pendiente=falta_tour)
 
 def ticket_filters(prefix="", con_cortesias=False):
     """WHERE dinámico compartido por la tabla admin y la exportación (RF-93).
@@ -3653,6 +3674,19 @@ def delete_admin(aid):
     db.commit()
     return jsonify(ok=True)
 
+@app.post("/api/admin/tutorial-visto")
+def tutorial_panel_visto():
+    """El colíder terminó su guía. No se vuelve a mostrar, ni cambiando de teléfono:
+    se apunta en el servidor, no en el navegador."""
+    s = require_panel()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    db.execute("UPDATE admins SET tutorial_seen=1 WHERE id=?", (s["admin"]["id"],))
+    db.commit()
+    return jsonify(ok=True)
+
+
 @app.get("/api/admin/grupos")
 def grupos_colider():
     """Cada colíder con sus números partidos en dos: lo que vendió ÉL en persona y lo
@@ -3664,7 +3698,8 @@ def grupos_colider():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     duenio = mi_ambito(s)
-    lideres = db.execute("SELECT id, username FROM admins WHERE role='colider' ORDER BY username").fetchall()
+    lideres = db.execute("SELECT id, username, last_login FROM admins WHERE role='colider' "
+                         "ORDER BY username").fetchall()
     if duenio:
         lideres = [l for l in lideres if l["id"] == duenio]
     salida = []
@@ -3672,6 +3707,7 @@ def grupos_colider():
         filas = db.execute(f"""
             SELECT s.id, s.name, s.code, s.es_lider, s.deleted, s.paid_cents,
                    COUNT(t.id) AS n,
+                   MAX(SUBSTR(t.created_at,1,10)) AS ultima,
                    COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS cents
             FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id AND t.status!='void' 
             WHERE s.hidden=0 AND s.owner_admin_id=?
@@ -3719,9 +3755,11 @@ def grupos_colider():
                         vendedores=len([r for r in equipo if not r["deleted"]])),
             total=dict(boletos=suma(filas, "n"), monto=money(suma(filas, "cents")),
                        cobrado=money(suma(filas, "paid_cents"))),
+            ultimo_acceso=l["last_login"],
             miembros=[dict(id=r["id"], name=r["name"], code=r["code"],
                            es_lider=bool(r["es_lider"]), deleted=bool(r["deleted"]),
                            boletos=r["n"] or 0, monto=money(r["cents"] or 0),
+                           ultima=r["ultima"],
                            cobrado=money(r["paid_cents"] or 0)) for r in filas],
         ))
     # el peso de cada grupo se calcula al final, cuando ya se conoce el total vendido

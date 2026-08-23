@@ -132,6 +132,9 @@ async function loadSummary(silent) {
   if (silent && sig === _sigSummary) return;   // nada cambió → no re-dibujar
   _sigSummary = sig;
   aplicarColider(s.soy_colider);
+  // la guía del colíder, una sola vez: se la pone el servidor, así que cambiar de
+  // teléfono no se la repite y cerrar el panel a medias sí
+  if (s.soy_colider && s.tutorial_pendiente && !$('#tour')) setTimeout(tourColider, 700);
   $('#sum-stats').innerHTML = `
     <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}</div></div>
     <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
@@ -255,6 +258,90 @@ function aplicarColider(esCo) {
   if (esCo && VEDADAS.includes(currentTab)) openTab('resumen');
 }
 
+/* "hace 2 días" se lee de un vistazo; una fecha hay que restarla mentalmente. */
+function haceCuanto(iso) {
+  if (!iso) return '';
+  const d = new Date(String(iso).replace(' ', 'T'));
+  if (isNaN(d)) return '';
+  const min = Math.round((Date.now() - d.getTime()) / 60000);
+  if (min < 2) return 'ahorita';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const dias = Math.round(h / 24);
+  return dias === 1 ? 'ayer' : `hace ${dias} días`;
+}
+
+/* ---------------- la guía del colíder (una sola vez) ----------------
+   Igual que la del vendedor: se oscurece la pantalla, se ilumina de lo que se está
+   hablando y al lado va una frase. No es un manual —son cinco renglones— y lo que
+   explica es lo único que él necesita saber para arrancar: dónde da de alta a su
+   gente, dónde les cobra, y de dónde sale su 20%. */
+const TOUR_CL = [
+  { sel: '#tabs .tab[data-tab="vendedores"]',
+    txt: 'Aquí das de alta a <b>tu gente</b> y les generas su código.' },
+  { sel: '#btn-sl-create', tab: 'vendedores',
+    txt: 'Con <b>+ Crear</b>. El código que sale es con el que entra a vender.' },
+  { sel: '#sl-body', tab: 'vendedores',
+    txt: 'En <b>Cuenta</b> le cobras lo que vendió. Tu gente entrega el <b>100%</b>: no se queda comisión.' },
+  { sel: '#tabs .tab[data-tab="colideres"]',
+    txt: 'Aquí está <b>tu corte</b>: el <b>20%</b> de todo lo que junta tu grupo.' },
+  { sel: '#cl-lista', tab: 'colideres',
+    txt: 'Crece cada vez que <b>cobras</b>, no cuando venden. De ahí le pagas a los tuyos si quieres.' },
+];
+
+function cerrarTourCL(marcar) {
+  const c = $('#tour');
+  if (c) c.remove();
+  document.body.style.overflow = '';
+  if (marcar) API.post('/api/admin/tutorial-visto').catch(() => {});
+}
+
+async function tourColider(i = 0) {
+  if (i >= TOUR_CL.length) return cerrarTourCL(true);
+  const paso = TOUR_CL[i];
+  // el paso puede vivir en otra pestaña: se abre y se espera a que pinte
+  if (paso.tab && currentTab !== paso.tab) {
+    openTab(paso.tab);
+    await new Promise(r => setTimeout(r, 900));
+  }
+  const el = $(paso.sel);
+  if (!el || el.offsetParent === null) return tourColider(i + 1);
+  el.scrollIntoView({ block: 'center', behavior: 'instant' });
+
+  let c = $('#tour');
+  if (!c) {
+    c = document.createElement('div');
+    c.id = 'tour';
+    c.innerHTML = '<div class="tr-foco"></div><div class="tr-globo"></div>';
+    document.body.appendChild(c);
+    document.body.style.overflow = 'hidden';
+  }
+  const r = el.getBoundingClientRect(), pad = 7;
+  c.querySelector('.tr-foco').style.cssText =
+    `top:${r.top - pad}px;left:${r.left - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px`;
+
+  const ultimo = i === TOUR_CL.length - 1;
+  const globo = c.querySelector('.tr-globo');
+  globo.innerHTML = `<div class="tr-num">${i + 1} de ${TOUR_CL.length}</div>
+    <div class="tr-txt">${paso.txt}</div>
+    <div class="tr-pie">
+      <div class="tr-dots">${TOUR_CL.map((_, k) =>
+        `<span class="tr-dot${k <= i ? ' on' : ''}"></span>`).join('')}</div>
+      <button class="btn sm" id="tr-next" style="width:auto;padding:11px 20px">
+        ${ultimo ? 'Listo' : 'Siguiente \u203a'}</button>
+    </div>`;
+  const alto = globo.offsetHeight || 150;
+  const cabeAbajo = r.bottom + 16 + alto < window.innerHeight;
+  globo.className = 'tr-globo ' + (cabeAbajo ? 'abajo' : 'arriba');
+  globo.style.top = cabeAbajo ? (r.bottom + 16) + 'px'
+                              : Math.max(10, r.top - 16 - alto) + 'px';
+  const g = globo.getBoundingClientRect();
+  const cx = Math.min(Math.max(r.left + r.width / 2, g.left + 22), g.right - 22);
+  globo.style.setProperty('--pico', (cx - g.left) + 'px');
+  $('#tr-next').onclick = () => ultimo ? cerrarTourCL(true) : tourColider(i + 1);
+}
+
 /* ---------------- colíderes: el grupo, partido en dos ----------------
    Un solo número por grupo no sirve para decidir nada: si un colíder trae 200 mil,
    importa muchísimo si los vendió él o su equipo. Por eso van las dos mitades
@@ -300,6 +387,8 @@ async function loadColideres() {
         <span class="resto" style="width:${100 - (g.total.monto / tope * 100)}%"></span>
       </div>
       <div class="cl-chips">
+        ${g.ultimo_acceso ? `<span title="Última vez que entró al panel">entró ${esc(haceCuanto(g.ultimo_acceso))}</span>`
+                          : '<span class="rojo">nunca ha entrado</span>'}
         <span>Él ${pctEl}%</span>
         <span>Equipo ${100 - pctEl}%</span>
         <span class="oro">Su corte ${g.comision_pct}% · ${fmtMoney(g.comision_ganada)}</span>
@@ -327,6 +416,9 @@ function verColider(g) {
         <div class="h1" style="font-size:18px;line-height:1.2">${esc(g.nombre)}</div>
         <div class="muted" style="font-size:11.5px;margin-top:2px">Colíder ·
           ${g.miembros.length} en su equipo · ${g.pct}% de toda la venta</div>
+        <div style="font:600 10.5px Manrope;margin-top:3px;color:${g.ultimo_acceso ? '#7ee0a0' : '#ff8a8a'}">
+          ${g.ultimo_acceso ? '● Ya entró al panel · ' + esc(haceCuanto(g.ultimo_acceso))
+                            : '● Todavía no entra al panel'}</div>
       </div>
       <div style="text-align:right">
         <div style="font:800 21px 'Space Grotesk';color:var(--cream)">${fmtMoney(g.total.monto)}</div>
@@ -375,7 +467,8 @@ function verColider(g) {
     <div class="rd-scroll">
       ${venden.length ? `<div class="rd-eq" style="border:none;padding-top:0">${venden.map(m => `
         <div class="rd-m cl-m" data-id="${m.id}" data-n="${esc(m.name)}" data-t="${m.monto}">
-          <span class="rd-mn">${m.es_lider ? '<b class="rd-est">★</b> ' : ''}${esc(m.name)}</span>
+          <span class="rd-mn">${m.es_lider ? '<b class="rd-est">★</b> ' : ''}${esc(m.name)}
+            <u>${m.ultima ? 'vendió ' + esc(haceCuanto(m.ultima)) : ''}</u></span>
           <span class="rd-mb"><i style="width:${Math.round(m.monto / tope * 100)}%"></i></span>
           <span class="rd-mv">${fmtMoney(m.monto)}<em>${m.boletos}</em></span>
         </div>`).join('')}</div>`

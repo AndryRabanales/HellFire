@@ -1186,3 +1186,5 @@ button.rd-p:active{transform:scale(.97)}
 /* aviso del dinero que ya se cortó antes de existir el grupo */
 .cl-antes{margin-top:7px;font:600 10px/1.5 Manrope;color:var(--cream-45);
   border-left:2px solid rgba(255,120,40,.35);padding-left:8px}
+.cl-chips .rojo{color:#ff8a8a;border-color:rgba(232,112,106,.35);background:rgba(232,112,106,.1)}
+.rd-mn u{display:block;font:600 9px Manrope;color:var(--cream-45);text-decoration:none;margin-top:1px}
