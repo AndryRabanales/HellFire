@@ -295,6 +295,7 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   actor TEXT NOT NULL,
+  actor_role TEXT,                 -- congelado: si borran al colíder, su rastro sigue siendo suyo
   action TEXT NOT NULL,
   detail TEXT NOT NULL,
   created_at TEXT NOT NULL
@@ -631,6 +632,7 @@ def init_db():
         db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
                    "tutorial_seen INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS client_ref TEXT")
+        db.execute("ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS actor_role TEXT")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
@@ -693,6 +695,14 @@ def init_db():
             db.execute("ALTER TABLE admins ADD COLUMN last_login TEXT")
         if "tutorial_seen" not in acols:
             db.execute("ALTER TABLE admins ADD COLUMN tutorial_seen INTEGER NOT NULL DEFAULT 0")
+        lcols = [r["name"] for r in db.execute("PRAGMA table_info(audit_log)").fetchall()]
+        if "actor_role" not in lcols:
+            db.execute("ALTER TABLE audit_log ADD COLUMN actor_role TEXT")
+    db.commit()
+    # Los renglones viejos no traen rol. Se les pone el que tiene hoy quien los firmó;
+    # de ahí en adelante cada uno se guarda con el suyo.
+    db.execute("UPDATE audit_log SET actor_role = (SELECT a.role FROM admins a "
+               "WHERE a.username = audit_log.actor) WHERE actor_role IS NULL")
     db.commit()
     for k, v in DEFAULT_SETTINGS.items():
         db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING", (k, v))
@@ -1076,8 +1086,15 @@ def backup_loop():
 # ---------------------------------------------------------------- auth / sesiones
 
 def audit(db, actor, action, detail):
-    db.execute("INSERT INTO audit_log(actor, action, detail, created_at) VALUES(?,?,?,?)",
-               (actor, action, detail, now_iso()))
+    """Se guarda QUÉ ERA quien lo hizo, no solo su nombre.
+
+    Si mañana borro a un colíder, sus movimientos siguen en el registro pero ya no
+    hay a quién preguntarle el rol: la vista "mis colíderes" perdería justo el
+    rastro que uno quiere repasar cuando saca a alguien."""
+    r = db.execute("SELECT role FROM admins WHERE username=?", (actor,)).fetchone()
+    db.execute("INSERT INTO audit_log(actor, actor_role, action, detail, created_at) "
+               "VALUES(?,?,?,?,?)",
+               (actor, (r["role"] if r else None), action, detail, now_iso()))
 
 # Los boletos de INVITADOS (vendedor oculto) no son una venta: se excluyen del
 # resumen, la cobranza, el listado de boletos y los movimientos. Siguen
@@ -3884,10 +3901,39 @@ def get_audit():
         rows = db.execute("SELECT * FROM audit_log WHERE action != 'generacion' "
                           "AND actor = ? ORDER BY id DESC LIMIT 500",
                           (s["admin"]["username"],)).fetchall()
+        return jsonify(log=[dict(r) for r in rows], colideres=[])
+
+    # Para el organizador el registro viene en dos vistas. "Todo" mezcla sus propios
+    # cambios de precio con lo que hacen seis colíderes, y lo que un colíder hace
+    # —anular un boleto, dar de baja a alguien— es justo lo que hay que poder repasar
+    # sin ir cazándolo entre cien líneas.
+    colideres = [r["username"] for r in db.execute(
+        "SELECT username FROM admins WHERE role='colider' ORDER BY username").fetchall()]
+    quien = (request.args.get("quien") or "todos").strip()
+
+    if quien == "colideres" or quien in colideres:
+        if quien == "colideres":
+            # actor_role va congelado en cada renglón: aunque el colíder ya no exista,
+            # lo que hizo sigue apareciendo aquí, que es cuando más se quiere revisar.
+            rows = db.execute(
+                "SELECT * FROM audit_log WHERE action != 'generacion' "
+                "AND (actor_role='colider' OR actor IN "
+                "     (SELECT username FROM admins WHERE role='colider')) "
+                "ORDER BY id DESC LIMIT 500").fetchall()
+        else:
+            rows = db.execute("SELECT * FROM audit_log WHERE action != 'generacion' "
+                              "AND actor = ? ORDER BY id DESC LIMIT 500",
+                              (quien,)).fetchall()
     else:
         rows = db.execute("SELECT * FROM audit_log WHERE action != 'generacion' "
                           "ORDER BY id DESC LIMIT 500").fetchall()
-    return jsonify(log=[dict(r) for r in rows])
+
+    lista = []
+    for r in rows:
+        d = dict(r)
+        d["es_colider"] = d.get("actor_role") == "colider" or d["actor"] in colideres
+        lista.append(d)
+    return jsonify(log=lista, colideres=colideres)
 
 # ---- gastos de la fiesta (local, bebidas, DJ, etc.): cuánto se debe -------------
 

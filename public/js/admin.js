@@ -261,6 +261,13 @@ function aplicarColider(esCo) {
   // el "?" es para el colíder: la ayuda está escrita para quien maneja un grupo
   const ay = $('#btn-ayuda-cl');
   if (ay) ay.classList.toggle('hidden', !esCo);
+  // El colíder ve SOLO sus propios movimientos; decirle "todo lo que pasa en el
+  // sistema" lo dejaría creyendo que el registro está incompleto o roto.
+  MV_QUIEN = 'todos'; _sigMoves = '';   // si cambia quién entra, el filtro arranca limpio
+  const mvi = $('#mv-intro');
+  if (mvi) mvi.textContent = esCo
+    ? 'Lo que tú has hecho: anulaciones, cobros, altas y bajas de tu grupo. El organizador también lo ve.'
+    : 'Todo lo que pasa en el sistema. Lo ven todos los administradores.';
   if (esCo && VEDADAS.includes(currentTab)) openTab('resumen');
 }
 
@@ -1135,20 +1142,68 @@ const MV_ICON = { generacion: '🎟', anulacion: '✕', vendedor_creado: '👤',
 const MV_COLOR = { anulacion: 'rgba(232,112,106,.5)', vendedor_eliminado: 'rgba(232,112,106,.5)',
                    generacion: 'rgba(126,226,168,.4)', vendedor_creado: 'rgba(126,226,168,.4)' };
 let _sigMoves = '';
+/* Dos vistas del mismo registro. Mezclado, lo que hacen seis colíderes queda
+   enterrado entre los cambios de precio y los cobros del organizador, y es
+   justamente lo que hay que poder repasar: quién anuló, quién dio de baja a quién.
+   MV_QUIEN: 'todos' | 'colideres' | el usuario de un colíder en concreto. */
+let MV_QUIEN = 'todos';
+let _mvColideres = [];
+
+function pintarFiltroMoves() {
+  const cont = $('#mv-filtro');
+  if (!cont) return;
+  if (!_mvColideres.length) { cont.innerHTML = ''; return; }   // sin colíderes no hay nada que separar
+  const enGrupo = MV_QUIEN !== 'todos';
+  const chip = (v, txt) =>
+    `<button class="mv-f${MV_QUIEN === v ? ' sel' : ''}" data-q="${esc(v)}">${esc(txt)}</button>`;
+  cont.innerHTML =
+    `<div class="mv-fila">${chip('todos', 'Todo el sistema')}` +
+    `${chip('colideres', 'Mis colíderes')}</div>` +
+    (enGrupo && _mvColideres.length > 1
+      ? `<div class="mv-fila mv-sub">${chip('colideres', 'Todos')}` +
+        _mvColideres.map(u => chip(u, u)).join('') + `</div>`
+      : '');
+}
+
 async function loadMovements(silent) {
-  const r = await API.get('/api/admin/audit');
-  const sig = r.log.length ? r.log[0].id + '-' + r.log.length : '0';
+  const r = await API.get('/api/admin/audit?quien=' + encodeURIComponent(MV_QUIEN));
+  const sig = MV_QUIEN + '|' + (r.log.length ? r.log[0].id + '-' + r.log.length : '0');
   if (silent && sig === _sigMoves) return;
   _sigMoves = sig;
+  _mvColideres = r.colideres || [];
+  pintarFiltroMoves();
+  const vacio = MV_QUIEN === 'todos'
+    ? 'Sin movimientos aún'
+    : 'Sin movimientos todavía por aquí';
+  // La marca de "colíder" solo sirve cuando están mezclados. Dentro de la vista de
+  // colíderes todos lo son y repetirlo en cada renglón es ruido.
+  const marcar = MV_QUIEN === 'todos' && !_coliderAplicado;
   $('#mv-list').innerHTML = r.log.map(l => `
-    <div class="trow" style="${MV_COLOR[l.action] ? 'border-color:' + MV_COLOR[l.action] : ''}">
+    <div class="trow${marcar && l.es_colider ? ' mv-cl' : ''}" style="${MV_COLOR[l.action] ? 'border-color:' + MV_COLOR[l.action] : ''}">
       <div class="avatar" style="font-size:13px">${MV_ICON[l.action] || '·'}</div>
       <div class="tmain">
         <div style="font:600 12.5px Manrope;color:var(--cream);white-space:normal">${esc(l.detail)}</div>
-        <div class="tmeta">${esc(l.actor)} · ${esc(l.created_at)}</div>
+        <div class="tmeta">${esc(l.actor)}${marcar && l.es_colider ? ' <span class="mv-tag">colíder</span>' : ''} · ${esc(l.created_at)}</div>
       </div>
-    </div>`).join('') || '<div class="muted">Sin movimientos aún</div>';
+    </div>`).join('') || `<div class="muted">${vacio}</div>`;
+  const mvi = $('#mv-intro');
+  if (mvi && !_coliderAplicado) {
+    mvi.textContent = MV_QUIEN === 'todos'
+      ? 'Todo lo que pasa en el sistema. Lo ven todos los administradores.'
+      : (MV_QUIEN === 'colideres'
+          ? 'Lo que han hecho tus colíderes: anulaciones, altas y bajas de su propia gente.'
+          : 'Todo lo que ha hecho ' + MV_QUIEN + ' dentro de su grupo.');
+  }
 }
+
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('#mv-filtro .mv-f');
+  if (!b) return;
+  MV_QUIEN = b.dataset.q;
+  _sigMoves = '';
+  pintarFiltroMoves();
+  loadMovements();
+});
 
 /* ---------------- vendedores ---------------- */
 let _sigSellers = '';

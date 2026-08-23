@@ -1207,3 +1207,18 @@ button.rd-p:active{transform:scale(.97)}
 .tr-skip{position:absolute;top:10px;right:12px;border:none;background:none;cursor:pointer;
   font:600 10px Manrope;color:var(--cream-45);padding:4px 6px}
 .tr-skip:active{color:var(--cream)}
+
+/* ---- movimientos: separar lo del organizador de lo de los colíderes ---- */
+.mv-fila{display:flex;gap:6px;margin-bottom:8px;overflow-x:auto;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none}
+.mv-fila::-webkit-scrollbar{display:none}
+.mv-sub{margin-top:-2px;flex-wrap:wrap;overflow-x:visible}   /* los nombres no se esconden: caben en varios renglones */
+.mv-f{flex:none;cursor:pointer;border-radius:999px;padding:7px 13px;
+  font:700 11.5px Manrope;color:var(--cream-45);background:transparent;
+  border:1px solid rgba(255,120,40,.18);white-space:nowrap}
+.mv-f.sel{border-color:var(--ember);background:rgba(255,110,30,.14);color:var(--cream)}
+.mv-sub .mv-f{padding:5px 11px;font-size:11px}
+.mv-tag{display:inline-block;padding:1px 6px;border-radius:999px;font:800 9px Manrope;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--ember);
+  background:rgba(255,110,30,.13);border:1px solid rgba(255,110,30,.25)}
+.trow.mv-cl{border-left:2px solid rgba(255,110,30,.45)}
