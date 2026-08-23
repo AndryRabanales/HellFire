@@ -141,10 +141,15 @@ select.input option{background:#160603;color:var(--cream)}
 
 /* El "?" de la guía. Chico y discreto: está para cuando hace falta, no para
    competir con lo que se usa a diario. */
-.ayuda{flex:none;width:28px;height:28px;border-radius:50%;cursor:pointer;
+.ayuda{position:relative;flex:none;width:28px;height:28px;border-radius:50%;cursor:pointer;
   border:1px solid rgba(255,120,40,.4);background:rgba(255,110,30,.09);
   font:800 13px Manrope;color:var(--ember-soft);
   transition:transform .1s ease,background .14s}
+/* El círculo se ve de 28, pero se toca de 44: es lo que mide un dedo. Estaba pegado
+   a "Salir", y fallar el tiro por dos milímetros no debe cerrarle la sesión a nadie
+   a media venta. El área crece hacia adentro, así que no mueve nada de sitio. */
+.ayuda::after{content:"";position:absolute;top:50%;left:50%;
+  width:44px;height:44px;transform:translate(-50%,-50%)}
 .ayuda:active{transform:scale(.9);background:rgba(255,110,30,.2)}
 
 /* Guía. Los cuatro pasos de una venta, un renglón cada uno: se leen de un vistazo
@@ -672,8 +677,13 @@ table.data tr.void td.strike{text-decoration:line-through}
 .gt-op:active{transform:scale(.98)}
 .gt-op .gt-n{font:700 11px Manrope;color:var(--cream)}
 .gt-op .gt-p{font:800 13px "Space Grotesk";color:var(--ember-soft)}
-.gt-cambiar{background:none;border:none;padding:0 0 0 7px;cursor:pointer;
+.gt-cambiar{position:relative;background:none;border:none;padding:0 0 0 7px;cursor:pointer;
   font:600 10.5px Manrope;color:var(--ember-soft);text-decoration:underline}
+/* mismo truco que el "?": se ve como un enlace de 14px de alto, se toca como un
+   botón de 40. Cambiar el tipo del grupo es rehacer $3,500 de venta; no puede
+   depender de atinarle a un renglón de texto */
+.gt-cambiar::after{content:"";position:absolute;top:50%;left:0;
+  width:100%;height:40px;min-width:56px;transform:translateY(-50%)}
 .gp-cu{font:600 11px Manrope;color:var(--cream-45)}
 
 /* El precio de antes, tachado, y la etiqueta de la fase, en el historial y en la
@@ -1231,4 +1241,33 @@ button.rd-p:active{transform:scale(.97)}
   #ad-list .tmain,#co-list .tmain{flex-basis:100%}
   .ad-btns{margin-left:0;width:100%}
   .ad-btns .btn{flex:1;width:auto}
+}
+
+/* ---- que el teléfono no haga zoom al tocar un campo ----
+   Safari en iPhone amplía la página en cuanto tocas un campo de menos de 16px, y NO
+   vuelve solo: el vendedor se queda con la pantalla corrida a media venta, buscando
+   el botón de generar. Todos los campos estaban entre 12 y 15. En pantalla grande se
+   dejan como están —ahí no hay zoom que valga— y por eso va con media query.
+   !important porque varios traen la medida escrita en el propio elemento. */
+@media (max-width:900px), (pointer:coarse){
+  input,select,textarea,.input,select.input,textarea.input,.search input{
+    font-size:16px !important}
+  /* el del código de acceso está fuera de la vista: los dígitos se ven en los
+     recuadros de al lado, así que su medida da igual */
+  #pin-input,#gate-input{font-size:16px !important}
+}
+
+/* ---- que todo lo que se toca quepa en un dedo ----
+   Varios controles se veían bien y se tocaban mal: el título de una ventanilla era
+   una franja de 11px de alto, y el orden del historial y los avisos de Rendimiento
+   rondaban los 24. En el celular eso es fallar el tiro. El área crece sin mover
+   nada de sitio: o con un pseudo-elemento por encima, o con relleno y un margen
+   negativo que lo compensa. */
+@media (max-width:900px), (pointer:coarse){
+  details.card > summary{padding:12px 0;margin:-12px 0}
+  /* solo los que SON botones: .rd-p también se usa de etiqueta suelta, y taparla
+     con un área invisible de 42px robaría los toques de lo que tiene debajo */
+  .orden,button.rd-p{position:relative}
+  .orden::after,button.rd-p::after{content:"";position:absolute;top:50%;left:0;
+    width:100%;height:42px;transform:translateY(-50%)}
 }

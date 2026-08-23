@@ -847,6 +847,27 @@ async function loadTicketsTable(silent) {
   $('#bt-count').textContent = r.tickets.length + ' boleto(s)';
   const body = $('#bt-body');
   body.innerHTML = '';
+  // Buscar algo que no está dejaba la tabla con los encabezados y nada debajo: no se
+  // distinguía "no hay ninguno" de "se rompió" o "todavía está cargando". Aquí se
+  // dice cuál de las tres es, y se ofrece el camino de vuelta.
+  const vacio = $('#bt-vacio'), tabla = body.closest('.tablewrap');
+  vacio.classList.toggle('hidden', r.tickets.length > 0);
+  if (tabla) tabla.classList.toggle('hidden', r.tickets.length === 0);
+  if (!r.tickets.length) {
+    const hayFiltro = !!filterQS();
+    vacio.innerHTML = `<div style="font:700 13px Manrope;color:var(--cream-60)">${hayFiltro
+        ? 'Ningún boleto coincide con lo que buscas'
+        : 'Todavía no hay boletos vendidos'}</div>
+      ${hayFiltro ? `<button class="btn sm ghost" id="bt-limpiar"
+        style="width:auto;margin-top:12px">Quitar los filtros</button>` : ''}`;
+    const lim = $('#bt-limpiar');
+    if (lim) lim.onclick = () => {
+      ['#fl-q', '#fl-admin', '#fl-seller', '#fl-type', '#fl-faculty']
+        .forEach(sel => { const e = $(sel); if (e) e.value = ''; });
+      _sigTickets = ''; loadTicketsTable();
+    };
+    return;
+  }
   r.tickets.forEach(t => {
     const tr = document.createElement('tr');
     if (t.status === 'void') tr.className = 'void';
@@ -1878,7 +1899,7 @@ function mostrarCodigos(creados, repetidos) {
   $('#bk-copy').onclick = async () => {
     try {
       await navigator.clipboard.writeText(texto);
-      toast('Lista copiada · pégala en WhatsApp');
+      toast('Lista copiada · ya la puedes pegar donde la vayas a mandar');
     } catch (_) {
       // sin permiso de portapapeles (pasa en algunos navegadores): se muestra para
       // seleccionar a mano en vez de dejar al admin sin salida

@@ -861,7 +861,7 @@ function panelVender() {
     ${paso(1, 'Escribe el <b>nombre</b> de quien te compra')}
     ${paso(2, 'Toca el <b>tipo</b> de boleto')}
     ${paso(3, 'Dale a <b>GENERAR</b> — se descarga solo')}
-    ${paso(4, '<b>Mándaselo por WhatsApp</b>. Esa imagen es su boleto')}
+    ${paso(4, '<b>Envíaselo al comprador</b>. Esa imagen es su boleto')}
   </div>`;
 }
 
@@ -933,7 +933,7 @@ $('#btn-ayuda').addEventListener('click', mostrarAyuda);
 const TOUR = [
   { sel: '#f-buyer',      txt: 'Aquí escribes el <b>nombre</b> de quien te compra.' },
   { sel: '#f-types',      txt: 'Aquí eliges el <b>tipo</b> de boleto.' },
-  { sel: '#btn-generate', txt: 'Le das aquí y <b>el boleto se descarga solo</b>. Mándaselo por WhatsApp: esa imagen es su boleto.' },
+  { sel: '#btn-generate', txt: 'Le das aquí y <b>el boleto se descarga solo</b>. Envíaselo al comprador: esa imagen es su boleto.' },
   // El tour es de un vistazo, no un manual: dice QUÉ hace el botón y qué hace la
   // estrella, en un renglón. Lo demás vive en el "?", que se lee cuando hace falta.
   { sel: '#btn-group-10', txt: '¿Van <b>10 juntos</b>? Aquí. Marca <b>★</b> a uno: ese recoge la botella.' },
