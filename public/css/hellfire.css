@@ -19,6 +19,10 @@
    si viene el segundo. Se apaga en toda la página: el pellizco para acercar sigue
    funcionando, que es el que de verdad hace falta. */
 html,body{touch-action:manipulation}
+/* El navegador puede AGRANDAR el texto por su cuenta (font boosting) y todo se ve
+   "con un poco de zoom" sin que nadie lo haya pedido. Con 100% se respeta lo que
+   dice el diseño; el usuario sigue pudiendo hacer zoom con los dedos. */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 html,body{margin:0;min-height:100%}
 body{
   background:radial-gradient(120% 70% at 50% -10%,#2a0c04 0%,#120503 40%,var(--bg) 100%) fixed;
@@ -201,7 +205,7 @@ select.input option{background:#160603;color:var(--cream)}
 /* Pestañas de la guía. Un acordeón esconde lo que tiene y obliga a abrir y cerrar
    hasta encontrar; unas pestañas enseñan TODO lo disponible de un golpe y llegan a
    cualquier cosa en un toque. */
-.gu-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;
+.gu-tabs{display:grid;grid-template-columns:repeat(auto-fit,minmax(60px,1fr));gap:4px;padding:4px;
   border-radius:13px;background:rgba(0,0,0,.35);border:1px solid rgba(255,120,40,.16)}
 .gu-tab{padding:10px 6px;border:none;border-radius:10px;cursor:pointer;background:transparent;
   font:700 12.5px Manrope;color:var(--cream-45);transition:background .18s,color .18s}
@@ -1188,3 +1192,11 @@ button.rd-p:active{transform:scale(.97)}
   border-left:2px solid rgba(255,120,40,.35);padding-left:8px}
 .cl-chips .rojo{color:#ff8a8a;border-color:rgba(232,112,106,.35);background:rgba(232,112,106,.1)}
 .rd-mn u{display:block;font:600 9px Manrope;color:var(--cream-45);text-decoration:none;margin-top:1px}
+
+/* ---------- bloques de la guía del colíder ---------- */
+.gu-b{padding:10px 0;border-bottom:1px solid rgba(255,120,40,.1)}
+.gu-b:last-child{border-bottom:none}
+.gu-t{font:700 12.5px Manrope;color:var(--cream);margin-bottom:3px}
+.gu-x{font:500 12px/1.55 Manrope;color:var(--cream-60)}
+.gu-x b{color:var(--cream);font-weight:700}
+.gu-x s{color:var(--cream-45)}

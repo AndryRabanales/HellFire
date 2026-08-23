@@ -135,6 +135,9 @@ async function loadSummary(silent) {
   // la guía del colíder, una sola vez: se la pone el servidor, así que cambiar de
   // teléfono no se la repite y cerrar el panel a medias sí
   if (s.soy_colider && s.tutorial_pendiente && !$('#tour')) setTimeout(tourColider, 700);
+  // los precios y la fase que viene salen del catálogo: se pide una vez, para que el
+  // "?" pueda decir cuándo suben en vez de mandarlo a preguntar
+  if (s.soy_colider && !GUIA_CAT) API.get('/api/catalog').then(c => { GUIA_CAT = c; }).catch(() => {});
   $('#sum-stats').innerHTML = `
     <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}</div></div>
     <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
@@ -255,8 +258,137 @@ function aplicarColider(esCo) {
   // vista para que no lo intente.
   const fl = $('#fl-card');
   if (fl) fl.classList.toggle('hidden', esCo);
+  // el "?" es para el colíder: la ayuda está escrita para quien maneja un grupo
+  const ay = $('#btn-ayuda-cl');
+  if (ay) ay.classList.toggle('hidden', !esCo);
   if (esCo && VEDADAS.includes(currentTab)) openTab('resumen');
 }
+
+/* ---------------- la guía del colíder, en el "?" ----------------
+   La del tour son cinco renglones para arrancar. Esta es para consultarla: lo que
+   pregunta un colíder a media semana —de dónde sale mi 20%, a quién le entrego, qué
+   pasa si mi vendedor no paga, cuándo suben los precios—. Se lee en partes para no
+   soltarle un muro de texto. */
+const GUIA_CL = [
+  { id: 'gente', t: 'Tu equipo', fn: guiaEquipo },
+  { id: 'corte', t: 'Tu 20%',    fn: guiaCorte },
+  { id: 'prec',  t: 'Precios',   fn: guiaPrecios },
+  { id: 'dud',   t: 'Dudas',     fn: guiaDudasCL },
+];
+let GUIA_CAT = null;   // el catálogo, para poder decir la próxima fase y su fecha
+
+function bloqueG(t, txt) {
+  return `<div class="gu-b"><div class="gu-t">${t}</div><div class="gu-x">${txt}</div></div>`;
+}
+
+function guiaEquipo() {
+  return bloqueG('Darles de alta',
+      'En <b>Vendedores → + Crear</b>. Sale un código de 5 dígitos: ese es con el que '
+      + 'entra a vender. Cópialo y mándaselo; no se vuelve a mostrar solo.')
+    + bloqueG('Cobrarles',
+      'En su fila, <b>Cuenta</b>. Escribes cuánto de su deuda está cubriendo y queda '
+      + 'registrado con fecha. Tu gente entrega el <b>100%</b> de lo que vendió: '
+      + 'no se queda comisión.')
+    + bloqueG('Pagarles',
+      'En esa misma cuenta hay un bloque verde para darles su parte, con el atajo del '
+      + '10%. Sale de <b>tu</b> comisión y queda anotado, así nadie discute después '
+      + 'quién cobró cuánto.')
+    + bloqueG('Lo que NO puedes',
+      'Anular boletos, cambiar precios, poner porcentajes, escanear en la puerta ni '
+      + 'ver a vendedores de otro grupo. Eso es del organizador.');
+}
+
+function guiaCorte() {
+  return bloqueG('De dónde sale',
+      'Es el <b>20%</b> de todo lo que junta tu grupo: lo que vendas tú y lo que '
+      + 'vendan los tuyos, todo junto.')
+    + bloqueG('Cuándo crece',
+      'Cuando <b>COBRAS</b>, no cuando venden. Un boleto vendido y no pagado todavía '
+      + 'no te genera nada; en cuanto entra el dinero, entra tu parte.')
+    + bloqueG('A quién le entregas',
+      'Al <b>organizador y a nadie más</b>. Tú juntas el dinero de tu gente, te '
+      + 'quedas tu 20% y le entregas el resto. Ningún otro colíder ni admin te cobra.')
+    + bloqueG('Repartir a los tuyos',
+      'Lo decides tú. Lo que les des sale de tu 20%, y el panel te dice cuánto ya '
+      + 'repartiste y cuánto te queda. No te deja dar más de lo que llevas ganado.')
+    + bloqueG('Si ya te habían cortado antes',
+      'Lo que cobraste como vendedor —con tu 10% de entonces— ya pagó lo suyo y no '
+      + 'vuelve a contar para el 20%. De ahí en adelante, todo cuenta.');
+}
+
+function guiaPrecios() {
+  const t = (GUIA_CAT && GUIA_CAT.types) || [];
+  const hoy = t.filter(x => x.price_cents > 0)
+    .map(x => `${esc(x.name)} <b>${fmtMoney(x.price_cents / 100)}</b>${
+      x.normal_cents > x.price_cents ? ` <s>${fmtMoney(x.normal_cents / 100)}</s>` : ''}`)
+    .join(' · ') || 'Todavía sin precios cargados.';
+  // la fase que viene: la fecha más cercana entre todos los tipos
+  const conFase = t.filter(x => x.next_phase);
+  let prox = 'No hay otra fase programada: los precios se quedan como están.';
+  if (conFase.length) {
+    const f = conFase.map(x => x.next_phase.starts_on).sort()[0];
+    const nombre = conFase.find(x => x.next_phase.starts_on === f).next_phase.name;
+    const suben = conFase.filter(x => x.next_phase.starts_on === f)
+      .map(x => `${esc(x.name)} <b>${fmtMoney(x.next_phase.price_cents / 100)}</b>`).join(' · ');
+    const dias = Math.max(0, Math.round((new Date(f + 'T00:00:00') - new Date()) / 86400000));
+    prox = `<b>${esc(nombre)}</b> arranca el <b>${esc(fechaCorta(f))}</b>`
+         + (dias ? ` · faltan ${dias} día${dias === 1 ? '' : 's'}` : ' · <b>hoy</b>')
+         + `<div style="margin-top:5px">Sube a: ${suben}</div>`;
+  }
+  const flash = (GUIA_CAT && GUIA_CAT.flash_manual);
+  return bloqueG('Hoy se vende a', hoy)
+    + bloqueG('La próxima fase', prox)
+    + bloqueG('Venta flash', flash
+      ? '<b style="color:#f3d27a">Está prendida ahora.</b> Se apaga cuando el '
+        + 'organizador quiera: no hay hora fija. Aprovéchala mientras dure.'
+      : 'Cuando el organizador la prende, los precios bajan al instante en el '
+        + 'teléfono de todos y el boleto sale con el precio anterior tachado. '
+        + 'No tienes que hacer nada.')
+    + bloqueG('Un boleto no cambia de precio',
+      'Cada boleto congela lo que costó al generarse. Si mañana suben los precios, '
+      + 'el que ya vendiste sigue valiendo lo mismo y tu cuenta no se mueve.');
+}
+
+function guiaDudasCL() {
+  return bloqueG('«Mi vendedor no me ha pagado»',
+      'Su boleto ya cuenta como vendido y su cuenta lo marca en rojo. Tu 20% de ese '
+      + 'dinero no existe hasta que él te pague — por eso conviene cobrar seguido.')
+    + bloqueG('«Cobré de más o me equivoqué»',
+      'En su cuenta puedes borrar el pago mal capturado, y el reparto también se '
+      + 'deshace. Todo queda anotado en Movimientos, así que el rastro no se pierde.')
+    + bloqueG('«¿Puedo ver quién le vendió a quién?»',
+      'Sí. En <b>Boletos</b> están todos los de tu grupo con el nombre del comprador, '
+      + 'y desde la cuenta de cada vendedor puedes ver los suyos.')
+    + bloqueG('«Se me perdió el código de alguien»',
+      'Está en <b>Vendedores</b>, en su fila. Si crees que se filtró, pídele al '
+      + 'organizador que se lo cambie: sus boletos no se pierden.')
+    + bloqueG('«¿Me pueden bajar el 20%?»',
+      'No. El sistema no acepta menos de 20 para un colíder. Solo se puede subir.');
+}
+
+function mostrarAyudaCL() {
+  modal(`<div class="h1" style="font-size:19px">Cómo funciona tu grupo</div>
+    <div class="gu-tabs mt12" id="gu-tabs">
+      ${GUIA_CL.map((x, i) =>
+        `<button class="gu-tab${i ? '' : ' on'}" data-g="${x.id}">${x.t}</button>`).join('')}
+    </div>
+    <div id="gu-body" class="mt12 rd-scroll"></div>
+    <button class="btn mt16" onclick="closeModal()">Entendido</button>`);
+  $('#gu-tabs').addEventListener('click', e => {
+    const b = e.target.closest('.gu-tab');
+    if (b) pintaGuiaCL(b.dataset.g);
+  });
+  pintaGuiaCL('gente');
+}
+
+function pintaGuiaCL(sel) {
+  $('#gu-body').innerHTML = (GUIA_CL.find(x => x.id === sel) || GUIA_CL[0]).fn();
+  $$('#gu-tabs .gu-tab').forEach(b => b.classList.toggle('on', b.dataset.g === sel));
+}
+
+document.addEventListener('click', e => {
+  if (e.target && e.target.id === 'btn-ayuda-cl') mostrarAyudaCL();
+});
 
 /* "hace 2 días" se lee de un vistazo; una fecha hay que restarla mentalmente. */
 function haceCuanto(iso) {
