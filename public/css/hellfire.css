@@ -1222,3 +1222,13 @@ button.rd-p:active{transform:scale(.97)}
   letter-spacing:.04em;text-transform:uppercase;color:var(--ember);
   background:rgba(255,110,30,.13);border:1px solid rgba(255,110,30,.25)}
 .trow.mv-cl{border-left:2px solid rgba(255,110,30,.45)}
+
+/* ---- cuentas del panel (admins y colíderes): dos botones sin aplastar el nombre ---- */
+#ad-list .trow,#co-list .trow{flex-wrap:wrap;row-gap:8px}
+#ad-list .tmain,#co-list .tmain{min-width:150px}
+.ad-btns{display:flex;gap:6px;flex:none;margin-left:auto}
+@media (max-width:520px){
+  #ad-list .tmain,#co-list .tmain{flex-basis:100%}
+  .ad-btns{margin-left:0;width:100%}
+  .ad-btns .btn{flex:1;width:auto}
+}

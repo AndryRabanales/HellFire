@@ -196,6 +196,8 @@ CREATE TABLE IF NOT EXISTS admins (
   username TEXT NOT NULL UNIQUE,
   pass_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'admin',   -- admin | colider (el colíder ve solo su grupo)
+  active INTEGER NOT NULL DEFAULT 1,    -- 0 = congelado: ni él ni su grupo entran, pero
+                                        -- no se borra ni se mueve nada. Se revierte.
   created_at TEXT NOT NULL,
   last_login TEXT,                      -- la última vez que entró: sirve para saber
                                         -- si un colíder ya está usando su cuenta
@@ -312,6 +314,9 @@ CREATE TABLE IF NOT EXISTS seller_payments (
   commission_pct REAL NOT NULL,       -- % con el que se calculó (congelado)
   note TEXT,
   created_by TEXT,                    -- admin que lo registró
+  owner_admin_id INTEGER,             -- de quién era el vendedor ESE día. Congelado: si
+                                      -- mañana lo cambio de grupo, lo que ya entregó
+                                      -- sigue contando para el colíder que lo cobró.
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS team_payments (
@@ -633,6 +638,9 @@ def init_db():
                    "tutorial_seen INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS client_ref TEXT")
         db.execute("ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS actor_role TEXT")
+        db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
+                   "active INTEGER NOT NULL DEFAULT 1")
+        db.execute("ALTER TABLE seller_payments ADD COLUMN IF NOT EXISTS owner_admin_id INTEGER")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
@@ -698,6 +706,18 @@ def init_db():
         lcols = [r["name"] for r in db.execute("PRAGMA table_info(audit_log)").fetchall()]
         if "actor_role" not in lcols:
             db.execute("ALTER TABLE audit_log ADD COLUMN actor_role TEXT")
+        if "active" not in acols:
+            db.execute("ALTER TABLE admins ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
+        ycols = [r["name"] for r in db.execute("PRAGMA table_info(seller_payments)").fetchall()]
+        if "owner_admin_id" not in ycols:
+            db.execute("ALTER TABLE seller_payments ADD COLUMN owner_admin_id INTEGER")
+    db.commit()
+    # Los cobros viejos no traen dueño. Se les pone el que tiene hoy su vendedor, que
+    # es exactamente de quien eran: hasta ahora nadie ha cambiado de grupo, así que las
+    # cuentas dan igual antes y después de este relleno.
+    db.execute("UPDATE seller_payments SET owner_admin_id = (SELECT s.owner_admin_id "
+               "FROM sellers s WHERE s.id = seller_payments.seller_id) "
+               "WHERE owner_admin_id IS NULL")
     db.commit()
     # Los renglones viejos no traen rol. Se les pone el que tiene hoy quien los firmó;
     # de ahí en adelante cada uno se guarda con el suyo.
@@ -1155,6 +1175,22 @@ def client_ip():
     return (request.headers.get("X-Forwarded-For", request.remote_addr or "?")
             .split(",")[0].strip())
 
+def grupo_congelado(db, seller):
+    """¿El colíder de este vendedor está desactivado?
+
+    Se PREGUNTA, no se marca. Congelar un grupo apagando el `active` de cada vendedor
+    obligaría a recordar cuáles ya estaban apagados a mano para no despertarlos al
+    reactivar; así el estado individual de cada uno queda intacto y volver atrás es
+    exactamente volver atrás.
+
+    Los boletos que ya vendió siguen valiendo y pasan en la puerta: el comprador pagó
+    y no tiene nada que ver con el pleito."""
+    if not seller or seller["owner_admin_id"] is None:
+        return False
+    r = db.execute("SELECT active FROM admins WHERE id=?",
+                   (seller["owner_admin_id"],)).fetchone()
+    return bool(r) and not r["active"]
+
 def current_session():
     token = (request.headers.get("Authorization") or "").replace("Bearer ", "").strip()
     if not token:
@@ -1166,7 +1202,7 @@ def current_session():
     if s["role"] == "seller":
         seller = db.execute("SELECT * FROM sellers WHERE id=?", (s["user_id"],)).fetchone()
         # RF-32 / RF-86: código desactivado o vendedor eliminado → sesión inválida
-        if not seller or not seller["active"] or seller["deleted"]:
+        if not seller or not seller["active"] or seller["deleted"] or grupo_congelado(db, seller):
             db.execute("DELETE FROM sessions WHERE token=?", (token,))
             db.commit()
             return None
@@ -1176,7 +1212,12 @@ def current_session():
         # Si el admin apagó o rotó la clave, la sesión ya se borró y no llega aquí.
         return {"role": "scanner", "token": token}
     admin = db.execute("SELECT * FROM admins WHERE id=?", (s["user_id"],)).fetchone()
-    if not admin:
+    if not admin or not admin["active"]:
+        # Congelado a media sesión: se cae en el acto, no al siguiente login. Si no,
+        # seguiría cobrando y dando de alta con la pestaña que ya tenía abierta.
+        if admin:
+            db.execute("DELETE FROM sessions WHERE token=?", (token,))
+            db.commit()
         return None
     return {"role": "admin", "admin": admin, "token": token}
 
@@ -1276,6 +1317,11 @@ def login_code():
     if not seller:
         record_attempt(db, key); db.commit()
         return jsonify(error=BAD), 401
+    if grupo_congelado(db, seller):
+        # Su código es bueno; el que está apagado es su grupo. No se le acusa de
+        # equivocarse ni se le suma un intento fallido: no hizo nada mal.
+        clear_attempts(db, key); db.commit()
+        return jsonify(error="Tu grupo está en pausa. Habla con tu líder."), 403
     # El doble toque del código de invitados se quitó. Existía cuando sus boletos eran
     # invisibles: si alguien adivinaba el código, los boletos gratis no aparecían en
     # ningún lado. Ahora salen en Boletos, en el filtro Cortesía y en su apartado, y se
@@ -1313,6 +1359,12 @@ def admin_login():
     if not admin or not check_password(str(body.get("password", "")), admin["pass_hash"]):
         record_attempt(db, key); db.commit()
         return jsonify(error="Usuario o contraseña incorrectos"), 401
+    if not admin["active"]:
+        # Se le dice claro: la clave está bien, la cuenta está apagada. Si dijera
+        # "incorrectos" se pasaría media hora probando contraseñas y luego el bloqueo
+        # por intentos lo dejaría fuera sin entender nada.
+        clear_attempts(db, key); db.commit()
+        return jsonify(error="Tu cuenta está desactivada. Habla con el organizador."), 403
     clear_attempts(db, key)
     token = create_session(db, "admin", admin["id"])
     # se apunta la entrada: es la única forma de saber si un colíder ya está usando
@@ -3211,10 +3263,11 @@ def add_seller_payment(sid):
     efectivo = abono - comision
     db.execute("""INSERT INTO seller_payments
         (seller_id, seller_name, amount_cents, commission_cents, cash_cents,
-         commission_pct, note, created_by, created_at)
-        VALUES(?,?,?,?,?,?,?,?,?)""",
+         commission_pct, note, created_by, owner_admin_id, created_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?)""",
         (sid, sel["name"], abono, comision, efectivo, pct,
-         str(b.get("note", "")).strip()[:120] or None, s["admin"]["username"], now_iso()))
+         str(b.get("note", "")).strip()[:120] or None, s["admin"]["username"],
+         sel["owner_admin_id"], now_iso()))
     # paid_cents queda como espejo del total abonado, para que el resumen y la
     # lista de vendedores (que ya lo usaban) sigan cuadrando sin cambios
     db.execute("UPDATE sellers SET paid_cents=? WHERE id=?", (ya + abono, sid))
@@ -3247,7 +3300,8 @@ def cobrado_del_grupo(db, colider_admin_id):
     return db.execute(
         """SELECT COALESCE(SUM(p.amount_cents),0) c FROM seller_payments p
            JOIN sellers s ON s.id=p.seller_id
-           WHERE s.owner_admin_id=? AND s.hidden=0 AND p.commission_cents=0""",
+           WHERE COALESCE(p.owner_admin_id, s.owner_admin_id)=? AND s.hidden=0
+             AND p.commission_cents=0""",
         (colider_admin_id,)).fetchone()["c"]
 
 
@@ -3661,7 +3715,10 @@ def list_admins():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    rows = db.execute("SELECT id, username, created_at, role FROM admins ORDER BY id").fetchall()
+    rows = db.execute("""SELECT a.id, a.username, a.created_at, a.role, a.active,
+                (SELECT COUNT(*) FROM sellers v WHERE v.owner_admin_id=a.id
+                   AND v.deleted=0 AND v.hidden=0 AND v.es_lider=0) AS vendedores
+              FROM admins a ORDER BY a.id""").fetchall()
     return jsonify(admins=[dict(r) for r in rows], me=s["admin"]["id"])
 
 @app.post("/api/admin/admins")
@@ -3722,6 +3779,49 @@ def create_admin():
           + (" — se le conservó el que ya tenía" if reusado else ""))
     db.commit()
     return jsonify(ok=True, code=code, reusado=reusado)
+
+@app.post("/api/admin/admins/<int:aid>/toggle")
+def toggle_admin(aid):
+    """Congela o descongela una cuenta del panel, con todo su grupo detrás.
+
+    Es el botón que faltaba: hasta ahora, para sacar a un colíder había que
+    ELIMINARLO —definitivo, y sus vendedores cambiaban de dueño sin avisar—. Casi
+    nunca es lo que uno quiere: uno quiere que deje de moverse hasta aclarar algo.
+
+    Congelado no se borra ni se mueve nada: ni su grupo, ni sus boletos, ni lo que se
+    le debe. Sus vendedores tampoco entran mientras tanto —si no, seguirían cobrando
+    dinero para entregárselo a alguien que acabas de sacar—, pero los boletos que ya
+    vendieron valen igual y pasan en la puerta."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    if aid == s["admin"]["id"]:
+        return jsonify(error="No puedes desactivarte a ti mismo"), 400
+    target = db.execute("SELECT * FROM admins WHERE id=?", (aid,)).fetchone()
+    if not target:
+        return jsonify(error="no existe"), 404
+    nuevo = 0 if target["active"] else 1
+    if not nuevo and (target["role"] or "admin") != "colider":
+        # Un colíder de menos es un grupo en pausa. Un administrador de menos puede ser
+        # el panel entero sin quien lo abra.
+        vivos = db.execute("SELECT COUNT(*) c FROM admins "
+                           "WHERE active=1 AND role!='colider' AND id!=?", (aid,)).fetchone()["c"]
+        if vivos < 1:
+            return jsonify(error="No se puede desactivar al último administrador"), 400
+    db.execute("UPDATE admins SET active=? WHERE id=?", (nuevo, aid))
+    if not nuevo:
+        # se le cierra la sesión abierta; la de sus vendedores se cae sola en cuanto
+        # toquen cualquier cosa, porque grupo_congelado() la invalida
+        db.execute("DELETE FROM sessions WHERE role='admin' AND user_id=?", (aid,))
+    equipo = db.execute("SELECT COUNT(*) c FROM sellers WHERE owner_admin_id=? "
+                        "AND deleted=0 AND hidden=0 AND es_lider=0", (aid,)).fetchone()["c"]
+    quees = "colíder" if (target["role"] or "admin") == "colider" else "administrador"
+    audit(db, s["admin"]["username"], "usuarios",
+          ("Reactivó" if nuevo else "Desactivó") + f" al {quees} '{target['username']}'"
+          + (f" y a sus {equipo} vendedor(es)" if equipo else ""))
+    db.commit()
+    return jsonify(ok=True, active=nuevo, vendedores=equipo)
 
 @app.delete("/api/admin/admins/<int:aid>")
 def delete_admin(aid):

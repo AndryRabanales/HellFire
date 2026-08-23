@@ -261,6 +261,12 @@ function aplicarColider(esCo) {
   // el "?" es para el colíder: la ayuda está escrita para quien maneja un grupo
   const ay = $('#btn-ayuda-cl');
   if (ay) ay.classList.toggle('hidden', !esCo);
+  // "Mi grupo" es la misma pestaña que Colíderes. Arriba están sus números, que sí son
+  // suyos; abajo, dar de alta y dar de baja colíderes, que no lo son ni por asomo.
+  ['#co-box', '#co-cuentas'].forEach(sel => {
+    const el = $(sel);
+    if (el) { el.classList.toggle('hidden', esCo); if (esCo) el.open = false; }
+  });
   // El colíder ve SOLO sus propios movimientos; decirle "todo lo que pasa en el
   // sistema" lo dejaría creyendo que el registro está incompleto o roto.
   MV_QUIEN = 'todos'; _sigMoves = '';   // si cambia quién entra, el filtro arranca limpio
@@ -513,12 +519,16 @@ function bloqueCL(t, n, monto, extra) {
 let CL_GRUPOS = [];
 
 async function loadColideres() {
+  // las cuentas van en la misma pestaña, plegadas al final; si fallan no se llevan
+  // por delante los números de los grupos, que es a lo que se entra aquí
+  if (!_coliderAplicado) loadAdmins().catch(() => {});
   const r = await API.get('/api/admin/grupos');
   // de mayor a menor: con seis grupos, el orden alfabético no dice nada
   CL_GRUPOS = (r.grupos || []).slice().sort((a, b) => b.total.monto - a.total.monto);
   if (!CL_GRUPOS.length) {
     $('#cl-lista').innerHTML = `<div class="card"><div class="label">Sin colíderes</div>
-      <div class="muted mt8">Todavía no hay ninguno. Se crean desde <b style="color:var(--cream)">Ajustes → Administradores del panel</b>, eligiendo «Colíder».</div></div>`;
+      <div class="muted mt8">Todavía no hay ninguno. Se dan de alta aquí abajo, en
+      <b style="color:var(--cream)">Dar de alta a un colíder</b>.</div></div>`;
     return;
   }
   const tope = Math.max(1, ...CL_GRUPOS.map(g => g.total.monto));
@@ -2871,32 +2881,89 @@ $('#btn-fc-create').addEventListener('click', async () => {
   } catch (e) { if (!guard(e)) $('#fc-err').textContent = e.message; }
 });
 
-/* ---------------- admins ---------------- */
+/* ---------------- cuentas del panel: admins y colíderes ----------------
+   La misma fila para los dos, pero en dos listas distintas y en dos pantallas
+   distintas. Un administrador se da de alta en Ajustes, junto a lo del evento; un
+   colíder se decide mirando su grupo, así que su alta y su baja viven en la pestaña
+   Colíderes, debajo de los grupos. Mezclarlos obligaba a buscar a un colíder en el
+   sitio donde se cambian los precios. */
+function filaCuenta(a, esYo) {
+  const row = document.createElement('div');
+  row.className = 'trow';
+  const esCo = (a.role || 'admin') === 'colider';
+  const quees = esCo ? 'colíder' : 'administrador';
+  const n = a.vendedores || 0;
+  const gente = n === 1 ? '1 vendedor' : n + ' vendedores';
+  const apagado = !a.active;
+  if (apagado) row.style.opacity = '.55';
+  row.innerHTML = `<div class="tmain"><div class="tbuyer">${esc(a.username)}${esYo ? ' <span class="muted">(tú)</span>' : ''}${apagado ? ' <span class="badge void">en pausa</span>' : ''}</div>
+    <div class="tmeta">${n ? gente : 'sin vendedores'} · desde ${esc(String(a.created_at).slice(0, 10))}</div></div>`;
+  if (esYo) return row;
+  // Dos botones y en este orden: el reversible primero. Eliminar es el último
+  // recurso, no el único —hasta ahora era el único, y por eso daba miedo tocarlo.
+  const caja = document.createElement('div');
+  caja.className = 'ad-btns';
+  const t = document.createElement('button');
+  t.className = 'btn sm ghost'; t.style.width = 'auto';
+  t.textContent = apagado ? 'Reactivar' : 'Desactivar';
+  t.onclick = async () => {
+    const ok = await confirmModal({
+      title: apagado ? `Reactivar a ${a.username}` : `Desactivar a ${a.username}`,
+      okLabel: apagado ? 'Reactivar' : 'Desactivar', danger: !apagado,
+      body: apagado
+        ? `Vuelve a entrar al panel${n ? ` y sus ${gente} vuelven a vender` : ''},
+           tal como estaban.${n ? ' Los que tú hayas apagado uno por uno siguen apagados.' : ''}`
+        : `No podrá entrar al panel${n ? `, y sus <b style="color:var(--cream)">${gente}</b> tampoco podrán vender` : ''}.
+           <br><br><b style="color:var(--ok)">No se borra ni se mueve nada</b>: su grupo, sus boletos y lo que se le debe
+           quedan igual, y los boletos ya vendidos <b style="color:var(--cream)">siguen pasando en la puerta</b>.
+           <br><br>Lo puedes reactivar cuando quieras.`,
+    });
+    if (!ok) return;
+    try {
+      const res = await API.post('/api/admin/admins/' + a.id + '/toggle', {});
+      toast(res.active ? 'Cuenta reactivada' : 'Cuenta en pausa');
+      loadAdmins();
+    } catch (e) { if (!guard(e)) toast(e.message); }
+  };
+  caja.appendChild(t);
+  const b = document.createElement('button');
+  b.className = 'btn sm danger'; b.style.width = 'auto'; b.textContent = 'Eliminar';
+  b.onclick = async () => {
+    const ok = await confirmModal({
+      title: `Eliminar ${quees}`, danger: true, okLabel: 'Eliminar para siempre',
+      // Antes solo decía "se eliminará la cuenta". Sus vendedores cambiaban de
+      // dueño en silencio, que es justo lo que hay que saber ANTES de decidir.
+      body: `Se elimina la cuenta <b style="color:var(--cream)">${esc(a.username)}</b> y esto no se deshace.`
+        + (n ? `<br><br>Sus <b style="color:var(--cream)">${gente}</b> pasan a ser tuyos: conservan su código y
+                sus boletos, y a partir de ahí les cobras tú.`
+             : '')
+        + (esCo && n ? `<br><br><b style="color:var(--warn,#e8a06a)">Ojo:</b> al dejar de ser su colíder,
+                su comisión del 20% deja de crecer. Lo que ya se calculó no se toca.` : '')
+        + `<br><br>Si solo quieres que pare un rato, usa <b style="color:var(--cream)">Desactivar</b>.`,
+    });
+    if (!ok) return;
+    try { await API.del('/api/admin/admins/' + a.id); toast(quees[0].toUpperCase() + quees.slice(1) + ' eliminado'); loadAdmins(); }
+    catch (e) { if (!guard(e)) toast(e.message); }
+  };
+  caja.appendChild(b);
+  row.appendChild(caja);
+  return row;
+}
+
 async function loadAdmins() {
   const r = await API.get('/api/admin/admins');
-  $('#ad-list').innerHTML = '';
+  const ad = $('#ad-list'), co = $('#co-list');
+  if (ad) ad.innerHTML = '';
+  if (co) co.innerHTML = '';
+  let nCo = 0;
   r.admins.forEach(a => {
-    const row = document.createElement('div');
-    row.className = 'trow';
     const esCo = (a.role || 'admin') === 'colider';
-    row.innerHTML = `<div class="tmain"><div class="tbuyer">${esc(a.username)}${a.id === r.me ? ' <span class="muted">(tú)</span>' : ''}${esCo ? ' <span class="badge used">colíder</span>' : ''}</div>
-      <div class="tmeta">creado ${esc(a.created_at)}</div></div>`;
-    if (a.id !== r.me) {
-      const b = document.createElement('button');
-      b.className = 'btn sm danger'; b.style.width = 'auto'; b.textContent = 'Eliminar';
-      b.onclick = async () => {
-        const ok = await confirmModal({
-          title: 'Eliminar administrador', danger: true, okLabel: 'Eliminar',
-          body: `Se eliminará la cuenta <b style="color:var(--cream)">${esc(a.username)}</b> y se cerrará su sesión.`,
-        });
-        if (!ok) return;
-        try { await API.del('/api/admin/admins/' + a.id); toast('Administrador eliminado'); loadAdmins(); }
-        catch (e) { if (!guard(e)) toast(e.message); }
-      };
-      row.appendChild(b);
-    }
-    $('#ad-list').appendChild(row);
+    const destino = esCo ? co : ad;
+    if (!destino) return;
+    if (esCo) nCo++;
+    destino.appendChild(filaCuenta(a, a.id === r.me));
   });
+  if (co && !nCo) co.innerHTML = '<div class="muted">Todavía no has dado de alta a ningún colíder.</div>';
 }
 
 $('#btn-ad-create').addEventListener('click', async () => {
@@ -2949,6 +3016,7 @@ $('#btn-co-create').addEventListener('click', async () => {
       <div style="text-align:center;margin:14px 0"><span class="codechip" style="font-size:26px;padding:10px 18px;letter-spacing:.3em">${r.code}</span></div>
       <button class="btn mt8" onclick="closeModal()">Listo</button>`);
     loadAdmins();
+    loadColideres();   // ya aparece arriba, en la lista de grupos, sin recargar
   } catch (e) { if (!guard(e)) $('#co-err').textContent = e.message; }
 });
 
@@ -3146,8 +3214,8 @@ async function renderFlyerPreview(variant) {
   }
 }
 
-/* Ajustes ya no tiene pestaña de Admins al lado: la lista de administradores vive
-   plegada al final de esta misma pestaña, así que se carga junto con lo demás. */
+/* La lista de administradores vive plegada al final de Ajustes; la de colíderes, en
+   su propia pestaña. Las llena la misma llamada, así que se pide desde las dos. */
 async function loadAjustes() {
   await Promise.all([loadSettings(), loadAdmins().catch(() => {})]);
 }

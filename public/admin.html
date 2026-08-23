@@ -99,6 +99,48 @@
   <!-- ===== Colíderes: cada grupo con lo suyo partido en dos ===== -->
   <section id="tab-colideres" class="mt16 hidden">
     <div id="cl-lista"></div>
+    <!-- Abajo del todo y plegadas: arriba se consulta cómo va cada grupo, que es lo
+         de todos los días; dar de alta o dar de baja a un colíder se hace de vez en
+         cuando y no tiene por qué estorbar mientras tanto. -->
+    <details class="card mt12" id="co-box">
+      <summary class="label" style="margin:0">Dar de alta a un colíder</summary>
+      <div class="muted mt8" style="margin-bottom:10px;line-height:1.55">
+        Un colíder arma su propio equipo de vendedores y les cobra, pero
+        <b style="color:var(--cream)">solo ve lo de su grupo</b>: ni tus ventas, ni las de
+        los demás. No anula boletos, no da de baja a nadie, no toca precios, gastos ni
+        ajustes, no escanea en la puerta y <b style="color:var(--cream)">no puede borrar el
+        sistema</b> — eso solo tú. Se le abre además su propio código de vendedor, para lo
+        que venda él en persona.
+      </div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        <input class="input grow" id="co-user" placeholder="Usuario del colíder" style="min-width:150px;padding:12px">
+        <input class="input grow" id="co-pass" type="password" placeholder="Contraseña (mín. 8)" style="min-width:160px;padding:12px">
+        <button class="btn sm" id="btn-co-create" style="padding:13px 16px">Crear colíder</button>
+      </div>
+      <div class="label mt12" style="font-size:11px">¿Ya vendía? Su código de vendedor</div>
+      <div class="muted" style="margin-bottom:6px;font-size:11px">Opcional. Si ya tiene uno, escríbelo y lo conserva con todo su historial. Si lo dejas vacío se le abre uno nuevo.</div>
+      <input class="input" id="co-code" placeholder="5 dígitos" inputmode="numeric" maxlength="5"
+             autocomplete="off" style="max-width:150px;letter-spacing:.2em">
+      <div class="err mt8" id="co-err"></div>
+      <div class="muted mt8" style="font-size:10.5px">
+        En cuanto lo crees aparece aquí arriba, con lo que vendió él y lo que vendió su
+        equipo por separado.
+      </div>
+    </details>
+
+    <!-- Sus cuentas: aquí y no en Ajustes. Ajustes es donde se toca el evento
+         —precios, flyers, la clave de la puerta—; a quién le abres o le cierras
+         el panel de un grupo se decide mirando al grupo, que es lo que hay arriba. -->
+    <details class="card mt12" id="co-cuentas">
+      <summary class="label" style="margin:0">Sus cuentas: pausar o quitar</summary>
+      <div class="muted mt8" style="margin-bottom:10px;line-height:1.55">
+        <b style="color:var(--cream)">Desactivar</b> pone al colíder y a su equipo en pausa
+        sin borrar ni mover nada, y se deshace cuando quieras. Los boletos ya vendidos
+        siguen pasando en la puerta. <b style="color:var(--cream)">Eliminar</b> es para
+        siempre y su gente pasa a ser tuya.
+      </div>
+      <div id="co-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </details>
   </section>
 
   <!-- ===== Cortesías: los invitados especiales, aparte de la venta ===== -->
@@ -402,34 +444,7 @@
       <div id="ad-list" class="mt12" style="display:flex;flex-direction:column;gap:8px"></div>
     </details>
 
-    <!-- Colíder: su propio bloque, no una opción escondida en el alta de admins.
-         Dar de alta a un colíder es una decisión distinta a dar de alta a un admin
-         —le abres el panel a alguien de fuera— y merece leerse antes de hacerla. -->
-    <details class="card mt12" id="co-box">
-      <summary class="label" style="margin:0">Colíderes</summary>
-      <div class="muted mt8" style="margin-bottom:10px;line-height:1.55">
-        Un colíder arma su propio equipo de vendedores y les cobra, pero
-        <b style="color:var(--cream)">solo ve lo de su grupo</b>: ni tus ventas, ni las de
-        los demás. No anula boletos, no da de baja a nadie, no toca precios, gastos ni
-        ajustes, no escanea en la puerta y <b style="color:var(--cream)">no puede borrar el
-        sistema</b> — eso solo tú. Se le abre además su propio código de vendedor, para lo
-        que venda él en persona.
-      </div>
-      <div class="row" style="flex-wrap:wrap;gap:8px">
-        <input class="input grow" id="co-user" placeholder="Usuario del colíder" style="min-width:150px;padding:12px">
-        <input class="input grow" id="co-pass" type="password" placeholder="Contraseña (mín. 8)" style="min-width:160px;padding:12px">
-        <button class="btn sm" id="btn-co-create" style="padding:13px 16px">Crear colíder</button>
-      </div>
-      <div class="label mt12" style="font-size:11px">¿Ya vendía? Su código de vendedor</div>
-      <div class="muted" style="margin-bottom:6px;font-size:11px">Opcional. Si ya tiene uno, escríbelo y lo conserva con todo su historial. Si lo dejas vacío se le abre uno nuevo.</div>
-      <input class="input" id="co-code" placeholder="5 dígitos" inputmode="numeric" maxlength="5"
-             autocomplete="off" style="max-width:150px;letter-spacing:.2em">
-      <div class="err mt8" id="co-err"></div>
-      <div class="muted mt8" style="font-size:10.5px">
-        Sus números salen en la pestaña <b style="color:var(--cream)">Colíderes</b>, con lo
-        que vendió él y lo que vendió su equipo por separado.
-      </div>
-    </details>
+
   </section>
 </div>
 
