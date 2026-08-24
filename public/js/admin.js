@@ -319,12 +319,13 @@ function guiaEquipo() {
       + 'entra a vender. Cópialo y mándaselo; no se vuelve a mostrar solo.')
     + bloqueG('Cobrarles',
       'En su fila, <b>Cuenta</b>. Escribes cuánto de su deuda está cubriendo y queda '
-      + 'registrado con fecha. Tu gente entrega el <b>100%</b> de lo que vendió: '
-      + 'no se queda comisión.')
+      + 'registrado con fecha. Te entregan el <b>100%</b> de lo que vendieron: '
+      + '<b>no descuentan nada al entregarte</b>, porque su parte se la pagas tú '
+      + 'aparte —eso es lo de abajo—.')
     + bloqueG('Pagarles',
-      'En esa misma cuenta hay un bloque verde para darles su parte, con el atajo del '
-      + '10%. Sale de <b>tu</b> comisión y queda anotado, así nadie discute después '
-      + 'quién cobró cuánto.')
+      'Ahí mismo, en el bloque verde, con el atajo del 10%. Tu gente <b>sí gana</b>: '
+      + 'lo que les des sale de <b>tu</b> 20% y queda anotado con fecha, así nadie '
+      + 'discute después quién cobró cuánto. Ellos lo ven en su propia app.')
     + bloqueG('Anular y dar de baja',
       'Puedes <b>anular boletos</b> de tu gente y <b>darlos de baja</b> cuando ya no '
       + 'estén. Solo dentro de tu grupo, y queda firmado con tu nombre.')
@@ -450,7 +451,11 @@ const TOUR_CL = [
   { sel: '#btn-sl-create', tab: 'vendedores',
     txt: 'Con <b>+ Crear</b>. El código que sale es con el que entra a vender.' },
   { sel: '#sl-body', tab: 'vendedores',
-    txt: 'En <b>Cuenta</b> le cobras lo que vendió. Tu gente entrega el <b>100%</b>: no se queda comisión.' },
+    // "no se queda comisión" sonaba a que su gente trabaja gratis, y no es eso: no
+    // descuentan nada AL ENTREGAR, porque lo suyo se lo paga él después. Dicho mal,
+    // el colíder se lo repite igual de mal a su equipo.
+    txt: 'En <b>Cuenta</b> le cobras lo que vendió. Te entrega <b>todo</b>, sin descontar nada: '
+       + 'lo suyo se lo pagas tú, de tu 20%.' },
   { sel: '#tabs .tab[data-tab="colideres"]',
     txt: 'Aquí est\u00e1 <b>tu grupo</b>: lo que vendiste t\u00fa, lo de tu gente y tu corte.' },
   { sel: '#cl-lista', tab: 'colideres',

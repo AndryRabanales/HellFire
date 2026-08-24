@@ -1513,8 +1513,13 @@ def catalog():
     # a ver lo suyo sin tener que preguntarlo, y así un "a mí nunca me dieron nada"
     # se resuelve mirando la pantalla en vez de discutiendo.
     mi_ganado = mi_boletos = mi_vendido = 0
+    mi_en_grupo = False
     if s.get("seller"):
         sid_mio = s["seller"]["id"]
+        # Si es de un colíder, la respuesta a "¿cuándo me pagan?" es OTRA: no se le
+        # descuenta nada al entregar, se lo paga su líder aparte. Contárselo mal es
+        # que se sienta estafado el día del corte.
+        mi_en_grupo = es_de_colider(db, sid_mio)
         r = db.execute("SELECT tutorial_seen, hidden FROM sellers WHERE id=?",
                        (sid_mio,)).fetchone()
         pendiente = bool(r and not r["tutorial_seen"] and not r["hidden"])
@@ -1534,7 +1539,7 @@ def catalog():
                    flash_manual=flash_manual(db),
                    tutorial_pendiente=pendiente,
                    mi_ganado=money(mi_ganado), mi_boletos=mi_boletos,
-                   mi_vendido=money(mi_vendido),
+                   mi_vendido=money(mi_vendido), mi_en_grupo=mi_en_grupo,
                    event_name=setting(db, "event_name"),
                    event_subtitle=setting(db, "event_subtitle"),
                    event_date_text=setting(db, "event_date_text"),

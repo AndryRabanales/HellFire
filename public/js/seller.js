@@ -887,7 +887,16 @@ function panelDudas() {
     duda('Se me borró un boleto',
          'En <b>Ver mi historial</b> están todos. Búscalo por nombre y descárgalo otra vez.') +
     duda('¿Cuándo me pagan?',
-         'Cobras el boleto completo. En el corte entregas y ahí se te descuenta tu comisión. Todo queda con fecha.') +
+         // Dos tratos distintos, y decirle el que no es lo deja esperando un descuento
+         // que nunca llega, o un pago que ya se le hizo de otra forma.
+         CATALOG && CATALOG.mi_en_grupo
+           ? 'Cobras el boleto completo y se lo entregas <b>íntegro a tu líder</b>: al '
+             + 'entregar no se descuenta nada. <b>Lo tuyo te lo paga él aparte</b>, y '
+             + 'cada pago queda con fecha. Lo que llevas recibido sale arriba en '
+             + '<b>Ver mi historial</b>.'
+           : 'Cobras el boleto completo. En el corte entregas y ahí se te descuenta tu '
+             + 'comisión. Todo queda con fecha, y lo que llevas ganado sale arriba en '
+             + '<b>Ver mi historial</b>.') +
     duda('Se cayó el internet a media venta',
          'Dale a <b>GENERAR</b> otra vez sin miedo: el sistema sabe que es la misma venta y <b>no la duplica</b>.');
 }
