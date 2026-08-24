@@ -853,7 +853,8 @@ function panelBoletos() {
            ['Sin fila para entrar', '2ª barra solo VIP', 'Botellas exclusivas',
             'Coca sin límite', 'Shot de bienvenida', 'Pulsera VIP']) +
          tarjeta('ultra', 'Ultra VIP', precioDe(['ultra']), 'Todo lo del VIP, más:',
-           ['Zona propia', '3ª barra solo tuya', 'Botellas top', 'Margaritas y palomas']);
+           ['Zona propia', '3ª barra solo tuya', 'Botellas top', 'Margaritas y palomas',
+            'Micheladas y cerveza']);
 }
 
 function panelVender() {
