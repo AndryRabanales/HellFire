@@ -3044,9 +3044,11 @@ $('#btn-co-create').addEventListener('click', async () => {
   const ok = await confirmModal({
     title: 'Crear colíder', okLabel: 'Crear colíder',
     body: `<b style="color:var(--cream)">${esc(usuario)}</b> va a poder entrar a este panel.<br><br>
-      Verá <b style="color:var(--cream)">solo lo de su grupo</b> y podrá crear vendedores y
-      cobrarles. No podrá anular boletos, dar de baja vendedores, tocar precios ni ajustes,
-      escanear en la puerta, ni borrar el sistema.` +
+      Verá <b style="color:var(--cream)">solo lo de su grupo</b>: ni tus ventas ni las de los
+      demás. Dentro de ese grupo manda —crea vendedores, les cobra, les paga, anula sus
+      boletos y los da de baja—, y todo queda firmado con su nombre en tus Movimientos.
+      <br><br>Lo que NO toca: precios, comisiones, gastos, ajustes, el escáner de la puerta,
+      a la gente de otro colíder ni a la tuya, y no puede borrar el sistema.` +
       (suCodigo ? `<br><br>Conserva su código <b style="color:var(--cream)">${esc(suCodigo)}</b>
         y todo lo que ya vendió con él, que pasa a contar como su venta personal.`
                 : `<br><br>Se le abrirá un código de vendedor nuevo.`),
