@@ -1271,3 +1271,20 @@ button.rd-p:active{transform:scale(.97)}
   .orden::after,button.rd-p::after{content:"";position:absolute;top:50%;left:0;
     width:100%;height:42px;transform:translateY(-50%)}
 }
+
+/* ---- lo que el grupo todavía debe, en la ventanilla del colíder ----
+   Va ARRIBA del corte a propósito: primero cuánto falta cobrar, y ya después de
+   dónde sale su 20%. Al revés, las tres cifras del corte en cero se leen como que
+   el sistema no está contando. */
+.cl-cobra{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}
+.cl-cobra>div{background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.13);
+  border-radius:10px;padding:7px 9px}
+.cl-cobra i{display:block;font:700 9px Manrope;color:var(--cream-45);font-style:normal;
+  letter-spacing:.4px;text-transform:uppercase}
+.cl-cobra b{display:block;font:800 15px "Space Grotesk";color:var(--cream);margin-top:2px}
+.cl-cobra .debe{border-color:rgba(232,112,106,.4);background:rgba(232,112,106,.07)}
+.cl-cobra .debe i{color:#ff8a8a}
+.cl-cobra .debe b{color:var(--danger)}
+.cl-cobra .saldado{border-color:rgba(126,224,160,.35);background:rgba(126,224,160,.06)}
+.cl-cobra .saldado i,.cl-cobra .saldado b{color:#7ee2a8}
+.cl-debe{font-weight:800;color:var(--danger)}

@@ -3404,8 +3404,12 @@ def export_seller_payments(sid):
     if es_colider(s) and sel["owner_admin_id"] != s["admin"]["id"]:
         return jsonify(error="no existe"), 404
     c = estado_cuenta(db, sid)
-    comision_total = c["sold"] * c["commission_pct"] / 100
-    debe_entregar = c["sold"] - comision_total
+    # Mismo criterio que la pantalla: la comisión NO se recalcula con el % de hoy.
+    # Cada corte congeló el suyo; aplicarle el de ahora a todo lo vendido le
+    # reclamaría de nuevo lo que ya se llevó —y este archivo se le manda a él—.
+    comision_total = c["commission_total"]
+    falta = c["balance"] * (1 - c["commission_pct"] / 100)
+    debe_entregar = c["cash_total"] + falta
 
     wb = Workbook()
     ws = wb.active
@@ -3418,12 +3422,17 @@ def export_seller_payments(sid):
     ws["A2"] = "Generado el " + now_dt().strftime("%d/%m/%Y %H:%M")
     ws.cell(row=3, column=1, value="Boletos vendidos").font = etiqueta
     ws.cell(row=3, column=2, value=c["sold_tickets"])
+    if c["en_grupo"]:
+        etq_com = ("Comisión de sus cortes anteriores" if comision_total > 0.005
+                   else "Su comisión · la lleva su colíder")
+    else:
+        etq_com = f"Su comisión ({c['commission_pct']:g}%)"
     resumen = [
         ("Vendió en boletos", c["sold"]),
-        (f"Su comisión ({c['commission_pct']:g}%)", -comision_total),
+        (etq_com, -comision_total),
         ("Debe entregar en total", debe_entregar),
         ("Ya entregó", c["cash_total"]),
-        ("Le falta entregar", max(0, debe_entregar - c["cash_total"])),
+        ("Le falta entregar", max(0, falta)),
     ]
     fila = 4
     for etq, val in resumen:

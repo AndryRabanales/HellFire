@@ -600,6 +600,7 @@ function verColider(g) {
   const ceros = (g.miembros || []).filter(m => !m.boletos);
   const tope = Math.max(1, ...venden.map(m => m.monto));
   const pctEl = g.total.monto ? Math.round(100 * g.propio.monto / g.total.monto) : 0;
+  const falta = g.total.monto - g.total.cobrado;
   modal(`
     <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px">
       <div style="min-width:0">
@@ -625,6 +626,17 @@ function verColider(g) {
     <div class="rd-split">
       <span class="rd-el" style="width:${pctEl}%"></span>
       <span class="rd-eq2" style="width:${100 - pctEl}%"></span>
+    </div>
+
+    <!-- Lo que el grupo TODAVÍA DEBE. Faltaba en esta ventana y es la primera
+         pregunta que uno le hace a un colíder: "¿cuánto me debes?". Sin esto había
+         que salirse a Vendedores a restar a mano, y las tres cifras del corte
+         —todas en cero mientras nadie entrega— parecían un error del sistema. -->
+    <div class="cl-cobra">
+      <div><i>Ya te entregó</i><b>${fmtMoney(g.total.cobrado)}</b></div>
+      <div class="${falta > 0.005 ? 'debe' : 'saldado'}">
+        <i>${falta > 0.005 ? 'Falta por entregar' : 'Cuenta saldada'}</i>
+        <b>${fmtMoney(Math.max(0, falta))}</b></div>
     </div>
 
     <div class="cl-corte mt16">
@@ -660,7 +672,9 @@ function verColider(g) {
           <span class="rd-mn">${m.es_lider ? '<b class="rd-est">★</b> ' : ''}${esc(m.name)}
             <u>${m.ultima ? 'vendió ' + esc(haceCuanto(m.ultima)) : ''}</u></span>
           <span class="rd-mb"><i style="width:${Math.round(m.monto / tope * 100)}%"></i></span>
-          <span class="rd-mv">${fmtMoney(m.monto)}<em>${m.boletos}</em></span>
+          <span class="rd-mv">${fmtMoney(m.monto)}<em>${m.monto - m.cobrado > 0.005
+            ? `<b class="cl-debe">debe ${fmtMoney(m.monto - m.cobrado)}</b>`
+            : m.boletos + ' bol.'}</em></span>
         </div>`).join('')}</div>`
         : '<div class="muted" style="font-size:12px">Nadie del grupo ha vendido todavía.</div>'}
       ${ceros.length ? `<div class="rd-cerosbox">
@@ -1399,9 +1413,15 @@ function pintaCuenta(s, c) {
   // Lo que de verdad importa: de lo que vendió, una parte se la queda de comisión y
   // el RESTO es el efectivo que debe entregar. Se dice con palabras, no con cuatro
   // números sueltos que hay que interpretar.
-  const comisionTotal = c.sold * c.commission_pct / 100;
-  const debeEntregar = c.sold - comisionTotal;
-  const faltaEntregar = debeEntregar - c.cash_total;
+  // OJO con el porcentaje: c.commission_pct es el de HOY, y aplicarlo a todo lo
+  // vendido reescribe el pasado. A un vendedor que se volvió colíder se le pasa de
+  // 10% a 0%, y de golpe el sistema le reclamaba otra vez la comisión que ya se
+  // había quedado —legítimamente— en los cortes de antes. Cada pago congeló su
+  // propio porcentaje; commission_total es la suma real de lo que se llevó.
+  // Lo que falta es sobre el SALDO, no sobre la venta entera.
+  const comisionTotal = c.commission_total;
+  const faltaEntregar = c.balance * (1 - c.commission_pct / 100);
+  const debeEntregar = c.cash_total + faltaEntregar;
   const avance = c.sold > 0 ? Math.round(c.settled_amount / c.sold * 100) : 0;
 
   // Con cortes semanales durante ~2 meses son muchos pagos. En pantalla solo se
@@ -1443,6 +1463,15 @@ function pintaCuenta(s, c) {
         <div class="muted" style="font-size:12px">Vendi\u00f3 en boletos</div>
         <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${fmtMoney(c.sold)}</div>
       </div>
+      <!-- Si fue vendedor suelto antes de entrar al grupo, se llevó comisión en
+           aquellos cortes. Ese dinero es suyo y ya no se le reclama: sin este
+           renglón, los números de abajo no cuadran con lo que vendió y parece que
+           el sistema perdió una parte. -->
+      ${c.en_grupo && c.commission_total > 0.005 ? `
+      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
+        <div class="muted" style="font-size:12px">Comisión de sus cortes anteriores</div>
+        <div style="font:800 15px 'Space Grotesk';color:#f3d27a">− ${fmtMoney(c.commission_total)}</div>
+      </div>` : ''}
       <!-- En un grupo el vendedor no se queda un porcentaje al entregar: el colíder
            reparte de su comisión. Enseñarle "0%" ahí lo hace ver como si no ganara
            nada; lo que importa es cuánto YA LE PAGARON. -->
@@ -1740,9 +1769,10 @@ async function descargarEstadoCuenta(s, c) {
   x.fillStyle = '#f6f1e7'; x.font = '800 34px Manrope, sans-serif';
   x.fillText(s.name, pad, 134);
 
-  const comisionTotal = c.sold * c.commission_pct / 100;
-  const debeEntregar = c.sold - comisionTotal;
-  const falta = debeEntregar - c.cash_total;
+  // mismo criterio que la pantalla: lo ya cobrado no se recalcula (ver pintaCuenta)
+  const comisionTotal = c.commission_total;
+  const falta = c.balance * (1 - c.commission_pct / 100);
+  const debeEntregar = c.cash_total + falta;
 
   let y = 186;
   const linea = (etq, val, color, grande) => {
@@ -1760,8 +1790,10 @@ async function descargarEstadoCuenta(s, c) {
   linea('Vendió en boletos', fmtMoney(c.sold), '#f6f1e7');
   // En un grupo la comisión no es de cada vendedor: es del colíder sobre el total.
   // Sin decirlo, un 0% en la ficha se lee como un error o como un castigo.
-  linea(c.en_grupo ? 'Su comisión · la lleva su colíder'
-                   : `Su comisión (${c.commission_pct}%)`,
+  linea(c.en_grupo
+          ? (comisionTotal > 0.005 ? 'Comisión de sus cortes anteriores'
+                                   : 'Su comisión · la lleva su colíder')
+          : `Su comisión (${c.commission_pct}%)`,
         '− ' + fmtMoney(comisionTotal), '#f3d27a');
   x.strokeStyle = 'rgba(255,120,40,.3)'; x.lineWidth = 1;
   x.beginPath(); x.moveTo(pad, y - 22); x.lineTo(W - pad, y - 22); x.stroke();
