@@ -3124,9 +3124,14 @@ def comision_pct(db, sid=None):
     explícito es "sin comisión" y NO cae al general —por eso se compara contra None y
     no por verdadero o falso, que trataría el 0 como "sin definir"—."""
     if sid is not None:
-        if es_de_colider(db, sid):
-            return 0.0
         r = db.execute("SELECT commission_pct FROM sellers WHERE id=?", (sid,)).fetchone()
+        if es_de_colider(db, sid):
+            # Cero es lo que aplica POR DEFECTO en un grupo. Pero si el organizador le
+            # escribió un porcentaje a mano a ese vendedor, manda el suyo: es un trato
+            # que ya se habló con la persona, y el sistema no está para desdecirlo.
+            if r is not None and r["commission_pct"] is not None:
+                return max(0.0, min(100.0, float(r["commission_pct"])))
+            return 0.0
         if r is not None and r["commission_pct"] is not None:
             return max(0.0, min(100.0, float(r["commission_pct"])))
     return comision_general(db)
@@ -3226,7 +3231,14 @@ def list_seller_payments(sid):
     # La comisión la fija un admin, punto. El colíder cobra a su equipo pero no
     # decide cuánto gana nadie —ni ellos ni él—. Va aparte de can_edit porque él SÍ
     # cobra: si se mezclaran, o se le quita el cobro o se le regala el sueldo.
-    out["can_commission"] = (not es_colider(s)) and puede_gestionar(db, s["admin"], sel)
+    # Que la pantalla no ofrezca lo que aquí abajo se rechaza: dentro de un grupo el
+    # porcentaje es del COLÍDER, así que solo su propia ficha lo lleva. A un vendedor
+    # de su equipo se le sigue diciendo que no —esas ventas pagarían dos veces—.
+    out["es_lider"] = bool(sel["es_lider"])
+    out["can_commission"] = ((not es_colider(s))
+                             and puede_gestionar(db, s["admin"], sel)
+                             and (not out["en_grupo"] or out["es_lider"]))
+    out["commission_min"] = COMISION_COLIDER_MIN if out["es_lider"] else 0
     return jsonify(**out)
 
 @app.post("/api/admin/sellers/<int:sid>/payments")

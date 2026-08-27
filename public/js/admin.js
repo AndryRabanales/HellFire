@@ -1488,7 +1488,20 @@ function pintaCuenta(s, c) {
       <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
         <div class="muted" style="font-size:12px">Ya le pagaron</div>
         <div style="font:800 20px 'Space Grotesk';color:${c.recibido > 0 ? '#7ee0a0' : 'var(--cream-45)'}">${fmtMoney(c.recibido)}</div>
-      </div>` : `
+      </div>
+      <!-- El colíder sí lleva porcentaje en SU propia ficha: es el mismo 20% del
+           grupo, y aquí se aplica en el momento del corte —entrega el 80% y se queda
+           su parte— en vez de entregar todo y devolvérsela después por otro lado.
+           A los de su equipo esto no se les ofrece: el servidor lo rechaza. -->
+      ${c.can_commission ? `
+      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
+        <div class="muted" style="font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          <span>Se queda en el corte</span>
+          <button id="cta-com" class="btn sm ghost" style="width:auto;flex:none;padding:5px 11px;font-size:12px;
+            border-color:rgba(243,210,122,.5);color:#f3d27a">${c.commission_pct}% ▾</button></div>
+        <div style="font:700 15px 'Space Grotesk';color:#f3d27a">${c.commission_pct > 0
+          ? '\u2212 ' + fmtMoney(c.balance * c.commission_pct / 100) : '\u2014'}</div>
+      </div>` : ''}` : `
       <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
         <div class="muted" style="font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
           <span>Se queda de comisi\u00f3n</span>${c.can_commission
@@ -1500,11 +1513,11 @@ function pintaCuenta(s, c) {
       <!-- Los porcentajes de un toque, plegados. Se abren solo cuando se van a usar,
            así la cuenta se sigue leyendo igual de limpia que antes. -->
       <div id="cta-com-box" class="row" style="display:none;gap:5px;flex-wrap:wrap;margin-top:8px">
-        ${[0, 10, 15, 20, 25].map(n => `<button class="btn sm ghost cta-pct${
-          n === c.commission_pct ? ' sel' : ''}" data-pct="${n}"
+        ${[0, 10, 15, 20, 25, 30].filter(n => n >= (c.commission_min || 0)).map(n =>
+          `<button class="btn sm ghost cta-pct${n === c.commission_pct ? ' sel' : ''}" data-pct="${n}"
           style="width:auto;flex:none;padding:7px 11px;font-size:11.5px">${n}%</button>`).join('')}
-        <button class="btn sm ghost cta-pct" data-pct="" style="width:auto;flex:none;padding:7px 11px;font-size:11.5px"
-          title="Volver a la comisi\u00f3n general del sistema">General</button>
+        ${c.es_lider ? '' : `<button class="btn sm ghost cta-pct" data-pct="" style="width:auto;flex:none;padding:7px 11px;font-size:11.5px"
+          title="Volver a la comisi\u00f3n general del sistema">General</button>`}
         <button class="btn sm ghost" id="cta-otro" style="width:auto;flex:none;padding:7px 11px;font-size:11.5px"
           title="Escribir cualquier porcentaje">Otro…</button>
       </div>
