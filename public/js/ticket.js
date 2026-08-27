@@ -508,7 +508,7 @@ async function downloadTicket(ticket, ev) {
 // del archivo que suban. Medido sobre el diseño: la línea de NOMBRE COMPLETO va a la
 // mitad de la altura, y el hueco arranca en el margen izquierdo y termina antes de
 // la máscara.
-const REDES = { x0: 0.109, x1: 0.678, linea: 0.4975, alto: 0.052 };
+const REDES = { x0: 0.109, x1: 0.678, linea: 0.4975, alto: 0.052, aire: 0.019 };
 
 function redesVariantFor(ticket) {
   const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
@@ -560,9 +560,11 @@ async function renderPresumible(ticket, ev, imgOverride) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = '#151210';
-    // separado de la línea por una fracción de su propio tamaño: así el aire se ve
-    // igual con letra grande y con letra chica
-    ctx.fillText(nombre, x0 + ancho / 2, H * REDES.linea - px * 0.34, ancho);
+    // El aire sobre la raya es FIJO, no proporcional a la letra. Atado al tamaño de
+    // letra, un nombre corto quedaba con 38px de hueco y uno largo con 8: cada
+    // invitación se veía distinta. Fijo, todas las de la tanda quedan a la misma
+    // altura sobre la línea, que es lo que las hace ver de la misma serie.
+    ctx.fillText(nombre, x0 + ancho / 2, H * (REDES.linea - REDES.aire), ancho);
   }
   return cv;
 }
