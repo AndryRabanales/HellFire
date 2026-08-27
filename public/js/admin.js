@@ -646,6 +646,14 @@ function verColider(g) {
         <div class="gana"><i>Le toca a él</i><b>${fmtMoney(g.comision_ganada)}</b></div>
         <div><i>Te entrega</i><b>${fmtMoney(g.entrega_al_admin)}</b></div>
       </div>
+      <!-- Lo que va a pasar con lo que todavía deben. Las tres cifras de arriba solo
+           cuentan lo YA cobrado, así que con el grupo debiendo se quedan en cero y
+           parece que su 20% se perdió. No se perdió: no ha nacido. Aquí se ve de
+           cuánto será y cuánto de eso es tuyo. -->
+      ${falta > 0.005 ? `<div class="cl-futuro">
+        Cuando te entregue los <b>${fmtMoney(falta)}</b>:
+        <b class="suyo">${fmtMoney(falta * g.comision_pct / 100)}</b> serán de él ·
+        <b class="tuyo">${fmtMoney(falta - falta * g.comision_pct / 100)}</b> tuyos</div>` : ''}
       <div class="cl-reparto">
         <span>Repartió a su equipo <b>${fmtMoney(g.repartido)}</b></span>
         <span class="cl-queda">Le quedan <b>${fmtMoney(g.le_queda)}</b></span>
@@ -670,11 +678,12 @@ function verColider(g) {
       ${venden.length ? `<div class="rd-eq" style="border:none;padding-top:0">${venden.map(m => `
         <div class="rd-m cl-m" data-id="${m.id}" data-n="${esc(m.name)}" data-t="${m.monto}">
           <span class="rd-mn">${m.es_lider ? '<b class="rd-est">★</b> ' : ''}${esc(m.name)}
-            <u>${m.ultima ? 'vendió ' + esc(haceCuanto(m.ultima)) : ''}</u></span>
+            <u>${[m.ultima ? 'vendió ' + esc(haceCuanto(m.ultima)) : '',
+                  m.monto - m.cobrado > 0.005
+                    ? `<b class="cl-debe">debe ${fmtMoney(m.monto - m.cobrado)}</b>` : '']
+                 .filter(Boolean).join(' · ')}</u></span>
           <span class="rd-mb"><i style="width:${Math.round(m.monto / tope * 100)}%"></i></span>
-          <span class="rd-mv">${fmtMoney(m.monto)}<em>${m.monto - m.cobrado > 0.005
-            ? `<b class="cl-debe">debe ${fmtMoney(m.monto - m.cobrado)}</b>`
-            : m.boletos + ' bol.'}</em></span>
+          <span class="rd-mv">${fmtMoney(m.monto)}<em>${m.boletos}</em></span>
         </div>`).join('')}</div>`
         : '<div class="muted" style="font-size:12px">Nadie del grupo ha vendido todavía.</div>'}
       ${ceros.length ? `<div class="rd-cerosbox">

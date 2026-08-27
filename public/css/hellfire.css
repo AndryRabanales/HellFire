@@ -1288,3 +1288,11 @@ button.rd-p:active{transform:scale(.97)}
 .cl-cobra .saldado{border-color:rgba(126,224,160,.35);background:rgba(126,224,160,.06)}
 .cl-cobra .saldado i,.cl-cobra .saldado b{color:#7ee2a8}
 .cl-debe{font-weight:800;color:var(--danger)}
+
+/* lo que su 20% va a ser cuando el grupo entregue lo que debe */
+.cl-futuro{margin-top:9px;padding:8px 10px;border-radius:10px;
+  border:1px dashed rgba(243,210,122,.3);background:rgba(243,210,122,.05);
+  font:600 11.5px Manrope;color:var(--cream-60);line-height:1.55}
+.cl-futuro b{font-family:"Space Grotesk";color:var(--cream)}
+.cl-futuro .suyo{color:#f3d27a}
+.cl-futuro .tuyo{color:#7ee2a8}
