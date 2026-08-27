@@ -128,7 +128,7 @@ function confirmModal({ title, body, okLabel, danger, withReason }) {
       <div class="muted mt8" style="font-size:13px;line-height:1.5">${body}</div>
       ${withReason ? '<div class="label mt12">Motivo</div><input class="input" id="cm-reason" placeholder="Ej. pago no recibido">' : ''}
       <div class="err mt8" id="cm-err"></div>
-      <div class="row mt16">
+      <div class="row mt16 cm-acciones">
         <button class="btn ghost grow" id="cm-no">Cancelar</button>
         <button class="btn ${danger ? 'danger' : ''} grow" id="cm-yes">${okLabel || 'Confirmar'}</button>
       </div>`);
@@ -3052,7 +3052,7 @@ function filaCuenta(a, esYo) {
   b.className = 'btn sm danger'; b.style.width = 'auto'; b.textContent = 'Eliminar';
   b.onclick = async () => {
     const ok = await confirmModal({
-      title: `Eliminar ${quees}`, danger: true, okLabel: 'Eliminar para siempre',
+      title: `Eliminar ${quees}`, danger: true, okLabel: 'Sí, eliminar',
       // Antes solo decía "se eliminará la cuenta". Sus vendedores cambiaban de
       // dueño en silencio, que es justo lo que hay que saber ANTES de decidir.
       body: `Se elimina la cuenta <b style="color:var(--cream)">${esc(a.username)}</b> y esto no se deshace.`
@@ -3373,7 +3373,12 @@ async function loadAjustes() {
 /* En vivo, de Ajustes solo se refrescan las CUENTAS. Lo de arriba son campos que se
    escriben —el nombre del evento, la comisión, el folio— y repintarlos cada 4 segundos
    le borraría a alguien lo que está tecleando. */
-function liveAjustes(silent) { return loadAdmins(silent); }
+function liveAjustes(silent) {
+  // las filas de la puerta también: la noche del evento el contador de cada una es
+  // lo que dice si alguna se atoró, y tiene que moverse solo
+  loadPuertas().catch(() => {});
+  return loadAdmins(silent);
+}
 
 /* Cerrar la boletera: se toca una sola vez, la noche de la fiesta, y con prisa.
    Por eso el botón dice qué va a pasar (no "Activado/Desactivado") y pide una
@@ -3407,44 +3412,101 @@ function pintaVentas(cerradas) {
   };
 }
 
-/* Clave del escáner de la puerta. Apagada, solo los admins pueden escanear; el día
-   del evento se genera y se reparte al staff. Rotarla saca a quien tenga la vieja. */
-function pintaPuerta(clave) {
-  const hay = !!clave;
-  $('#dc-estado').innerHTML = hay
-    ? '<b style="color:var(--ok)">ENCENDIDA</b> \u00b7 el staff entra a /scan con esta clave'
-    : '<b style="color:var(--cream-60)">APAGADA</b> \u00b7 solo t\u00fa puedes escanear (abre Esc\u00e1ner arriba)';
-  $('#dc-clave').style.display = hay ? '' : 'none';
-  if (hay) $('#dc-num').textContent = clave;
-  $('#btn-dc-gen').textContent = hay ? 'Generar una clave nueva' : 'Generar clave para el staff';
-  $('#btn-dc-off').style.display = hay ? '' : 'none';
-  $('#btn-dc-gen').onclick = async () => {
-    if (hay) {
+/* Las filas de la puerta. Antes era UNA clave para todos: los seis que escanean
+   quedaban anónimos —si mañana se quemó un boleto que no debían, no había de dónde
+   agarrarse— y rotarla sacaba a las seis filas al mismo tiempo. Ahora cada fila
+   tiene la suya, firma lo que deja pasar, y se apaga sola. */
+async function loadPuertas() {
+  const r = await API.get('/api/admin/doors');
+  const cont = $('#dr-list');
+  if (!cont) return;
+  cont.innerHTML = '';
+  if (!r.doors.length) {
+    cont.innerHTML = `<div class="muted" style="font-size:12px">Todavía no hay ninguna fila.
+      Abre una por cada persona que vaya a escanear.</div>`;
+  }
+  r.doors.forEach(d => {
+    const fila = document.createElement('div');
+    fila.className = 'trow';
+    if (!d.active) fila.style.opacity = '.55';
+    fila.innerHTML = `<div class="tmain">
+        <div class="tbuyer">${esc(d.name)}${d.active ? '' : ' <span class="badge void">apagada</span>'}</div>
+        <div class="tmeta"><span class="codechip" style="letter-spacing:.22em">${esc(d.code)}</span>
+          · ${d.entradas} ${d.entradas === 1 ? 'entrada' : 'entradas'}
+          ${d.last_used ? '· entró ' + esc(haceCuanto(d.last_used)) : '· nadie ha entrado con ella'}</div>
+      </div>`;
+    const caja = document.createElement('div');
+    caja.className = 'ad-btns';
+    const mk = (txt, cls, fn, titulo) => {
+      const b = document.createElement('button');
+      b.className = 'btn sm ' + cls; b.style.width = 'auto'; b.textContent = txt;
+      if (titulo) b.title = titulo;
+      b.onclick = fn; caja.appendChild(b); return b;
+    };
+    mk(d.active ? 'Apagar' : 'Prender', 'ghost', async () => {
+      if (d.active) {
+        const ok = await confirmModal({
+          title: `Apagar «${d.name}»`, danger: true, okLabel: 'Apagar',
+          body: `Los teléfonos de <b style="color:var(--cream)">esta fila</b> quedan fuera al
+            instante. Las demás siguen escaneando sin enterarse.
+            <br><br>Los ${d.entradas} que ya dejó pasar no se borran.`,
+        });
+        if (!ok) return;
+      }
+      try { await API.post(`/api/admin/doors/${d.id}/toggle`, {}); loadPuertas(); }
+      catch (e) { if (!guard(e)) toast(e.message); }
+    });
+    mk('Nueva clave', 'ghost', async () => {
       const ok = await confirmModal({
-        title: 'Generar una clave nueva',
-        body: 'La clave anterior deja de servir y el staff que la tenga queda fuera hasta que le pases la nueva.',
-        okLabel: 'Generar', danger: true,
+        title: `Clave nueva para «${d.name}»`, danger: true, okLabel: 'Cambiarla',
+        body: `Sirve si esa clave se filtró. Sus teléfonos quedan fuera y tienen que
+          teclear la nueva; <b style="color:var(--cream)">las otras filas no se tocan</b>.`,
       });
       if (!ok) return;
-    }
-    try {
-      const r = await API.post('/api/admin/door-code', { accion: 'generar' });
-      pintaPuerta(r.door_code); toast('Clave lista: ' + r.door_code);
-    } catch (e) { if (!guard(e)) toast(e.message); }
-  };
-  $('#btn-dc-off').onclick = async () => {
-    const ok = await confirmModal({
-      title: 'Apagar el esc\u00e1ner del staff',
-      body: 'Las sesiones de puerta se cierran al instante. T\u00fa sigues pudiendo escanear con tu cuenta.',
-      okLabel: 'Apagar', danger: true,
-    });
-    if (!ok) return;
-    try {
-      const r = await API.post('/api/admin/door-code', { accion: 'apagar' });
-      pintaPuerta(''); toast('Esc\u00e1ner del staff apagado');
-    } catch (e) { if (!guard(e)) toast(e.message); }
-  };
+      try {
+        const r2 = await API.post(`/api/admin/doors/${d.id}/rotate`, {});
+        toast('Clave nueva: ' + r2.code); loadPuertas();
+      } catch (e) { if (!guard(e)) toast(e.message); }
+    }, 'Por si se filtró');
+    mk('✕', 'danger', async () => {
+      const ok = await confirmModal({
+        title: `Eliminar «${d.name}»`, danger: true, okLabel: 'Eliminar',
+        body: `Se quita la fila y su clave deja de servir.
+          <br><br><b style="color:var(--ok)">Los ${d.entradas} que dejó pasar conservan su
+          nombre</b>: quién dejó entrar a quién no se borra nunca.`,
+      });
+      if (!ok) return;
+      try { await API.del('/api/admin/doors/' + d.id); loadPuertas(); }
+      catch (e) { if (!guard(e)) toast(e.message); }
+    }, 'Eliminar la fila');
+    fila.appendChild(caja);
+    cont.appendChild(fila);
+  });
+  // lo que entró sin firma es de antes de que existieran las filas, o lo escaneaste tú
+  const extra = (r.otros || []).map(o => `${esc(o.name)} ${o.entradas}`).join(' · ');
+  $('#dr-resumen').innerHTML = `${r.total} boleto(s) han entrado en total.`
+    + (extra ? ` Fuera de las filas: ${extra}.` : '')
+    + (r.sin_firma ? ` ${r.sin_firma} entraron antes de que hubiera filas.` : '');
 }
+
+$('#btn-dr-add').addEventListener('click', async () => {
+  $('#dr-err').textContent = '';
+  const name = $('#dr-name').value.trim();
+  try {
+    const r = await API.post('/api/admin/doors', { name });
+    $('#dr-name').value = '';
+    modal(`<div class="h1" style="font-size:18px">${esc(r.name)}</div>
+      <div class="muted mt8">Su clave. Pásasela solo a quien va a estar en esa fila:</div>
+      <div style="text-align:center;margin:16px 0"><span class="codechip"
+        style="font-size:28px;padding:11px 20px;letter-spacing:.3em">${esc(r.code)}</span></div>
+      <div class="muted" style="font-size:11px;line-height:1.5">Entra en
+        <b style="color:var(--cream)">/scan</b> y la teclea una vez. Queda dentro hasta
+        que tú apagues la fila, así que conviene hacerlo <b style="color:var(--cream)">antes
+        de abrir</b> y no con la gente encima.</div>
+      <button class="btn mt16" onclick="closeModal()">Listo</button>`);
+    loadPuertas();
+  } catch (e) { if (!guard(e)) $('#dr-err').textContent = e.message; }
+});
 
 /* Borrar todo desde el panel. La palabra escrita a mano es el candado: un "¿estás
    seguro?" se contesta que sí sin leer, escribir BORRAR TODO no. */
@@ -3478,7 +3540,7 @@ $('#btn-rs-go').addEventListener('click', async () => {
 async function loadSettings() {
   const s = await API.get('/api/admin/settings');
   pintaVentas(s.ventas_cerradas);
-  pintaPuerta(s.door_code);
+  loadPuertas().catch(() => {});
   $('#st-name').value = s.event_name;
   $('#st-subtitle').value = s.event_subtitle;
   $('#st-folio').value = s.folio_start || '1';

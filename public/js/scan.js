@@ -7,12 +7,21 @@
 let stream = null, scanning = false, busy = false, lastCode = '', lastAt = 0;
 let SCAN_TOKEN = localStorage.getItem('onfire_scan_token') || '';
 
+/* Qué fila es esta. Se guarda en el teléfono para que al recargar siga diciéndolo
+   sin volver a teclear la clave. */
+function pintarPuerta(nombre) {
+  const el = document.querySelector('.who');
+  if (el && nombre) el.textContent = nombre;
+}
+
 function tokenDePuerta() {
   // la sesión de admin (misma página, mismo navegador) también autoriza
   return SCAN_TOKEN || localStorage.getItem('onfire_admin_token') || '';
 }
 
 function mostrarGate(msj) {
+  localStorage.removeItem('onfire_scan_puerta');
+  pintarPuerta('Puerta');
   document.getElementById('view-gate').classList.remove('hidden');
   document.getElementById('view-scan').style.display = 'none';
   GATE_PIN = ''; document.getElementById('gate-code').value = ''; pintarGate();
@@ -55,6 +64,12 @@ async function entrarConClave() {
     }
     SCAN_TOKEN = r.token;
     localStorage.setItem('onfire_scan_token', r.token);
+    // El nombre de la fila arriba, siempre a la vista: con seis puertas abiertas hay
+    // que poder decir en cuál estás sin adivinar por el color de la pulsera.
+    if (r.puerta) {
+      localStorage.setItem('onfire_scan_puerta', r.puerta);
+      pintarPuerta(r.puerta);
+    }
     document.getElementById('view-gate').classList.add('hidden');
     document.getElementById('view-scan').style.display = '';
     ensureCamera();
@@ -354,7 +369,8 @@ function pintarEntradas() {
     : `Los ${vis.length} más recientes`;
   document.getElementById('ent-lista').innerHTML = vis.length ? vis.map(e => `
     <div class="ent-fila">
-      <div class="e-n">${esc(e.buyer_name || '')}</div>
+      <div class="e-n">${esc(e.buyer_name || '')}${e.scanned_by
+        ? `<span class="e-por">${esc(e.scanned_by)}</span>` : ''}</div>
       ${e.type_is_vip ? '<div class="e-vip">★ VIP</div>' : ''}
       <div class="e-t">${(e.used_at || '').slice(11, 16)}</div>
     </div>`).join('')
@@ -398,6 +414,9 @@ document.getElementById('gate-code').addEventListener('input', e => {
 // si responde 401, al candado; cualquier otra cosa significa que hay permiso.
 (async () => {
   if (!tokenDePuerta()) { mostrarGate(); return; }
+  // al recargar, el nombre de la fila vuelve del teléfono: no hay que teclear la
+  // clave otra vez solo para saber en cuál estás
+  pintarPuerta(localStorage.getItem('onfire_scan_puerta') || '');
   try {
     await call('');          // 'no_existe' si hay permiso; lanza si es 401
     startCamera();

@@ -1234,11 +1234,11 @@ button.rd-p:active{transform:scale(.97)}
 .trow.mv-cl{border-left:2px solid rgba(255,110,30,.45)}
 
 /* ---- cuentas del panel (admins y colíderes): dos botones sin aplastar el nombre ---- */
-#ad-list .trow,#co-list .trow{flex-wrap:wrap;row-gap:8px}
-#ad-list .tmain,#co-list .tmain{min-width:150px}
+#ad-list .trow,#co-list .trow,#dr-list .trow{flex-wrap:wrap;row-gap:8px}
+#ad-list .tmain,#co-list .tmain,#dr-list .tmain{min-width:150px}
 .ad-btns{display:flex;gap:6px;flex:none;margin-left:auto}
 @media (max-width:520px){
-  #ad-list .tmain,#co-list .tmain{flex-basis:100%}
+  #ad-list .tmain,#co-list .tmain,#dr-list .tmain{flex-basis:100%}
   .ad-btns{margin-left:0;width:100%}
   .ad-btns .btn{flex:1;width:auto}
 }
@@ -1296,3 +1296,20 @@ button.rd-p:active{transform:scale(.97)}
 .cl-futuro b{font-family:"Space Grotesk";color:var(--cream)}
 .cl-futuro .suyo{color:#f3d27a}
 .cl-futuro .tuyo{color:#7ee2a8}
+
+/* ---- los dos botones de un aviso ----
+   "Eliminar para siempre" no cabía a lo ancho de medio celular y se partía en dos
+   renglones: quedaba un botón de dos líneas junto a uno de una, torcido. Si las dos
+   etiquetas no caben lado a lado, se apilan enteras —la acción arriba, Cancelar
+   abajo— en vez de romperse por dentro. */
+/* El orden NO se toca: Cancelar a la izquierda y la acción a la derecha, como en
+   todo el panel. Probé invirtiéndolo para que al apilarse la acción quedara arriba,
+   y el costo era peor: el dedo va al botón de la derecha por costumbre y ahí habría
+   quedado "Eliminar". Apilado, la acción queda abajo — más difícil de tocar sin
+   querer, que para un botón destructivo está bien. */
+.cm-acciones{flex-wrap:wrap}
+/* min-width:max-content = "este botón pide el ancho de su texto entero". Con eso el
+   corte lo decide la etiqueta, no un ancho de pantalla que yo adivine: si las dos
+   caben van lado a lado, y si no, se apilan solas. Con un @media fijo, una etiqueta
+   larga en una pantalla mediana se salía del botón. */
+.cm-acciones .btn{white-space:nowrap;min-width:max-content}

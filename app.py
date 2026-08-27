@@ -289,6 +289,18 @@ CREATE TABLE IF NOT EXISTS sessions (
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS door_keys (
+  -- Una clave por FILA de la puerta, con su nombre. Con una sola clave para todos,
+  -- los seis que escanean son anónimos: si mañana se quemó un boleto que no debían,
+  -- no hay de dónde agarrarse. Y si una se filtra a media fiesta, apagar la única
+  -- deja a las seis filas fuera al mismo tiempo.
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  code TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  last_used TEXT,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS login_attempts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   key TEXT NOT NULL,               -- ip o ip+usuario
@@ -654,6 +666,7 @@ def init_db():
         db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
                    "tutorial_seen INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS client_ref TEXT")
+        db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS scanned_by TEXT")
         db.execute("ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS actor_role TEXT")
         db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
                    "active INTEGER NOT NULL DEFAULT 1")
@@ -701,6 +714,8 @@ def init_db():
             db.execute("ALTER TABLE tickets ADD COLUMN normal_price_cents INTEGER")
         if "client_ref" not in tkcols:
             db.execute("ALTER TABLE tickets ADD COLUMN client_ref TEXT")
+        if "scanned_by" not in tkcols:
+            db.execute("ALTER TABLE tickets ADD COLUMN scanned_by TEXT")
         if "es_representante" not in tkcols:
             db.execute("ALTER TABLE tickets ADD COLUMN es_representante INTEGER NOT NULL DEFAULT 0")
         if "es_cortesia" not in tkcols:
@@ -729,6 +744,14 @@ def init_db():
         if "owner_admin_id" not in ycols:
             db.execute("ALTER TABLE seller_payments ADD COLUMN owner_admin_id INTEGER")
     db.commit()
+    # La clave única de antes pasa a ser una puerta con nombre, para que quien ya la
+    # tenga en su teléfono siga entrando y de una vez quede identificada.
+    vieja = setting(db, "door_code")
+    if vieja and not db.execute("SELECT 1 FROM door_keys LIMIT 1").fetchone():
+        db.execute("INSERT INTO door_keys(name, code, active, created_at) VALUES(?,?,1,?)",
+                   ("Puerta principal", vieja, now_iso()))
+        db.commit()
+
     # Los cobros viejos no traen dueño. Se les pone el que tiene hoy su vendedor, que
     # es exactamente de quien eran: hasta ahora nadie ha cambiado de grupo, así que las
     # cuentas dan igual antes y después de este relleno.
@@ -1225,9 +1248,14 @@ def current_session():
             return None
         return {"role": "seller", "seller": seller, "token": token}
     if s["role"] == "scanner":
-        # sesión de puerta: no apunta a ningún usuario, solo autoriza escanear.
-        # Si el admin apagó o rotó la clave, la sesión ya se borró y no llega aquí.
-        return {"role": "scanner", "token": token}
+        # La sesión guarda DE QUÉ FILA es (user_id = la puerta). Así cada ingreso queda
+        # firmado, y apagar una puerta saca a sus teléfonos sin tocar a las otras.
+        puerta = db.execute("SELECT * FROM door_keys WHERE id=?", (s["user_id"],)).fetchone()
+        if s["user_id"] and (not puerta or not puerta["active"]):
+            db.execute("DELETE FROM sessions WHERE token=?", (token,))
+            db.commit()
+            return None
+        return {"role": "scanner", "token": token, "puerta": puerta}
     admin = db.execute("SELECT * FROM admins WHERE id=?", (s["user_id"],)).fetchone()
     if not admin or not admin["active"]:
         # Congelado a media sesión: se cae en el acto, no al siguiente login. Si no,
@@ -1572,6 +1600,8 @@ def ticket_public(t):
             "type_name": t["type_name"], "type_is_vip": t["type_is_vip"],
             "price": money(t["price_cents"]), "status": t["status"],
             "created_at": t["created_at"], "used_at": t["used_at"],
+            # por qué puerta entró: es lo que deja señalar responsable de un ingreso
+            "scanned_by": (t["scanned_by"] if "scanned_by" in t.keys() else None),
             "seller_name": t["seller_name"], "seller_code": t["seller_code"],
             "phase_name": t["phase_name"], "group_size": t["group_size"],
             "es_representante": bool(t["es_representante"]),
@@ -1854,7 +1884,7 @@ def scan_recent():
         return jsonify(error="clave requerida"), 401
     db = get_db()
     filas = db.execute(
-        f"""SELECT buyer_name, type_name, type_is_vip, used_at FROM tickets
+        f"""SELECT buyer_name, type_name, type_is_vip, used_at, scanned_by FROM tickets
             WHERE status='used' AND {NOT_GUEST}
             ORDER BY used_at DESC LIMIT 60""").fetchall()
     total = db.execute(
@@ -1871,14 +1901,18 @@ def scan_login():
     if espera:
         return jsonify(error=aviso_bloqueo(espera), espera=espera), 429
     codigo = str((request.json or {}).get("code", "")).strip()
-    puerta = setting(db, "door_code")
-    if not puerta or codigo != puerta:
+    fila = db.execute("SELECT * FROM door_keys WHERE code=? AND active=1",
+                      (codigo,)).fetchone() if codigo else None
+    if not fila:
         db.execute("INSERT INTO login_attempts(key, ts) VALUES(?,?)", ("door:" + ip, time.time()))
         db.commit()
         return jsonify(error="Clave incorrecta"), 401
-    token = create_session(db, "scanner", 0)
+    clear_attempts(db, "door:" + ip)
+    token = create_session(db, "scanner", fila["id"])
+    db.execute("UPDATE door_keys SET last_used=? WHERE id=?", (now_iso(), fila["id"]))
     db.commit()
-    return jsonify(token=token)
+    # el nombre se le enseña arriba: quien escanea tiene que ver en qué fila está
+    return jsonify(token=token, puerta=fila["name"])
 
 def require_scanner():
     """Puede escanear: un admin (siempre) o una sesión de puerta (con la clave).
@@ -1901,7 +1935,8 @@ def scan():
     ignoraba dos cosas: acepta FOLIOS, que son consecutivos y adivinables, y hasta con
     puros tokens cualquiera con la URL podía quemar el boleto de otra persona con una
     foto. Ahora escanea el admin siempre, y el staff con la clave del día del evento."""
-    if not require_scanner():
+    s = require_scanner()
+    if not s:
         return jsonify(error="clave requerida"), 401
     db = get_db()
     ident = folio_from_scan((request.json or {}).get("code", ""))
@@ -1921,8 +1956,13 @@ def scan():
     # SEGUNDOS: dos copias escaneadas en el mismo segundo daban la misma hora, las
     # dos creían haber ganado y ENTRABAN LAS DOS.
     when = now_iso()
-    cur = db.execute("UPDATE tickets SET status='used', used_at=? WHERE id=? AND status='active'",
-                     (when, t["id"]))
+    # De quién fue el escaneo. Va CONGELADO en el boleto y no como referencia a la
+    # puerta: si mañana borras o renombras esa fila, el registro de quién dejó pasar a
+    # esta persona no puede cambiar ni desaparecer.
+    quien = (s.get("puerta")["name"] if s.get("puerta")
+             else (s["admin"]["username"] if s.get("admin") else "puerta"))
+    cur = db.execute("UPDATE tickets SET status='used', used_at=?, scanned_by=? "
+                     "WHERE id=? AND status='active'", (when, quien, t["id"]))
     gane = cur.rowcount == 1
     db.commit()
     t2 = db.execute("SELECT * FROM tickets WHERE id=?", (t["id"],)).fetchone()
@@ -4274,7 +4314,6 @@ def get_settings():
                                        "folio_start"]}
     out["ventas_cerradas"] = ventas_cerradas(db)
     out["seller_commission_pct"] = comision_general(db)
-    out["door_code"] = setting(db, "door_code")
     out.update(flyer_info(db))
     return jsonify(out)
 
@@ -4311,33 +4350,118 @@ def admin_reset():
         db.commit()
     return jsonify(ok=True, boletos=antes, vendedores=vend)
 
-@app.post("/api/admin/door-code")
-def door_code():
-    """Genera o apaga la clave del escáner de la puerta.
+def _codigo_puerta(db):
+    """Seis dígitos que no choquen con otra puerta ni con un código de vendedor."""
+    for _ in range(200):
+        c = f"{secrets.randbelow(900000) + 100000}"
+        if db.execute("SELECT 1 FROM door_keys WHERE code=?", (c,)).fetchone():
+            continue
+        if db.execute("SELECT 1 FROM sellers WHERE code=?", (c,)).fetchone():
+            continue
+        return c
+    raise RuntimeError("no se pudo generar una clave de puerta")
 
-    Generar una nueva (o apagarla) TAMBIÉN cierra las sesiones de escáner abiertas:
-    rotar la clave debe sacar al staff viejo, o rotarla no protege nada."""
+@app.get("/api/admin/doors")
+def list_doors():
+    """Las filas de la puerta, con cuántos lleva cada una. El conteo sale de los
+    boletos, no de un contador aparte: así no puede desincronizarse."""
     s = require_admin()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    accion = str((request.json or {}).get("accion", "")).strip()
-    if accion == "generar":
-        clave = f"{secrets.randbelow(1000000):06d}"
-        set_setting(db, "door_code", clave)
-        db.execute("DELETE FROM sessions WHERE role='scanner'")
-        audit(db, s["admin"]["username"], "ajustes",
-              "Generó una clave nueva para el escáner de la puerta")
-        db.commit()
-        return jsonify(ok=True, door_code=clave)
-    if accion == "apagar":
-        set_setting(db, "door_code", "")
-        db.execute("DELETE FROM sessions WHERE role='scanner'")
-        audit(db, s["admin"]["username"], "ajustes",
-              "Apagó la clave del escáner: solo los admins pueden escanear")
-        db.commit()
-        return jsonify(ok=True, door_code="")
-    return jsonify(error="accion inválida"), 400
+    filas = db.execute("SELECT * FROM door_keys ORDER BY id").fetchall()
+    cuenta = {r["q"]: r["c"] for r in db.execute(
+        "SELECT scanned_by q, COUNT(*) c FROM tickets WHERE status='used' "
+        "AND scanned_by IS NOT NULL GROUP BY scanned_by").fetchall()}
+    total = db.execute("SELECT COUNT(*) c FROM tickets WHERE status='used'").fetchone()["c"]
+    sin_firma = total - sum(cuenta.values())
+    return jsonify(
+        doors=[{"id": f["id"], "name": f["name"], "code": f["code"],
+                "active": bool(f["active"]), "last_used": f["last_used"],
+                "created_at": f["created_at"], "entradas": cuenta.get(f["name"], 0)}
+               for f in filas],
+        total=total, sin_firma=sin_firma,
+        # lo que escaneó el organizador desde su propia sesión, o puertas ya borradas
+        otros=[{"name": k, "entradas": v} for k, v in sorted(cuenta.items())
+               if k not in {f["name"] for f in filas}])
+
+@app.post("/api/admin/doors")
+def create_door():
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    name = str((request.json or {}).get("name", "")).strip()[:40]
+    if len(name) < 3:
+        return jsonify(error="Ponle un nombre a la fila (ej. «Mujeres VIP»)"), 400
+    if db.execute("SELECT 1 FROM door_keys WHERE LOWER(name)=LOWER(?)", (name,)).fetchone():
+        return jsonify(error=f"Ya tienes una fila que se llama «{name}»"), 400
+    code = _codigo_puerta(db)
+    db.execute("INSERT INTO door_keys(name, code, active, created_at) VALUES(?,?,1,?)",
+               (name, code, now_iso()))
+    audit(db, s["admin"]["username"], "ajustes", f"Abrió la fila de puerta '{name}'")
+    db.commit()
+    return jsonify(ok=True, code=code, name=name)
+
+@app.post("/api/admin/doors/<int:did>/toggle")
+def toggle_door(did):
+    """Apaga o prende UNA fila. Apagarla cierra sus sesiones al instante y no toca a
+    las demás: es lo que sirve si una clave se filtra a media fiesta."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    f = db.execute("SELECT * FROM door_keys WHERE id=?", (did,)).fetchone()
+    if not f:
+        return jsonify(error="no existe"), 404
+    nuevo = 0 if f["active"] else 1
+    db.execute("UPDATE door_keys SET active=? WHERE id=?", (nuevo, did))
+    if not nuevo:
+        db.execute("DELETE FROM sessions WHERE role='scanner' AND user_id=?", (did,))
+    audit(db, s["admin"]["username"], "ajustes",
+          ("Prendió" if nuevo else "Apagó") + f" la fila de puerta '{f['name']}'")
+    db.commit()
+    return jsonify(ok=True, active=nuevo)
+
+@app.post("/api/admin/doors/<int:did>/rotate")
+def rotate_door(did):
+    """Clave nueva para esa fila. Sus teléfonos quedan fuera y tienen que teclear la
+    nueva; los de las otras filas ni se enteran."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    f = db.execute("SELECT * FROM door_keys WHERE id=?", (did,)).fetchone()
+    if not f:
+        return jsonify(error="no existe"), 404
+    code = _codigo_puerta(db)
+    db.execute("UPDATE door_keys SET code=?, active=1 WHERE id=?", (code, did))
+    db.execute("DELETE FROM sessions WHERE role='scanner' AND user_id=?", (did,))
+    audit(db, s["admin"]["username"], "ajustes", f"Cambió la clave de la fila '{f['name']}'")
+    db.commit()
+    return jsonify(ok=True, code=code)
+
+@app.delete("/api/admin/doors/<int:did>")
+def delete_door(did):
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    f = db.execute("SELECT * FROM door_keys WHERE id=?", (did,)).fetchone()
+    if not f:
+        return jsonify(error="no existe"), 404
+    db.execute("DELETE FROM door_keys WHERE id=?", (did,))
+    db.execute("DELETE FROM sessions WHERE role='scanner' AND user_id=?", (did,))
+    # OJO: los boletos que dejó pasar CONSERVAN su nombre. Borrar la fila no puede
+    # borrar el rastro de quién dejó entrar a quién.
+    audit(db, s["admin"]["username"], "ajustes", f"Eliminó la fila de puerta '{f['name']}'")
+    db.commit()
+    return jsonify(ok=True)
+
+# La clave ÚNICA del escáner se fue: ahora hay una por fila (/api/admin/doors), y
+# cada ingreso queda firmado con la suya. El ajuste "door_code" sobrevive solo como
+# semilla: al arrancar por primera vez se convierte en la fila "Puerta principal"
+# para que quien ya la tenga en su teléfono siga entrando. No se vuelve a escribir.
 
 @app.post("/api/admin/ventas")
 def toggle_ventas():
