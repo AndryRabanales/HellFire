@@ -493,3 +493,100 @@ async function downloadTicket(ticket, ev) {
   soltar();
   return true;
 }
+
+/* ==================================================================
+   La invitación PARA REDES. Solo cortesías.
+
+   No es un boleto y por eso no comparte nada con renderTicket(): no lleva QR —ese es
+   justo el punto, que la puedan publicar sin regalar su entrada— ni banda inferior, y
+   su medida es 4:5, la del feed de Instagram. La imagen que sube el organizador ya
+   trae todo el diseño (fecha, hora, acceso); lo único que se dibuja encima es el
+   nombre del invitado, sobre la línea que el diseño dejó para eso.
+   ================================================================== */
+
+// Dónde cae el nombre, en fracciones del lienzo para que no dependa de la resolución
+// del archivo que suban. Medido sobre el diseño: la línea de NOMBRE COMPLETO va a la
+// mitad de la altura, y el hueco arranca en el margen izquierdo y termina antes de
+// la máscara.
+const REDES = { x0: 0.109, x1: 0.678, linea: 0.4975, alto: 0.052 };
+
+function redesVariantFor(ticket) {
+  const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
+  if (t === 'ultravip') return 'redesultra';
+  return ticket.type_is_vip ? 'redesvip' : 'redesexterno';
+}
+
+/* ¿Se le puede ofrecer? Solo si es cortesía Y su imagen está subida. Sin imagen no
+   hay respaldo posible: el flyer del boleto tiene otra medida y otro diseño. */
+function hayPresumible(ticket, ev) {
+  return !!(ticket && ticket.es_cortesia && ev && ev['flyer_' + redesVariantFor(ticket)]);
+}
+
+async function renderPresumible(ticket, ev, imgOverride) {
+  await document.fonts.ready;
+  const variant = redesVariantFor(ticket);
+  const flyer = imgOverride !== undefined ? imgOverride
+    : await loadFlyer(variant, ev['flyer_' + variant]);
+  const W = 1080, H = 1350;                 // 4:5 exacto, tamaño de publicación
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#f6f1e7'; ctx.fillRect(0, 0, W, H);
+
+  if (flyer && flyer.width > 0 && flyer.height > 0) {
+    // "cover": llena los 4:5 sin deformar. Si suben algo que no es 4:5, se recorta
+    // por el lado que sobra en vez de estirarse —un nombre estirado se nota—.
+    const s = Math.max(W / flyer.width, H / flyer.height);
+    const dw = flyer.width * s, dh = flyer.height * s;
+    ctx.drawImage(flyer, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  }
+
+  const nombre = (ticket.buyer_name || '').trim();
+  if (nombre) {
+    const x0 = W * REDES.x0, x1 = W * REDES.x1;
+    const ancho = x1 - x0;
+    // Un renglón siempre. Si el nombre es largo, la letra se encoge hasta caber: es
+    // preferible una letra más chica a un nombre cortado o encimado en la línea.
+    let px = Math.round(H * REDES.alto);
+    // El piso tiene que ser BAJO. Con uno alto, un nombre de 35 letras —"María
+    // Fernanda Villanueva Escamilla", nada raro— llegaba al tope todavía sin caber y
+    // el navegador lo APLASTABA a lo ancho para meterlo: las letras salían flacas y
+    // deformes. Prefiero una letra chica y bien hecha. A este piso entra un nombre de
+    // ~50 caracteres a su proporción natural.
+    const minimo = Math.round(H * 0.015);
+    const mide = t => { ctx.font = `700 ${px}px Cinzel, Georgia, serif`; return ctx.measureText(t).width; };
+    while (px > minimo && mide(nombre) > ancho) px -= 1;
+    ctx.font = `700 ${px}px Cinzel, Georgia, serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#151210';
+    // separado de la línea por una fracción de su propio tamaño: así el aire se ve
+    // igual con letra grande y con letra chica
+    ctx.fillText(nombre, x0 + ancho / 2, H * REDES.linea - px * 0.34, ancho);
+  }
+  return cv;
+}
+
+async function downloadPresumible(ticket, ev) {
+  const cv = await renderPresumible(ticket, ev);
+  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  if (!blob) throw new Error('No se pudo generar la invitación');
+  const slug = (ticket.buyer_name || 'invitacion').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'invitacion';
+  const url = URL.createObjectURL(blob);
+  const soltar = () => setTimeout(() => URL.revokeObjectURL(url), 60000);
+  if (navegadorIncrustado() || !soportaDescarga()) {
+    mostrarParaGuardar(url, ticket);
+    soltar();
+    return false;
+  }
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'invitacion_' + slug + '.png';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => a.remove(), 1000);
+  soltar();
+  return true;
+}

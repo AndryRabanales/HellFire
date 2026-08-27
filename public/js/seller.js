@@ -588,6 +588,11 @@ function showSoloResult(t, bajoAutomatico) {
         </div>
         <button class="u-dl" id="solo-dl">${DL_ICON}<span>Descargar</span></button>
       </div>
+      ${hayPresumible(t, CATALOG) ? `<div class="u-fila" style="margin-top:8px">
+        <div class="u-datos"><div class="u-meta">Para que la presuma, sin el QR</div></div>
+        <button class="u-dl" id="solo-ig" style="border-color:rgba(243,210,122,.5);color:#f3d27a">
+          ${DL_ICON}<span>Invitación</span></button>
+      </div>` : ''}
     </div>`;
   if (bajoAutomatico) DOWNLOADED.add(t.id);
   const b = $('#solo-dl');
@@ -599,6 +604,13 @@ function showSoloResult(t, bajoAutomatico) {
         toast('Boleto descargado otra vez');
       }
     } finally { b.disabled = false; }
+  });
+  const ig = $('#solo-ig');
+  if (ig) ig.addEventListener('click', async () => {
+    ig.disabled = true;
+    try { if (await downloadPresumible(t, CATALOG)) toast('Invitación descargada ✓'); }
+    catch (e) { toast(e.message); }
+    finally { ig.disabled = false; }
   });
   $('#solo-result').classList.remove('hidden');
 }
@@ -726,6 +738,25 @@ async function loadHistory() {
           } finally { b.disabled = false; }
         });
         row.appendChild(b);
+        // La invitación para redes vive junto a su boleto: quien reparte cortesías
+        // baja las dos de un tirón, sin ir a buscarlas a otra pantalla.
+        if (hayPresumible(t, CATALOG)) {
+          const ig = document.createElement('button');
+          ig.className = 'iconbtn';
+          ig.textContent = '★';
+          ig.title = 'Descargar su invitación para redes (sin QR)';
+          ig.style.color = '#f3d27a';
+          ig.style.borderColor = 'rgba(243,210,122,.5)';
+          ig.style.background = 'rgba(243,210,122,.1)';
+          ig.style.marginLeft = '6px';
+          ig.addEventListener('click', async () => {
+            ig.disabled = true;
+            try { if (await downloadPresumible(t, CATALOG)) toast('Invitación descargada ✓'); }
+            catch (e) { toast(e.message); }
+            finally { ig.disabled = false; }
+          });
+          row.appendChild(ig);
+        }
       }
       list.appendChild(row);
     });

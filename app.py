@@ -388,6 +388,14 @@ DEFAULT_SETTINGS = {
     "flyer_focus_cortesiavip": "", "flyer_scale_cortesiavip": "",
     "flyer_data_cortesiaultra": "", "flyer_mime_cortesiaultra": "",
     "flyer_focus_cortesiaultra": "", "flyer_scale_cortesiaultra": "",
+    # La invitación para REDES: la misma cortesía pero en 4:5, sin QR y con el nombre
+    # del invitado encima. Es para que la presuma sin publicar su boleto de verdad.
+    "flyer_data_redesexterno": "", "flyer_mime_redesexterno": "",
+    "flyer_focus_redesexterno": "", "flyer_scale_redesexterno": "",
+    "flyer_data_redesvip": "", "flyer_mime_redesvip": "",
+    "flyer_focus_redesvip": "", "flyer_scale_redesvip": "",
+    "flyer_data_redesultra": "", "flyer_mime_redesultra": "",
+    "flyer_focus_redesultra": "", "flyer_scale_redesultra": "",
     # El interruptor de la venta flash. Con "1" hay flash AHORA, sin esperar fecha.
     "flash_manual": "0",
     "seller_commission_pct": "10",   # % de comisión del vendedor sobre lo que entrega
@@ -405,12 +413,18 @@ def set_setting(db, key, value):
 
 FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip",
                   "grupo10vip", "grupo10ultra",
-                  "cortesiaexterno", "cortesiavip", "cortesiaultra")
+                  "cortesiaexterno", "cortesiavip", "cortesiaultra",
+                  "redesexterno", "redesvip", "redesultra")
 FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
                "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
                "grupo10vip": "Grupo de 10 · VIP", "grupo10ultra": "Grupo de 10 · Ultra VIP",
                "cortesiaexterno": "Cortesía Externo", "cortesiavip": "Cortesía VIP",
-               "cortesiaultra": "Cortesía Ultra VIP"}
+               "cortesiaultra": "Cortesía Ultra VIP",
+               "redesexterno": "Para redes · Externo", "redesvip": "Para redes · VIP",
+               "redesultra": "Para redes · Ultra VIP"}
+# Las de redes son 4:5 y llevan el nombre encima. Van aparte porque no son un boleto:
+# no llevan QR y su medida es la del feed de Instagram, no la del boleto.
+FLYER_REDES = ("redesexterno", "redesvip", "redesultra")
 # cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
 # relacionado antes de caer al flyer legado de una sola imagen
 FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
@@ -422,6 +436,9 @@ FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
                    # le toca: se ve bien desde el primer invitado, sin configurar nada
                    "cortesiaexterno": "externo", "cortesiavip": "vip",
                    "cortesiaultra": "ultravip"}
+# Las de redes NO tienen respaldo a propósito: son 4:5 y con el nombre encima. Caer
+# en el flyer del boleto sacaría una imagen de otra medida y con el diseño movido.
+# Si no está subida, no se ofrece el botón — mejor eso que mandarla mal hecha.
 
 def _flyer_chain(v):
     chain = [v]

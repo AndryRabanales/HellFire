@@ -765,6 +765,25 @@ async function loadCortesias(silent) {
         finally { dl.disabled = false; }
       };
       fila.appendChild(dl);
+      // La invitación para redes: la misma cortesía en 4:5, sin QR y con su nombre.
+      // Es lo que el invitado publica. Solo sale si su imagen está subida —sin ella
+      // no hay nada que dibujar y ofrecer un botón que falla es peor que no tenerlo.
+      if (hayPresumible(c, EV)) {
+        const ig = document.createElement('button');
+        ig.className = 'iconbtn'; ig.style.flex = 'none'; ig.textContent = '★';
+        ig.title = 'Descargar su invitación para redes (sin QR)';
+        ig.style.color = '#f3d27a';
+        ig.style.borderColor = 'rgba(243,210,122,.5)';
+        ig.style.background = 'rgba(243,210,122,.1)';
+        ig.onclick = async () => {
+          ig.disabled = true;
+          try {
+            if (await downloadPresumible(c, EV)) toast('Invitación descargada ✓');
+          } catch (e) { toast(e.message); }
+          finally { ig.disabled = false; }
+        };
+        fila.appendChild(ig);
+      }
       // Quitarle la entrada: con 100 cortesías repartidas, que una se filtre o que
       // alguien ya no vaya es cuestión de tiempo.
       const an = document.createElement('button');
@@ -3176,10 +3195,23 @@ const FLYER_META = {
                    sample: { folio: 'INV-0001', qr_payload: 'demo', buyer_name: 'Invitado Especial',
                              faculty_name: '', type_name: 'Ultra VIP', type_is_vip: 1,
                              price: 0, es_cortesia: true } },
+  // Las de REDES van con un nombre LARGO de muestra a propósito: así, al subir la
+  // imagen, se ve de una vez si el peor caso cabe en la línea. Con un nombre corto
+  // todo se ve bien y el problema aparece con el invitado número 40.
+  redesexterno: { redes: true, label: 'Para redes · Externo (4:5)',
+                  sample: { buyer_name: 'María Fernanda Villanueva Escamilla',
+                            type_name: 'Externo', type_is_vip: 0, es_cortesia: true } },
+  redesvip: { redes: true, label: 'Para redes · VIP (4:5)',
+              sample: { buyer_name: 'María Fernanda Villanueva Escamilla',
+                        type_name: 'VIP', type_is_vip: 1, es_cortesia: true } },
+  redesultra: { redes: true, label: 'Para redes · Ultra VIP (4:5)',
+                sample: { buyer_name: 'María Fernanda Villanueva Escamilla',
+                          type_name: 'Ultra VIP', type_is_vip: 1, es_cortesia: true } },
 };
 const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip',
                         'grupo10vip', 'grupo10ultra',
-                        'cortesiaexterno', 'cortesiavip', 'cortesiaultra'];
+                        'cortesiaexterno', 'cortesiavip', 'cortesiaultra',
+                        'redesexterno', 'redesvip', 'redesultra'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
 const FLY_ED = {};
 for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null };
@@ -3204,16 +3236,23 @@ function buildFlyerEditor(variant) {
       <div class="label" style="margin:0">${meta.label}</div>
       ${meta.hidden ? '<span class="muted" style="font-size:10px;border:1px solid var(--line);border-radius:20px;padding:2px 8px">oculto · no se vende</span>' : ''}
     </div>
+    ${meta.redes ? `<div class="muted" style="font-size:10.5px;line-height:1.5;margin-top:6px">
+      Súbela en <b style="color:var(--cream)">4:5</b> (ej. 1080×1350), sin QR y con la
+      línea del nombre vacía. El nombre del invitado se escribe solo encima de esa
+      línea, y si es largo la letra se encoge hasta caber. La muestra de abajo usa a
+      propósito un nombre de los más largos.</div>` : ''}
     <input type="file" accept="image/png,image/jpeg,image/webp" class="input" style="padding:10px;font-size:12px;margin-top:8px" data-f="file">
     <div data-f="wrap" style="display:none">
       <div class="mt8" style="display:flex;justify-content:center;background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:12px;padding:10px">
         <canvas data-f="cv" style="width:150px;max-width:100%;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,.6);cursor:grab"></canvas>
       </div>
-      <div class="mt8">
+      <!-- En las de redes la imagen llena los 4:5 exactos: no hay nada que encuadrar
+           ni que acercar, y dejar los controles ahí invita a mover algo que no aplica. -->
+      <div class="mt8" ${meta.redes ? 'style="display:none"' : ''}>
         <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Posición</div><span class="muted" data-f="fv">centro</span></div>
         <input type="range" min="0" max="1" step="0.02" value="0.5" style="width:100%;accent-color:var(--ember)" data-f="focus">
       </div>
-      <div class="mt8">
+      <div class="mt8" ${meta.redes ? 'style="display:none"' : ''}>
         <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Zoom</div><span class="muted" data-f="sv">1.0×</span></div>
         <input type="range" min="1" max="3" step="0.05" value="1" style="width:100%;accent-color:var(--ember)" data-f="scale">
       </div>
@@ -3309,7 +3348,9 @@ async function renderFlyerPreview(variant) {
   try {
     const st = FLY_ED[variant];
     const ev = { ...EV, ['flyer_focus_' + variant]: st.focus, ['flyer_scale_' + variant]: st.scale };
-    const cv = await renderTicket(FLYER_META[variant].sample, ev, st.img);
+    const cv = FLYER_META[variant].redes
+      ? await renderPresumible(FLYER_META[variant].sample, ev, st.img)
+      : await renderTicket(FLYER_META[variant].sample, ev, st.img);
     st.ui.cv.width = cv.width; st.ui.cv.height = cv.height;
     st.ui.cv.getContext('2d').drawImage(cv, 0, 0);
   } catch (e) {
