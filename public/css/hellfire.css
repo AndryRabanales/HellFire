@@ -1313,3 +1313,19 @@ button.rd-p:active{transform:scale(.97)}
    caben van lado a lado, y si no, se apilan solas. Con un @media fijo, una etiqueta
    larga en una pantalla mediana se salía del botón. */
 .cm-acciones .btn{white-space:nowrap;min-width:max-content}
+
+/* ---- que un nombre largo no empuje la fila fuera del marco ----
+   En CSS una columna "1fr" NO puede encogerse por debajo de su palabra más larga:
+   con "José Guadalupe de la Cruz Hernández Martínez" la fila crecía de más y el
+   monto de la derecha se salía del marco (la fila lo recorta, así que simplemente
+   desaparecía). minmax(0,1fr) le da permiso de encogerse, y el min-width:0 se lo da
+   a lo que va dentro. Se aplica a toda fila que reciba un nombre escrito por alguien. */
+.rd-v{grid-template-columns:8px minmax(0,1fr) 96px}
+.rd-m{grid-template-columns:minmax(0,1fr) 54px 84px}
+.rk-row{grid-template-columns:36px minmax(0,1fr) auto}
+.rd-tipo{grid-template-columns:74px minmax(0,1fr) 78px}
+.cl-rep{grid-template-columns:minmax(0,1fr) auto auto}
+.tp-row{grid-template-columns:minmax(0,1fr) auto 26px}
+.fl-row{grid-template-columns:minmax(0,1fr) auto 92px}
+.rd-v>*,.rd-m>*,.rk-row>*,.rd-tipo>*,.cl-rep>*,.tp-row>*,.fl-row>*{min-width:0}
+@media(max-width:760px){ .fl-row{grid-template-columns:minmax(0,1fr) 104px} }

@@ -88,18 +88,24 @@ const LIVE = { resumen: loadSummary, boletos: loadTicketsTable,
                // desde su teléfono, esta pantalla no puede seguir diciendo "apagada"
                // y ofrecer un botón que hace lo contrario de lo que se lee.
                catalogos: loadFlash };
+const LIVE_MS = 2500;
 function startLive() {
   stopLive();
   const fn = LIVE[currentTab];
   if (!fn) return;
-  liveTimer = setInterval(() => {
+  const latido = () => {
     if (document.hidden) return;
     // Con una ventanilla abierta, no. Repintar por debajo mueve los botones a media
     // decisión: le das a "Desactivar" y aprietas el "Eliminar" que acaba de ocupar
     // ese sitio. La pantalla se pone al día en cuanto se cierra.
     if (!$('#modal-bg').classList.contains('hidden')) return;
     fn(true).catch(() => {});   // true = silencioso (solo actualiza si cambió)
-  }, 4000);
+  };
+  // UNO YA. Antes el primero salía hasta los 4 segundos, y como esto también corre al
+  // volver a la pantalla, desbloqueabas el teléfono y te quedabas viendo el número
+  // viejo un rato largo —el boleto ya estaba vendido, el panel todavía no lo sabía—.
+  latido();
+  liveTimer = setInterval(latido, LIVE_MS);
 }
 function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } }
 
