@@ -108,6 +108,17 @@ window.addEventListener('offline', updateNet);
 const SIN_RESPUESTA = new Map();   // code -> cuándo falló
 const REINTENTO_MS = 45000;   // el reintento real toma segundos; 45s ya es generoso
 
+/* Lo que ESTE teléfono acaba de dejar pasar. Sirve para no acusar a nadie por culpa
+   del propio escáner: el staff escanea, sale verde, y si deja el teléfono apuntando
+   al mismo boleto —que es lo normal mientras la persona guarda el suyo— a los 3.5s
+   la cámara vuelve a leerlo, el servidor contesta "usado" y salía un ROJO de "NO
+   ENTRA · ya se usó" para quien acababa de entrar bien. En una fila eso se lee como
+   que se quiere colar, y se detiene a alguien que sí pagó.
+   La ventana es corta a propósito: pasado ese rato, un boleto repetido SÍ tiene que
+   salir en rojo, porque entonces sí es una copia. */
+const YA_PASO = new Map();    // code -> cuándo lo dejó pasar ESTE aparato
+const MISMO_MS = 25000;
+
 /* Un QR leído mientras se resuelve el anterior NO se tira. Antes se ignoraba en
    silencio: la pantalla seguía enseñando el "✓ ENTRA" verde de la persona de
    adelante, el de atrás pasaba, y su boleto nunca se marcó. Se guarda y se valida
@@ -135,6 +146,20 @@ async function validate(code) {
       r.recuperado = true;
     }
     SIN_RESPUESTA.delete(code);
+    // "usado" de un boleto que yo mismo acabo de pasar: no es un colado, es mi propia
+    // cámara leyéndolo otra vez. Se dice sin alarma.
+    if (r.result === 'usado' && YA_PASO.has(code) &&
+        Date.now() - YA_PASO.get(code) < MISMO_MS) {
+      r.result = 'repetido';
+    }
+    if (r.result === 'valido') {
+      YA_PASO.set(code, Date.now());
+      // que el mapa no crezca toda la noche: se tiran los que ya no pueden servir
+      if (YA_PASO.size > 400) {
+        const corte = Date.now() - MISMO_MS;
+        for (const [k, v] of YA_PASO) if (v < corte) YA_PASO.delete(k);
+      }
+    }
     render(r);
     if (r.result === 'valido') cargarEntradas();   // el contador y la lista al día
     if (navigator.vibrate) navigator.vibrate(r.result === 'valido' ? 90 : [70, 60, 70]);
@@ -165,6 +190,11 @@ function render(r) {
   const box = document.getElementById('result'), t = r.ticket;
   let cls = 'bad', title = '✕ NO ENTRA', meta = '';
   if (r.result === 'valido') { cls = 'ok'; title = '✓ ENTRA'; }
+  else if (r.result === 'repetido') {
+    // ni verde ni rojo: no es una entrada nueva, pero tampoco hay nada que revisar
+    cls = 'wait'; title = 'YA LO ESCANEASTE';
+    meta = 'Este mismo boleto, hace un momento · ya entró';
+  }
   else if (r.result === 'usado') meta = 'Ya se usó · ' + (r.used_at || '').slice(11, 16) + ' h';
   else if (r.result === 'anulado') meta = 'Boleto anulado';
   else if (r.result === 'no_existe') meta = 'Boleto falso — no existe';
