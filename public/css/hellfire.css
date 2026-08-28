@@ -1329,3 +1329,13 @@ button.rd-p:active{transform:scale(.97)}
 .fl-row{grid-template-columns:minmax(0,1fr) auto 92px}
 .rd-v>*,.rd-m>*,.rk-row>*,.rd-tipo>*,.cl-rep>*,.tp-row>*,.fl-row>*{min-width:0}
 @media(max-width:760px){ .fl-row{grid-template-columns:minmax(0,1fr) 104px} }
+
+/* ---- la celda de acciones de las tablas ----
+   Los botones sueltos en un <td> se alinean por línea base. Con un SVG (↓) junto a
+   texto (★, ✕) cada uno apoya a distinta altura y salían escalonados en diagonal.
+   En fila flex quedan centrados entre sí, midan lo que midan por dentro. */
+.td-acc{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:nowrap}
+.td-acc>*{margin:0;flex:none}
+/* Gastos lleva cuatro botones con texto: esos sí pueden bajar de renglón. Los de
+   icono, no — son tres cuadros y caben siempre. */
+.td-acc.envuelve{flex-wrap:wrap;justify-content:flex-start}

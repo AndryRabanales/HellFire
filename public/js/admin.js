@@ -113,6 +113,17 @@ function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = nul
    de esperar al siguiente latido. Eliminar un colíder no solo lo quita de la lista de
    cuentas: también desaparece su grupo de arriba, y verlo ahí cuatro segundos más deja
    dudando de si el botón funcionó. */
+/* La celda de acciones de una tabla. Los botones sueltos dentro de un <td> se
+   alinean por LÍNEA BASE, y como el ↓ es un SVG y el ★ y la ✕ son texto, cada uno
+   apoyaba distinto: salían escalonados en diagonal. Metidos en una fila flex quedan
+   a la misma altura, midan lo que midan por dentro. */
+function celdaAcciones(td, envuelve) {
+  const fila = document.createElement('div');
+  fila.className = 'td-acc' + (envuelve ? ' envuelve' : '');
+  td.appendChild(fila);
+  return fila;
+}
+
 function refrescarPantalla() {
   const fn = loaders[currentTab];
   if (fn) fn().catch(e => { if (!guard(e)) toast(e.message); });
@@ -948,18 +959,18 @@ async function loadTicketsTable(silent) {
       <td data-label="Estado">${estado}</td>`;
     const td = document.createElement('td');
     td.setAttribute('data-label', '');
-    td.style.whiteSpace = 'nowrap';
+    const acc = celdaAcciones(td);
     if (t.status !== 'void') {
       const dl = document.createElement('button');
       dl.className = 'iconbtn'; dl.title = 'Descargar boleto'; dl.innerHTML = DL_ICON;
       dl.onclick = async () => { dl.disabled = true; try { await downloadTicket(t, EV); } finally { dl.disabled = false; } };
-      td.appendChild(dl);
+      acc.appendChild(dl);
       // La invitación para redes también aquí. Estaba solo en Cortesías, pero cuando
       // buscas a alguien por su nombre lo buscas en Boletos, que es el buscador de
       // verdad — y ahí el botón no estaba.
       if (hayPresumible(t, EV)) {
         const ig = document.createElement('button');
-        ig.className = 'iconbtn'; ig.textContent = '★'; ig.style.marginLeft = '6px';
+        ig.className = 'iconbtn'; ig.textContent = '★';
         ig.title = 'Descargar su invitación para redes (sin QR)';
         ig.style.color = '#f3d27a';
         ig.style.borderColor = 'rgba(243,210,122,.5)';
@@ -970,16 +981,16 @@ async function loadTicketsTable(silent) {
           catch (e) { toast(e.message); }
           finally { ig.disabled = false; }
         };
-        td.appendChild(ig);
+        acc.appendChild(ig);
       }
       // la tachita aparece SOLO si el servidor dice que este admin puede anularlo
       if (t.can_void) {
         const vd = document.createElement('button');
-        vd.className = 'iconbtn'; vd.textContent = '✕'; vd.style.marginLeft = '6px';
+        vd.className = 'iconbtn'; vd.textContent = '✕';
         vd.title = 'Anular boleto';
         vd.style.color = 'var(--danger)'; vd.style.borderColor = 'rgba(232,112,106,.5)'; vd.style.background = 'rgba(232,112,106,.08)';
         vd.onclick = () => voidTicket(t);
-        td.appendChild(vd);
+        acc.appendChild(vd);
       }
     }
     tr.appendChild(td);
@@ -1164,12 +1175,13 @@ async function loadExpenses(silent) {
       <td data-label="Estado">${estado}</td>`;
     const td = document.createElement('td');
     td.setAttribute('data-label', '');
+    const accG = celdaAcciones(td, true);   // cuatro botones con texto: que bajen si no caben
     const mk = (label, fn, cls) => {
       const b = document.createElement('button');
       b.className = 'btn sm ' + (cls || 'ghost');
-      b.style.width = 'auto'; b.style.marginRight = '6px'; b.style.marginBottom = '4px';
+      b.style.width = 'auto';
       b.textContent = label; b.onclick = fn;
-      td.appendChild(b);
+      accG.appendChild(b);
     };
     if (!pagado) mk('Abonar', () => abonarGasto(e), '');
     mk(pagado ? 'Marcar pendiente' : 'Ya se pagó todo',
@@ -1422,19 +1434,20 @@ async function loadSellers(silent) {
       // Con 30 vendedores, cuatro botones por fila es un muro. La acción del día a
       // día es COBRAR; editar, desactivar y eliminar casi no se usan, así que se
       // guardan detrás de los tres puntos.
+      const accV = celdaAcciones(td);
       const cuenta = document.createElement('button');
       cuenta.className = 'btn sm';
-      cuenta.style.cssText = 'width:auto;margin-right:6px';
+      cuenta.style.width = 'auto';
       cuenta.textContent = 'Cuenta';
       cuenta.onclick = () => paySeller(s);
-      td.appendChild(cuenta);
+      accV.appendChild(cuenta);
       const mas = document.createElement('button');
       mas.className = 'btn sm ghost';
       mas.style.cssText = 'width:auto;padding:9px 12px';
       mas.textContent = '\u22ef';
       mas.title = 'Más opciones';
       mas.onclick = () => menuVendedor(s);
-      td.appendChild(mas);
+      accV.appendChild(mas);
     } else if (!s.deleted) {
       td.innerHTML = `<span class="muted" style="font-size:10px">solo ${esc(s.owner_admin_name || 'su admin')} puede modificarlo</span>`;
     }
