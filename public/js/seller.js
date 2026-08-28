@@ -649,12 +649,18 @@ function drawPreviewQR(token) {
    escribe una sola vez porque aparece en tres sitios —el último boleto, el
    historial y el boleto que se descarga— y si cada uno lo arma por su cuenta,
    tarde o temprano uno se queda sin el tachado y el vendedor no sabe cuál creer. */
+/* Una cortesía NO tiene precio ni fase: se regaló, no se compró en ninguna. Y si se
+   generó con la venta flash prendida, el boleto se queda con el precio flash y su
+   "Venta flash" guardados —hace falta para las cuentas—, así que sin este candado
+   aparecía "$350 tachado, $250, ⚡ Venta flash" encima de un regalo. El boleto
+   descargable ya lo cuidaba (ver dibujarPrecio); esta pantalla no. */
 function precioConTachado(t) {
+  if (t.es_cortesia) return 'Cortesía';
   if (!(t.normal_price > t.price)) return fmtMoney(t.price);
   return `<span class="f-antes">${fmtMoney(t.normal_price)}</span> ${fmtMoney(t.price)}`;
 }
 function etiquetaFlash(t) {
-  return t.normal_price > t.price
+  return !t.es_cortesia && t.normal_price > t.price
     ? `<span class="f-flash">\u26a1 ${esc(t.phase_name || 'Venta flash')}</span>` : '';
 }
 

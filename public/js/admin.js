@@ -954,6 +954,24 @@ async function loadTicketsTable(silent) {
       dl.className = 'iconbtn'; dl.title = 'Descargar boleto'; dl.innerHTML = DL_ICON;
       dl.onclick = async () => { dl.disabled = true; try { await downloadTicket(t, EV); } finally { dl.disabled = false; } };
       td.appendChild(dl);
+      // La invitación para redes también aquí. Estaba solo en Cortesías, pero cuando
+      // buscas a alguien por su nombre lo buscas en Boletos, que es el buscador de
+      // verdad — y ahí el botón no estaba.
+      if (hayPresumible(t, EV)) {
+        const ig = document.createElement('button');
+        ig.className = 'iconbtn'; ig.textContent = '★'; ig.style.marginLeft = '6px';
+        ig.title = 'Descargar su invitación para redes (sin QR)';
+        ig.style.color = '#f3d27a';
+        ig.style.borderColor = 'rgba(243,210,122,.5)';
+        ig.style.background = 'rgba(243,210,122,.1)';
+        ig.onclick = async () => {
+          ig.disabled = true;
+          try { if (await downloadPresumible(t, EV)) toast('Invitación descargada ✓'); }
+          catch (e) { toast(e.message); }
+          finally { ig.disabled = false; }
+        };
+        td.appendChild(ig);
+      }
       // la tachita aparece SOLO si el servidor dice que este admin puede anularlo
       if (t.can_void) {
         const vd = document.createElement('button');
