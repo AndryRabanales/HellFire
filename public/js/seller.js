@@ -325,7 +325,9 @@ function clearForm() {
 let GROUP_SIZE = null;      // null | 5 | 10
 let GROUP_REP_IDX = null;   // índice del representante (solo grupo de 10)
 let GROUP_RESULT = null;    // respuesta de /api/groups una vez generado (hasta tocar "Listo")
-let GROUP_TYPE = null;      // el tipo del grupo: Externo, VIP o Ultra VIP
+let GROUP_TYPE = null;      // el tipo con el que arrancan los diez
+let GROUP_TYPES = [];       // el tipo de CADA integrante: un grupo se junta mixto
+let GROUP_MIXTO = false;    // el grupo va con tipos distintos entre sí
 
 // El tipo se elige ANTES de escribir los diez nombres. Los grupos se piden en las
 // tres categorías —"vamos 10 en VIP con botella"— y antes salían todos como
@@ -343,6 +345,8 @@ function enterGroupMode(size) {
   GROUP_SIZE = size;
   GROUP_REP_IDX = null;
   GROUP_RESULT = null;
+  GROUP_TYPES = [];
+  GROUP_MIXTO = false;
   // con un solo tipo disponible no hay nada que elegir: se entra directo
   GROUP_TYPE = GROUP_TYPE && tipos.some(t => t.id === GROUP_TYPE.id)
     ? GROUP_TYPE : (tipos.length === 1 ? tipos[0] : null);
@@ -362,7 +366,7 @@ function enterGroupMode(size) {
 }
 
 function exitGroupMode() {
-  GROUP_SIZE = null; GROUP_REP_IDX = null; GROUP_RESULT = null; GROUP_TYPE = null;
+  GROUP_SIZE = null; GROUP_REP_IDX = null; GROUP_RESULT = null; GROUP_TYPE = null; GROUP_TYPES = []; GROUP_MIXTO = false;
   $('#mode-individual').classList.remove('hidden');
   $('#group-switch').classList.remove('hidden');
   $('#mode-group').classList.add('hidden');
@@ -389,25 +393,38 @@ function renderGroupPriceBar() {
            <span class="gt-p">${enFlash
              ? `<span class="f-antes">${fmtMoney(t.normal_cents / 100)}</span> ${fmtMoney(t.price_cents / 100)}`
              : fmtMoney(t.price_cents / 100)}</span></button>`;
-       }).join('')}</div>
-       <div class="gp-save">Los diez llevan el mismo tipo. Uno se lleva la botella.</div>`;
+       }).join('')}${tipos.length > 1 ? `
+         <button type="button" class="gt-op gt-mix" data-gt="mixto">
+           <span class="gt-n">Mixto</span>
+           <span class="gt-p">cada quien el suyo</span></button>` : ''}</div>
+       <div class="gp-save">Si el grupo va todo igual, elige el tipo. Si van revueltos, toca Mixto.</div>`;
     $$('.gt-op').forEach(b => b.onclick = () => {
-      GROUP_TYPE = tipos.find(t => String(t.id) === b.dataset.gt);
+      // Mixto no es un tipo: es decir "cada quien el suyo". Los diez arrancan en el
+      // primero de la lista y cada renglon trae su selector a la vista, porque asi
+      // es como llega la gente: "Danniree general, Andry ultra VIP".
+      GROUP_MIXTO = b.dataset.gt === 'mixto';
+      GROUP_TYPE = GROUP_MIXTO ? tipos[0] : tipos.find(t => String(t.id) === b.dataset.gt);
+      GROUP_TYPES = Array.from({ length: GROUP_SIZE }, () => GROUP_TYPE);
       renderGroupPriceBar(); renderGroupNames(); aplicarCierre();
     });
     return;
   }
-  const p = GROUP_TYPE.price_cents;
-  const enFlash = GROUP_TYPE.normal_cents && GROUP_TYPE.normal_cents > p;
+  // Con la mezcla ya no hay un "precio c/u": lo que importa es el total y de que se
+  // compone. El reparto se dice en palabras —"7 General, 3 VIP"— porque es asi como
+  // el vendedor le cobra al grupo.
+  const usados = GROUP_TYPES.filter(Boolean);
+  const total = usados.reduce((a, t) => a + t.price_cents, 0);
+  const cuenta = new Map();
+  usados.forEach(t => cuenta.set(t.name, (cuenta.get(t.name) || 0) + 1));
+  const reparto = [...cuenta.entries()].map(([n, c]) => `${c} ${esc(n)}`).join(' \u00b7 ');
   barra.innerHTML = `
-    <div class="gp-line">Grupo de ${GROUP_SIZE} \u00b7 ${esc(GROUP_TYPE.name)}
+    <div class="gp-line">Grupo de ${GROUP_SIZE} \u00b7 ${GROUP_MIXTO ? 'mixto' : esc(GROUP_TYPE.name)}
       <button type="button" class="gt-cambiar" id="gt-cambiar">cambiar</button></div>
-    <div class="gp-price">${enFlash
-      ? `<span class="f-antes">${fmtMoney(GROUP_TYPE.normal_cents / 100)}</span> ${fmtMoney(p / 100)}`
-      : fmtMoney(p / 100)} <span class="gp-cu">c/u</span></div>
-    <div class="gp-save">Total ${fmtMoney(p * GROUP_SIZE / 100)} \u00b7 marca con ★ quién recoge la botella en la barra</div>`;
+    <div class="gp-price">${fmtMoney(total / 100)} <span class="gp-cu">total</span></div>
+    <div class="gp-save">${GROUP_MIXTO ? esc(reparto) + ' \u00b7 ' : ''}marca con ★ quién recoge la botella</div>`;
   const c = $('#gt-cambiar');
-  if (c) c.onclick = () => { GROUP_TYPE = null; renderGroupPriceBar(); renderGroupNames(); aplicarCierre(); };
+  if (c) c.onclick = () => { GROUP_TYPE = null; GROUP_TYPES = []; GROUP_MIXTO = false;
+    renderGroupPriceBar(); renderGroupNames(); aplicarCierre(); };
 }
 
 // cada integrante va en su propia tarjeta (borde + ficha numerada), para que
@@ -435,6 +452,22 @@ function renderGroupNames() {
     input.className = 'input grow'; input.dataset.idx = i;
     input.placeholder = 'Nombre completo';
     col.appendChild(input);
+    // Solo en mixto: cada nombre trae SU tipo escrito y desplegable, debajo del
+    // campo. Un chip que hay que adivinar no sirve — aqui se lee "General" y se
+    // toca, como se dice en voz alta: "Danniree general, Andry ultra VIP".
+    const tipos = tiposDeGrupo();
+    if (GROUP_MIXTO && tipos.length > 1) {
+      const sel = document.createElement('select');
+      sel.className = 'input gr-sel'; sel.dataset.idx = i;
+      sel.innerHTML = tipos.map(t =>
+        `<option value="${t.id}">${esc(t.name)} \u00b7 ${fmtMoney(t.price_cents / 100)}</option>`).join('');
+      sel.value = String((GROUP_TYPES[i] || GROUP_TYPE).id);
+      sel.addEventListener('change', () => {
+        GROUP_TYPES[i] = tipos.find(t => String(t.id) === sel.value);
+        renderGroupPriceBar();
+      });
+      col.appendChild(sel);
+    }
     row.appendChild(col);
     if (GROUP_SIZE === 10) {
       const rep = document.createElement('button');
@@ -449,6 +482,8 @@ function renderGroupNames() {
     }
     box.appendChild(row);
   }
+  // ya hay a qué apuntar: los diez renglones, la estrella y el botón de generar
+  explicarGrupo();
 }
 
 // tras generar: NO se sale de la pantalla. Cada tarjeta pasa a verde con su
@@ -516,6 +551,9 @@ async function generateGroup() {
     const r = await API.post('/api/groups', {
       size: GROUP_SIZE, names,
       type_id: GROUP_TYPE ? GROUP_TYPE.id : null,
+      // uno por integrante: el grupo puede ir mezclado
+      types: Array.from({ length: GROUP_SIZE },
+                        (_, i) => (GROUP_TYPES[i] || GROUP_TYPE || {}).id || null),
       representative_index: GROUP_SIZE === 10 ? GROUP_REP_IDX : null,
     });
     showGroupResult(r);
@@ -987,23 +1025,35 @@ const TOUR = [
   { sel: '#f-phase-timer',txt: 'Este reloj dice cuándo <b>suben los precios</b>. Enséñaselo para cerrar la venta.' },
 ];
 
+/* El mismo recorrido sirve para dos momentos distintos: la bienvenida y la primera
+   vez que arma un grupo. Cambian las paradas y qué se marca al terminar; el foco,
+   el globo y el pico son los mismos. */
+let TOUR_PASOS = TOUR;
+let TOUR_ALFIN = () => API.post('/api/tutorial-visto').catch(() => {});
+
+function correrTour(pasos, alFin) {
+  TOUR_PASOS = pasos;
+  TOUR_ALFIN = alFin;
+  setTimeout(() => mostrarTour(0), 350);
+}
+
 function cerrarTour(marcar) {
   const c = $('#tour');
   if (c) c.remove();
   document.body.style.overflow = '';
-  if (marcar) API.post('/api/tutorial-visto').catch(() => {});
+  if (marcar && TOUR_ALFIN) TOUR_ALFIN();
 }
 
 function mostrarTour(i = 0) {
   // se saltan los que no estén en pantalla (ej. el grupo con las ventas cerradas)
-  while (i < TOUR.length) {
-    const e = $(TOUR[i].sel);
+  while (i < TOUR_PASOS.length) {
+    const e = $(TOUR_PASOS[i].sel);
     if (e && e.offsetParent !== null) break;
     i++;
   }
-  if (i >= TOUR.length) return cerrarTour(true);
+  if (i >= TOUR_PASOS.length) return cerrarTour(true);
 
-  const paso = TOUR[i], el = $(paso.sel);
+  const paso = TOUR_PASOS[i], el = $(paso.sel);
   el.scrollIntoView({ block: 'center', behavior: 'instant' });
 
   let c = $('#tour');
@@ -1021,10 +1071,10 @@ function mostrarTour(i = 0) {
 
   // Solo cuentan las paradas cuyo elemento está en pantalla: si el grupo o el reloj
   // no salen, ni el contador ni los puntos deben prometer paradas que no van a venir.
-  const visibles = TOUR.filter(x => { const e = $(x.sel); return e && e.offsetParent !== null; });
+  const visibles = TOUR_PASOS.filter(x => { const e = $(x.sel); return e && e.offsetParent !== null; });
   const total = visibles.length;
-  const nEste = TOUR.slice(0, i + 1).filter(x => { const e = $(x.sel); return e && e.offsetParent !== null; }).length;
-  const ultimo = i === TOUR.length - 1 || nEste === total;
+  const nEste = TOUR_PASOS.slice(0, i + 1).filter(x => { const e = $(x.sel); return e && e.offsetParent !== null; }).length;
+  const ultimo = i === TOUR_PASOS.length - 1 || nEste === total;
 
   const globo = c.querySelector('.tr-globo');
   globo.innerHTML = `<div class="tr-num">${nEste} de ${total}</div>
@@ -1054,4 +1104,31 @@ function mostrarTour(i = 0) {
 /* Directo al recorrido: sin pantalla de bienvenida. La primera parada ya saluda
    sola —oscurece todo y señala el campo del nombre— y nadie quería leer un saludo
    antes de eso. */
-function mostrarTutorial() { setTimeout(() => mostrarTour(0), 400); }
+function mostrarTutorial() {
+  correrTour(TOUR, () => API.post('/api/tutorial-visto').catch(() => {}));
+}
+
+/* ---------------- la primera vez que arma un grupo ----------------
+   Tres paradas y se acabó. Un grupo de diez es la venta más cara que hace un
+   vendedor y la única con un paso que no se adivina —la estrella—: si nadie la
+   marca, en la barra no hay a quién darle la botella. Sale cuando los renglones
+   ya están en pantalla, no al entrar: así cada parada señala algo que existe.
+
+   Se recuerda en el teléfono y no en el servidor: es un recordatorio de treinta
+   segundos, no un trámite, y no vale una columna nueva en una base en vivo. */
+const TOUR_GRUPO = [
+  { sel: '#group-names',          txt: 'Escribe el <b>nombre completo</b> de cada integrante. Cada uno recibe su propio boleto.' },
+  { sel: '#group-names .repbtn',  txt: 'Marca con <b>\u2605</b> a uno: es quien recoge la <b>botella</b> en la barra.' },
+  { sel: '#btn-generate-group',   txt: 'Aqu\u00ed se generan <b>los diez boletos</b> de una vez. Despu\u00e9s descargas cada uno.' },
+];
+
+const LLAVE_TOUR_GRUPO = 'of_tour_grupo';
+function grupoYaExplicado() {
+  try { return localStorage.getItem(LLAVE_TOUR_GRUPO) === '1'; } catch (e) { return true; }
+}
+function explicarGrupo() {
+  if (grupoYaExplicado() || $('#tour')) return;
+  correrTour(TOUR_GRUPO, () => {
+    try { localStorage.setItem(LLAVE_TOUR_GRUPO, '1'); } catch (e) {}
+  });
+}

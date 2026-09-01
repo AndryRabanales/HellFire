@@ -983,6 +983,34 @@ async function loadTicketsTable(silent) {
         };
         acc.appendChild(ig);
       }
+      // La botella fuera del grupo de 10. Se regala todo el tiempo —al que trajo
+      // gente, a un invitado— y antes la unica forma era armarle un grupo falso.
+      // No aparece en boletos de grupo: alli la botella es del representante y
+      // moverla desde aqui dejaria dos reclamando la misma en la barra.
+      if (!t.group_id) {
+        const bt = document.createElement('button');
+        bt.className = 'iconbtn'; bt.textContent = '\u{1F37E}';
+        const pinta = () => {
+          bt.title = t.es_representante
+            ? 'Ya tiene botella \u00b7 toca para quitarsela'
+            : 'Darle botella (la recoge en la barra)';
+          bt.classList.toggle('grabbed', !!t.es_representante);
+          bt.style.opacity = t.es_representante ? '1' : '.45';
+        };
+        pinta();
+        bt.onclick = async () => {
+          bt.disabled = true;
+          try {
+            const r = await API.post(`/api/admin/tickets/${t.id}/botella`, {});
+            t.es_representante = r.botella;
+            pinta();
+            toast(r.botella ? `${t.buyer_name} ya tiene botella \u2713`
+                            : `Se le quit\u00f3 la botella a ${t.buyer_name}`);
+          } catch (e) { if (!guard(e)) toast(e.message); }
+          finally { bt.disabled = false; }
+        };
+        acc.appendChild(bt);
+      }
       // la tachita aparece SOLO si el servidor dice que este admin puede anularlo
       if (t.can_void) {
         const vd = document.createElement('button');
@@ -1484,9 +1512,18 @@ function pintaCuenta(s, c) {
   // había quedado —legítimamente— en los cortes de antes. Cada pago congeló su
   // propio porcentaje; commission_total es la suma real de lo que se llevó.
   // Lo que falta es sobre el SALDO, no sobre la venta entera.
-  const comisionTotal = c.commission_total;
-  const faltaEntregar = c.balance * (1 - c.commission_pct / 100);
-  const debeEntregar = c.cash_total + faltaEntregar;
+  // Un corte se hace de a uno: lo que vendió DESDE la última vez, lo que se queda y
+  // lo que te entrega hoy. La tarjeta abría con el total de la temporada —$2,275
+  // cuando lo que se estaba cobrando eran $600— y había que restar de cabeza para
+  // saber cuánto pedirle. La historia sigue completa, pero abajo y como historia.
+  // OJO con el porcentaje: c.commission_pct es el de HOY y solo se aplica a lo que
+  // falta por cobrar. Lo ya cobrado congeló el suyo en cada corte; recalcularlo le
+  // reclamaría de nuevo la comisión que legítimamente ya se llevó.
+  const pendiente = c.balance;
+  const seQueda   = pendiente * c.commission_pct / 100;
+  const teEntrega = pendiente - seQueda;
+  const hayCortes = c.payments.length;
+  const alCorriente = pendiente <= 0.005;
   const avance = c.sold > 0 ? Math.round(c.settled_amount / c.sold * 100) : 0;
 
   // Con cortes semanales durante ~2 meses son muchos pagos. En pantalla solo se
@@ -1519,93 +1556,85 @@ function pintaCuenta(s, c) {
 
   modal(`<div class="h1" style="font-size:18px">Cuenta de ${esc(s.name)}</div>
 
+    <!-- EL CORTE DE HOY -->
     <div class="card mt12" style="background:rgba(255,110,30,.07)">
+      <div class="label" style="margin:0 0 10px">${hayCortes ? `Corte ${hayCortes + 1}` : 'Su primer corte'}</div>
+      ${alCorriente ? `
+      <div style="text-align:center;padding:8px 0 4px">
+        <div style="font:800 25px 'Space Grotesk';color:var(--ok)">Al corriente ✓</div>
+        <div class="muted" style="font-size:12px;margin-top:6px">
+          ${hayCortes ? 'No ha vendido nada desde su último corte' : 'Todavía no ha vendido'}</div>
+      </div>` : `
       <div class="row" style="justify-content:space-between;align-items:baseline">
-        <div class="muted" style="font-size:12px">Boletos vendidos</div>
-        <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${c.sold_tickets || 0}</div>
+        <div class="muted" style="font-size:12px">Vendió ${hayCortes ? 'desde el último corte' : 'hasta ahora'}</div>
+        <div style="text-align:right">
+          <div style="font:800 24px 'Space Grotesk';color:var(--cream)">${fmtMoney(pendiente)}</div>
+          <div class="muted" style="font-size:10.5px;margin-top:1px">${c.tickets_since || 0} boleto${(c.tickets_since || 0) === 1 ? '' : 's'}</div>
+        </div>
       </div>
-      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
-        <div class="muted" style="font-size:12px">Vendi\u00f3 en boletos</div>
-        <div style="font:800 20px 'Space Grotesk';color:var(--cream)">${fmtMoney(c.sold)}</div>
-      </div>
-      <!-- Si fue vendedor suelto antes de entrar al grupo, se llevó comisión en
-           aquellos cortes. Ese dinero es suyo y ya no se le reclama: sin este
-           renglón, los números de abajo no cuadran con lo que vendió y parece que
-           el sistema perdió una parte. -->
-      ${c.en_grupo && c.commission_total > 0.005 ? `
-      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
-        <div class="muted" style="font-size:12px">Comisión de sus cortes anteriores</div>
-        <div style="font:800 15px 'Space Grotesk';color:#f3d27a">− ${fmtMoney(c.commission_total)}</div>
-      </div>` : ''}
-      <!-- En un grupo el vendedor no se queda un porcentaje al entregar: el colíder
-           reparte de su comisión. Enseñarle "0%" ahí lo hace ver como si no ganara
-           nada; lo que importa es cuánto YA LE PAGARON. -->
-      ${c.en_grupo ? `
-      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
-        <div class="muted" style="font-size:12px">Ya le pagaron</div>
-        <div style="font:800 20px 'Space Grotesk';color:${c.recibido > 0 ? '#7ee0a0' : 'var(--cream-45)'}">${fmtMoney(c.recibido)}</div>
-      </div>
-      <!-- El colíder sí lleva porcentaje en SU propia ficha: es el mismo 20% del
-           grupo, y aquí se aplica en el momento del corte —entrega el 80% y se queda
-           su parte— en vez de entregar todo y devolvérsela después por otro lado.
-           A los de su equipo esto no se les ofrece: el servidor lo rechaza. -->
-      ${c.can_commission ? `
-      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
+      ${c.commission_pct > 0 || c.can_commission ? `
+      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:9px">
         <div class="muted" style="font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span>Se queda en el corte</span>
-          <button id="cta-com" class="btn sm ghost" style="width:auto;flex:none;padding:5px 11px;font-size:12px;
-            border-color:rgba(243,210,122,.5);color:#f3d27a">${c.commission_pct}% ▾</button></div>
-        <div style="font:700 15px 'Space Grotesk';color:#f3d27a">${c.commission_pct > 0
-          ? '\u2212 ' + fmtMoney(c.balance * c.commission_pct / 100) : '\u2014'}</div>
-      </div>` : ''}` : `
-      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
-        <div class="muted" style="font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span>Se queda de comisi\u00f3n</span>${c.can_commission
+          <span>Se queda</span>${c.can_commission
             ? `<button id="cta-com" class="btn sm ghost" style="width:auto;flex:none;padding:5px 11px;font-size:12px;
-                 border-color:rgba(243,210,122,.5);color:#f3d27a">${c.commission_pct}% \u25be</button>`
-            : `<b style="color:var(--cream)">${c.commission_pct}%</b>`}</div>
-        <div style="font:700 15px 'Space Grotesk';color:#f3d27a">\u2212 ${fmtMoney(comisionTotal)}</div>
+                 border-color:rgba(243,210,122,.5);color:#f3d27a">${c.commission_pct}% ▾</button>`
+            : `<b style="color:#f3d27a">${c.commission_pct}%</b>`}</div>
+        <div style="font:700 16px 'Space Grotesk';color:#f3d27a">${seQueda > 0.005 ? '− ' + fmtMoney(seQueda) : '—'}</div>
+      </div>` : ''}
+      <div style="border-top:1px solid rgba(255,120,40,.25);margin:11px 0 9px"></div>
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div style="font:700 13px Manrope;color:var(--cream)">Te entrega hoy</div>
+        <div style="font:800 26px 'Space Grotesk';color:var(--ember)">${fmtMoney(teEntrega)}</div>
       </div>`}
-      <!-- Los porcentajes de un toque, plegados. Se abren solo cuando se van a usar,
-           así la cuenta se sigue leyendo igual de limpia que antes. -->
-      <div id="cta-com-box" class="row" style="display:none;gap:5px;flex-wrap:wrap;margin-top:8px">
+      <!-- Los porcentajes de un toque, plegados: se abren solo cuando se van a usar. -->
+      <div id="cta-com-box" class="row" style="display:none;gap:5px;flex-wrap:wrap;margin-top:9px">
         ${[0, 10, 15, 20, 25, 30].filter(n => n >= (c.commission_min || 0)).map(n =>
           `<button class="btn sm ghost cta-pct${n === c.commission_pct ? ' sel' : ''}" data-pct="${n}"
           style="width:auto;flex:none;padding:7px 11px;font-size:11.5px">${n}%</button>`).join('')}
         ${c.es_lider ? '' : `<button class="btn sm ghost cta-pct" data-pct="" style="width:auto;flex:none;padding:7px 11px;font-size:11.5px"
-          title="Volver a la comisi\u00f3n general del sistema">General</button>`}
+          title="Volver a la comisión general del sistema">General</button>`}
         <button class="btn sm ghost" id="cta-otro" style="width:auto;flex:none;padding:7px 11px;font-size:11.5px"
           title="Escribir cualquier porcentaje">Otro…</button>
       </div>
-      <!-- Para el porcentaje que no está en los atajos: 30, 12.5, el que sea. -->
       <div id="cta-otro-box" class="row" style="display:none;gap:6px;align-items:center;margin-top:8px">
         <input class="input" id="cta-otro-val" type="number" min="0" max="100" step="0.5"
           inputmode="decimal" placeholder="%" style="width:92px;padding:8px;font-size:13px">
         <button class="btn sm" id="cta-otro-ok" style="width:auto;flex:none;padding:8px 13px;font-size:12px">Aplicar</button>
       </div>
-      <div style="border-top:1px solid rgba(255,120,40,.25);margin:10px 0 8px"></div>
-      <div class="row" style="justify-content:space-between;align-items:baseline">
-        <div style="font:700 12.5px Manrope;color:var(--cream)">Debe entregarte en total</div>
-        <div style="font:800 22px 'Space Grotesk';color:var(--ember)">${fmtMoney(debeEntregar)}</div>
-      </div>
     </div>
 
-    <div class="card mt8" style="border-color:${faltaEntregar > 0.005 ? 'rgba(232,112,106,.4)' : 'rgba(126,226,168,.45)'}">
+    <!-- LO DE ANTES: la temporada completa, ya como historia y no como deuda -->
+    ${hayCortes ? `
+    <div class="card mt8">
+      <div class="label" style="margin:0 0 9px">Lo de antes</div>
       <div class="row" style="justify-content:space-between;align-items:baseline">
-        <div class="muted" style="font-size:12px">Ya te entreg\u00f3</div>
-        <div style="font:800 18px 'Space Grotesk';color:var(--cream)">${fmtMoney(c.cash_total)}</div>
+        <div class="muted" style="font-size:12px">Ya te entregó en ${hayCortes} corte${hayCortes > 1 ? 's' : ''}</div>
+        <div style="font:800 18px 'Space Grotesk';color:var(--ok)">${fmtMoney(c.cash_total)}</div>
       </div>
+      ${c.commission_total > 0.005 ? `
       <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
-        <div style="font:700 12.5px Manrope;color:${faltaEntregar > 0.005 ? 'var(--danger)' : 'var(--ok)'}">
-          ${faltaEntregar > 0.005 ? 'Le falta entregarte' : 'Cuenta saldada \u2713'}</div>
-        <div style="font:800 20px 'Space Grotesk';color:${faltaEntregar > 0.005 ? 'var(--danger)' : 'var(--ok)'}">
-          ${fmtMoney(Math.max(0, faltaEntregar))}</div>
+        <div class="muted" style="font-size:12px">${c.en_grupo
+          ? 'Comisión de cuando era vendedor suelto' : 'Se ha quedado de comisión'}</div>
+        <div style="font:700 15px 'Space Grotesk';color:#f3d27a">${fmtMoney(c.commission_total)}</div>
+      </div>` : ''}
+      ${c.en_grupo ? `
+      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
+        <div class="muted" style="font-size:12px">Ya le pagaron de la comisión del grupo</div>
+        <div style="font:700 15px 'Space Grotesk';color:${c.recibido > 0 ? '#7ee0a0' : 'var(--cream-45)'}">${fmtMoney(c.recibido)}</div>
+      </div>` : ''}
+      <div style="border-top:1px solid rgba(255,120,40,.18);margin:10px 0 8px"></div>
+      <div class="row" style="justify-content:space-between;align-items:baseline">
+        <div class="muted" style="font-size:12px">Vendido en toda la temporada</div>
+        <div style="text-align:right">
+          <div style="font:700 16px 'Space Grotesk';color:var(--cream-60)">${fmtMoney(c.sold)}</div>
+          <div class="muted" style="font-size:10px">${c.sold_tickets || 0} boletos</div>
+        </div>
       </div>
       <div style="height:7px;border-radius:99px;background:rgba(255,255,255,.07);margin-top:11px;overflow:hidden">
         <div style="height:100%;width:${avance}%;border-radius:99px;background:linear-gradient(90deg,#ff8a3d,#e8480d)"></div>
       </div>
-      <div class="muted" style="font-size:10.5px;margin-top:6px">${avance}% de su cuenta cubierto</div>
-    </div>
+      <div class="muted" style="font-size:10.5px;margin-top:6px">${avance}% de todo lo que ha vendido ya está cobrado</div>
+    </div>` : ''}
 
     ${c.payments.length ? `
     <div class="row mt8" style="gap:7px">
@@ -1850,7 +1879,6 @@ async function descargarEstadoCuenta(s, c) {
   // mismo criterio que la pantalla: lo ya cobrado no se recalcula (ver pintaCuenta)
   const comisionTotal = c.commission_total;
   const falta = c.balance * (1 - c.commission_pct / 100);
-  const debeEntregar = c.cash_total + falta;
 
   let y = 186;
   const linea = (etq, val, color, grande) => {
@@ -1865,7 +1893,9 @@ async function descargarEstadoCuenta(s, c) {
   // Su propio renglón, antes del dinero: es el número que el vendedor lleva en la
   // cabeza, y si el monto no le cuadra es lo primero contra lo que compara.
   linea('Boletos vendidos', String(c.sold_tickets || 0), '#f6f1e7');
-  linea('Vendió en boletos', fmtMoney(c.sold), '#f6f1e7');
+  // El corte que se esta cobrando AHORA va primero: lo de la temporada es historia.
+  linea('Vendió desde el último corte', fmtMoney(c.balance), '#f6f1e7');
+  linea('Vendido en toda la temporada', fmtMoney(c.sold), 'rgba(246,241,231,.55)');
   // En un grupo la comisión no es de cada vendedor: es del colíder sobre el total.
   // Sin decirlo, un 0% en la ficha se lee como un error o como un castigo.
   linea(c.en_grupo
@@ -1875,9 +1905,8 @@ async function descargarEstadoCuenta(s, c) {
         '− ' + fmtMoney(comisionTotal), '#f3d27a');
   x.strokeStyle = 'rgba(255,120,40,.3)'; x.lineWidth = 1;
   x.beginPath(); x.moveTo(pad, y - 22); x.lineTo(W - pad, y - 22); x.stroke();
-  linea('Debe entregar en total', fmtMoney(debeEntregar), '#ff7a2e', true);
-  linea('Ya entregó', fmtMoney(c.cash_total), '#f6f1e7');
-  linea(falta > 0.005 ? 'Le falta entregar' : 'Cuenta saldada',
+  linea('Ya entregó' + (c.payments.length ? ` en ${c.payments.length} corte` + (c.payments.length > 1 ? 's' : '') : ''), fmtMoney(c.cash_total), '#f6f1e7');
+  linea(falta > 0.005 ? 'Te entrega hoy' : 'Al corriente',
         fmtMoney(Math.max(0, falta)), falta > 0.005 ? '#e8706a' : '#7ee2a8', true);
 
   y += 12;

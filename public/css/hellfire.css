@@ -58,7 +58,13 @@ body{
 .input,select.input,textarea.input{
   width:100%;padding:14px;border-radius:13px;background:var(--card);
   border:1px solid var(--line);font:600 15px Manrope;color:var(--cream);outline:none;
-  appearance:none;-webkit-appearance:none}
+  appearance:none;-webkit-appearance:none;
+  /* Sin esto el navegador da por hecho que la pagina es CLARA y dibuja sus propios
+     controles en claro. En iPhone no se notaba porque ahi el <select> abre la rueda
+     del sistema, que ignora la pagina; en Android Chrome dibuja el desplegable el
+     mismo y lo sacaba como una caja blanca —con la fila resaltada y la barra de
+     desplazamiento tambien blancas— con las opciones oscuras metidas dentro. */
+  color-scheme:dark}
 /* El nombre del comprador es el PASO 1 de la venta y tiene que ser lo primero que
    la vista encuentra: el campo más alto de la pantalla, con el borde más claro y un
    resplandor propio. Jerarquía es comparación, no valor absoluto — por eso además
@@ -76,7 +82,10 @@ label[for="f-buyer"],#lbl-buyer{color:var(--ember-dim)!important;font-size:9.5px
 .input::placeholder{color:rgba(246,241,231,.3)}
 select.input{background-image:linear-gradient(45deg,transparent 50%,var(--ember-dim) 50%),linear-gradient(135deg,var(--ember-dim) 50%,transparent 50%);
   background-position:calc(100% - 20px) 55%,calc(100% - 15px) 55%;background-size:5px 5px;background-repeat:no-repeat}
-select.input option{background:#160603;color:var(--cream)}
+/* Colores literales, no variables: dentro del desplegable nativo de Android las
+   custom properties no siempre resuelven y el texto se iba a negro sobre negro. */
+select.input option{background:#160603;color:#f6f1e7}
+select.input option:disabled{color:rgba(246,241,231,.45)}
 
 /* El botón principal llevaba un halo naranja de 24px sin dirección: manchaba todo lo
    que tenía cerca. Ahora la sombra cae hacia abajo, como caería la luz, y un filo
@@ -379,6 +388,20 @@ select.input option{background:#160603;color:var(--cream)}
 .gr-label{font:700 9px "Space Grotesk";letter-spacing:.12em;text-transform:uppercase;
   color:var(--ember-dim);margin-bottom:4px}
 .grouprow.done .gr-label{color:rgba(255,150,130,.85)}
+/* El tipo de cada integrante, bajo su nombre. Un grupo casi nunca es de un solo
+   tipo —"somos 7 en general y 3 en VIP"— y antes eso obligaba a partir la venta
+   en dos. Los que van distinto al tipo base se encienden, para que la mezcla se
+   vea de un vistazo sin leer los diez renglones. */
+/* En grupo mixto cada integrante lleva su tipo desplegable bajo su nombre. Va
+   mas chico que el campo del nombre —el nombre es el dato, el tipo es la
+   etiqueta— pero con el mismo alto de toque para el pulgar. */
+.gr-sel{margin-top:7px;padding:9px 11px;font:700 12.5px Manrope;
+  border-radius:10px;background:rgba(255,110,30,.08);
+  border-color:rgba(255,120,40,.32);color:var(--cream);
+  background-position:calc(100% - 15px) 55%,calc(100% - 10px) 55%}
+/* iOS hace zoom en cualquier campo por debajo de 16px al tocarlo */
+@media (max-width:820px){ .gr-sel{font-size:16px} }
+.gt-mix .gt-n{color:var(--ember-soft)}
 .repbtn{flex:none;width:36px;height:36px;border-radius:11px;border:1.5px solid var(--line-strong);
   background:transparent;color:rgba(246,241,231,.3);font-size:16px;cursor:pointer;transition:all .12s}
 .repbtn.sel{background:rgba(243,210,122,.14);border-color:#f3d27a;color:#f3d27a;
@@ -635,8 +658,12 @@ table.data tr.void td.strike{text-decoration:line-through}
 .phase-timer .pt-u i{font:600 6.5px "Space Grotesk";letter-spacing:.12em;
   text-transform:uppercase;color:var(--cream-45);font-style:normal}
 
-.phase-timer .pt-items{margin-top:6px;padding-top:6px;display:grid;gap:4px;
-  grid-auto-flow:column;grid-auto-columns:1fr;
+/* Una columna por tipo forzaba a los cuatro a caber en el ancho del telefono: a
+   78px por columna, "ULTRA VIP $900" mide 92 y se salia de la caja. Ahora la
+   rejilla acomoda las que quepan con holgura —dos y dos en el telefono, los
+   cuatro en fila en pantalla ancha— y ninguna queda apretada. */
+.phase-timer .pt-items{margin-top:6px;padding-top:6px;display:grid;gap:4px 10px;
+  grid-template-columns:repeat(auto-fit,minmax(104px,1fr));
   border-top:1px solid rgba(255,122,46,.16)}
 /* nombre y precio en la MISMA línea, centrados dentro de su columna: así los tres
    bloques miden lo mismo sin que el cronómetro crezca un renglón */
@@ -669,14 +696,26 @@ table.data tr.void td.strike{text-decoration:line-through}
 
 /* Elegir el tipo del grupo: tres botones grandes, uno por categoría, antes de
    pedir los diez nombres. */
-.gt-ops{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:6px;margin:8px 0 7px}
+.gt-ops{display:grid;grid-template-columns:repeat(auto-fit,minmax(82px,1fr));gap:6px;margin:8px 0 7px}
+/* Mixto no es un tipo mas: es "cada quien el suyo". Metido en la fila robaba
+   ancho a los tres tipos y en el telefono los precios se encimaban. Abajo y de
+   lado a lado se lee por lo que es, y los tipos recuperan su espacio. */
+.gt-ops .gt-mix{grid-column:1 / -1;flex-direction:row;justify-content:center;gap:8px;
+  background:rgba(255,110,30,.09);border-color:rgba(255,122,46,.45)}
 /* Compactos a propósito: son un paso rápido antes de los nombres, no la pantalla. */
 .gt-op{display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;
   padding:7px 6px;border-radius:10px;border:1px solid rgba(255,122,46,.3);
   background:rgba(255,255,255,.03);transition:border-color .15s,background .15s}
 .gt-op:active{transform:scale(.98)}
 .gt-op .gt-n{font:700 11px Manrope;color:var(--cream)}
-.gt-op .gt-p{font:800 13px "Space Grotesk";color:var(--ember-soft)}
+/* Con venta flash el boton lleva DOS precios. Uno junto al otro no cabia en 96px
+   ("$900 $550"); uno debajo del otro se lee mejor y ademas dice lo que pasa: de
+   ese precio, a este. */
+.gt-op .gt-p{font:800 13px/1.15 "Space Grotesk";color:var(--ember-soft);
+  display:flex;flex-direction:column;align-items:center;min-width:0}
+.gt-op .gt-p .f-antes{margin-right:0;font-size:.74em}
+.gt-op.gt-mix .gt-p{font:600 9.5px Manrope;letter-spacing:.02em;
+  text-transform:none;color:var(--cream-45);flex-direction:row}
 .gt-cambiar{position:relative;background:none;border:none;padding:0 0 0 7px;cursor:pointer;
   font:600 10.5px Manrope;color:var(--ember-soft);text-decoration:underline}
 /* mismo truco que el "?": se ve como un enlace de 14px de alto, se toca como un

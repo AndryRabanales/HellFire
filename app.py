@@ -7,6 +7,7 @@ Todos los datos de venta se sincronizan automáticamente a data/boletos.xlsx.
 """
 import os, re, json, time, base64, shutil, sqlite3, secrets, hashlib, threading
 from datetime import datetime, timedelta
+from collections import Counter
 from io import BytesIO
 try:
     from zoneinfo import ZoneInfo
@@ -1735,13 +1736,14 @@ def create_ticket():
 
 @app.post("/api/groups")
 def create_group():
-    """Genera un grupo de 10: cada integrante recibe su propio boleto del MISMO tipo,
-    y uno de ellos —el representante— se lleva la botella.
+    """Genera un grupo de 10: cada integrante recibe su propio boleto y uno de
+    ellos —el representante— se lleva la botella.
 
-    El tipo lo elige el vendedor (Externo, VIP o Ultra VIP): los grupos se piden en
-    las tres categorías y antes salía siempre Externo, así que un grupo VIP se
-    vendía como VIP y se generaba como general. No se pueden mezclar tipos dentro
-    de un grupo: eso volvería ambiguo qué botella le toca a quién."""
+    El tipo es POR INTEGRANTE. Un grupo se junta como se junta: "somos 7 en general
+    y 3 en VIP". Obligar a que los diez fueran del mismo tipo partía esa venta en
+    dos y el vendedor perdía la botella de uno de los dos pedazos. La botella no se
+    vuelve ambigua porque va marcada en el boleto del representante y con SU
+    categoría escrita: el de la barra lee el boleto, no el registro del grupo."""
     s = require_seller()
     if not s:
         return jsonify(error="sin sesión"), 401
@@ -1769,24 +1771,36 @@ def create_group():
         if not isinstance(idx, int) or idx < 0 or idx >= 10:
             return jsonify(error="Marca quién es el representante del grupo (recibe la botella)"), 400
         representative = names[idx]
-    # Sin type_id se asume Externo: así los grupos que ya existían siguen igual.
-    tid = b.get("type_id")
-    if tid:
-        tt = db.execute("SELECT * FROM ticket_types WHERE id=? AND active=1", (tid,)).fetchone()
-    else:
-        tt = db.execute("SELECT * FROM ticket_types WHERE name='Externo' AND active=1").fetchone()
-    if not tt:
-        return jsonify(error="Ese tipo de boleto no está disponible para armar grupos"), 400
-    # La facultad es por persona y aquí solo se piden los diez nombres: un grupo UADY
-    # saldría con la facultad vacía en los diez boletos.
-    if tt["needs_faculty"]:
-        return jsonify(error=f"Los grupos no se pueden armar con {tt['name']}, "
-                             f"porque cada boleto necesita su facultad."), 400
-    price_now, phase_name, normal_now = effective_price(db, tt)
-    if price_now <= 0:
-        return jsonify(error=f"El precio de {tt['name']} aún no está configurado"), 400
-    pct = 0   # el grupo ya no tiene descuento: su beneficio es la botella
-    group_price = round(price_now * (100 - pct) / 100)
+    # Un tipo por integrante. Se sigue aceptando el type_id suelto —es lo que manda
+    # la pantalla cuando los diez van iguales, y lo que mandaban las versiones
+    # anteriores— y en ese caso los diez llevan ese mismo tipo.
+    pedidos = b.get("types")
+    if not (isinstance(pedidos, list) and len(pedidos) == size):
+        pedidos = [b.get("type_id")] * size
+    tipos, precios, cache = [], [], {}
+    for i, tid in enumerate(pedidos):
+        if tid not in cache:
+            if tid:
+                fila = db.execute("SELECT * FROM ticket_types WHERE id=? AND active=1",
+                                  (tid,)).fetchone()
+            else:
+                # Sin tipo se asume Externo: así los grupos de antes siguen igual.
+                fila = db.execute("SELECT * FROM ticket_types WHERE name='Externo' AND active=1").fetchone()
+            if not fila:
+                return jsonify(error=f"El tipo del integrante {i + 1} no está "
+                                     f"disponible para armar grupos"), 400
+            # La facultad es por persona y aquí solo se piden los diez nombres: un
+            # integrante UADY saldría con la facultad vacía en su boleto.
+            if fila["needs_faculty"]:
+                return jsonify(error=f"Los grupos no se pueden armar con {fila['name']}, "
+                                     f"porque cada boleto necesita su facultad."), 400
+            precio, fase, normal = effective_price(db, fila)
+            if precio <= 0:
+                return jsonify(error=f"El precio de {fila['name']} aún no está configurado"), 400
+            cache[tid] = (fila, precio, fase, normal)
+        fila, precio, fase, normal = cache[tid]
+        tipos.append(fila)
+        precios.append((precio, fase, normal))
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
     gcur = db.execute("INSERT INTO groups(size, names, representative, seller_id, seller_name, created_at) "
                       "VALUES(?,?,?,?,?,?)",
@@ -1795,27 +1809,36 @@ def create_group():
     db.commit()
     gid = gcur.lastrowid
     tickets_out = []
-    for name in names:
+    for i, name in enumerate(names):
+        tt = tipos[i]
+        precio, fase, normal = precios[i]
         # La marca va en SU boleto, no solo en el registro del grupo: el de la barra
         # no tiene el panel abierto, tiene un boleto enfrente. Si los diez se ven
-        # iguales, cualquiera puede decir que él es el representante.
-        t = _insert_ticket_row(db, name, None, "", tt, group_price,
+        # iguales, cualquiera puede decir que él es el representante. Se compara por
+        # POSICIÓN y no por nombre: con dos tocayos en el grupo, los dos salían con
+        # la estrella y aparecían dos botellas.
+        t = _insert_ticket_row(db, name, None, "", tt, precio,
                                seller_id, seller_name, seller_code, group_id=gid,
-                               phase_name=phase_name, group_size=size,
+                               phase_name=fase, group_size=size,
                                # en venta flash el grupo también saca su tachado
-                               normal_price_cents=normal_now,
-                               representante=(name == representative))
+                               normal_price_cents=normal,
+                               representante=(i == idx))
         if not t:
             return jsonify(error="No se pudo generar uno de los folios, intenta de nuevo"), 500
         tickets_out.append(ticket_public(t))
+    total = sum(p for p, _, _ in precios)
+    # el desglose va al registro: un grupo mixto tiene que poder auditarse sin abrir
+    # los diez boletos uno por uno
+    reparto = ", ".join(f"{n}\u00d7 {t}" for t, n in
+                        Counter(x["name"] for x in tipos).most_common())
     audit(db, seller_name, "generacion",
-          f"Generó un grupo de {size} ({', '.join(names)}) a ${group_price/100:,.2f} c/u"
+          f"Generó un grupo de {size} [{reparto}] ({', '.join(names)}) "
+          f"por ${total/100:,.2f}"
           + (f" · representante: {representative}" if representative else ""))
     db.commit()
     sync_excel_async()
     return jsonify(group_id=gid, size=size, representative=representative,
-                   price=money(group_price), normal_price=money(price_now),
-                   savings=money(price_now - group_price), tickets=tickets_out)
+                   total=money(total), tickets=tickets_out)
 
 @app.get("/api/admin/groups")
 def list_groups():
@@ -2081,6 +2104,8 @@ def admin_tickets():
         tp = ticket_public(t)
         tp["owner_admin_id"] = t["owner_admin_id"]
         tp["owner_admin_name"] = t["owner_admin_name"]
+        # si es de grupo, la botella no se toca desde aquí: es del representante
+        tp["group_id"] = t["group_id"]
         # el SERVIDOR decide si este admin puede anular este boleto (única verdad)
         if es_colider(s):
             # el colíder anula lo de SU grupo y nada más: mismo candado que la ruta
@@ -2153,6 +2178,45 @@ def void_ticket(tid):
     db.commit()
     sync_excel_async()
     return jsonify(ok=True)
+
+@app.post("/api/admin/tickets/<int:tid>/botella")
+def toggle_botella(tid):
+    """Le da (o le quita) la botella a UN boleto, sin que tenga que ser de un grupo.
+
+    La botella nació atada al grupo de 10, pero se regala fuera de él todo el tiempo:
+    al que trajo gente, a un invitado, a alguien con quien ya se habló. Sin esto la
+    única forma era armarle un grupo falso. El boleto ya sabía llevar la marca —es la
+    misma que usa el representante— y el de la barra la lee igual: no hay una lista
+    aparte que consultar ni un concepto nuevo que aprender."""
+    s = require_panel()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    t = db.execute("SELECT * FROM tickets WHERE id=?", (tid,)).fetchone()
+    if not t or (ticket_is_guest(db, t) and not t["es_cortesia"]):
+        return jsonify(error="no existe"), 404
+    if t["status"] == "void":
+        return jsonify(error="Ese boleto está anulado"), 400
+    # mismo candado que anular: el colíder solo dentro de su grupo
+    duenio = mi_ambito(s)
+    if duenio:
+        sel = db.execute("SELECT owner_admin_id FROM sellers WHERE id=?",
+                         (t["seller_id"],)).fetchone() if t["seller_id"] else None
+        if not sel or sel["owner_admin_id"] != duenio:
+            return jsonify(error="Ese boleto no es de tu grupo"), 403
+    # Dentro de un grupo la botella es del representante y ahí no se toca: moverla
+    # por aquí dejaría dos boletos reclamando la misma en la barra.
+    if t["group_id"]:
+        return jsonify(error="Ese boleto es de un grupo: la botella se marca con la "
+                             "★ al armarlo"), 400
+    dar = 0 if t["es_representante"] else 1
+    db.execute("UPDATE tickets SET es_representante=? WHERE id=?", (dar, tid))
+    audit(db, s["admin"]["username"], "botella",
+          f"{'Le dio' if dar else 'Le quitó'} la botella al boleto {t['folio']} de "
+          f"{t['buyer_name']} ({t['type_name']}, vendió {t['seller_name']})")
+    db.commit()
+    sync_excel_async()
+    return jsonify(ok=True, botella=bool(dar))
 
 # ---- catálogos: tipos de boleto y facultades (RF-80/81)
 
@@ -3241,7 +3305,18 @@ def estado_cuenta(db, sid):
         # calcula sobre la lista vieja→nueva y no cambia aunque después se invierta
         historial.append(_pago_publico(p, vendido - abonado, i))
     historial.reverse()          # el más reciente arriba
+    # Boletos vendidos DESPUÉS del último corte. Es la venta que se está cobrando
+    # AHORA, y es el número que el admin necesita enfrente: quien ya cortó la semana
+    # pasada y vendió uno más quiere ver ese uno, no los diecinueve de la temporada.
+    ultimo = filas[-1]["created_at"] if filas else None
+    if ultimo:
+        desde = db.execute("SELECT COUNT(*) AS n FROM tickets WHERE seller_id=? "
+                           "AND status!='void' AND created_at > ?",
+                           (sid, ultimo)).fetchone()["n"]
+    else:
+        desde = boletos_de(db, sid)
     return {"sold": money(vendido), "sold_tickets": boletos_de(db, sid),
+            "tickets_since": desde, "cuts": len(filas),
             "settled_amount": money(abonado),
             "commission_total": money(com), "cash_total": money(efectivo),
             "balance": money(vendido - abonado),
@@ -3478,7 +3553,6 @@ def export_seller_payments(sid):
     # reclamaría de nuevo lo que ya se llevó —y este archivo se le manda a él—.
     comision_total = c["commission_total"]
     falta = c["balance"] * (1 - c["commission_pct"] / 100)
-    debe_entregar = c["cash_total"] + falta
 
     wb = Workbook()
     ws = wb.active
@@ -3499,8 +3573,8 @@ def export_seller_payments(sid):
     resumen = [
         ("Vendió en boletos", c["sold"]),
         (etq_com, -comision_total),
-        ("Debe entregar en total", debe_entregar),
-        ("Ya entregó", c["cash_total"]),
+        ("Ya entregó" + (f" en {len(c['payments'])} corte(s)" if c["payments"] else ""),
+         c["cash_total"]),
         ("Le falta entregar", max(0, falta)),
     ]
     fila = 4
