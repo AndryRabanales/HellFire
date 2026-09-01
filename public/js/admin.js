@@ -30,9 +30,14 @@ async function login() {
 }
 
 let ME_ID = null;   // id del admin con sesión (para saber qué es "mío")
+let SOY_COLIDER = false;  // el colíder ve el panel, pero no todo lo que hay en él
 async function enter(name) {
   EV = await API.get('/api/catalog');
-  try { ME_ID = (await API.get('/api/me')).admin_id ?? null; } catch (_) {}
+  try {
+    const yo = await API.get('/api/me');
+    ME_ID = yo.admin_id ?? null;
+    SOY_COLIDER = !!yo.es_colider;
+  } catch (_) {}
   $('#who').textContent = name;
   $('#av').textContent = (EV.event_name || 'O')[0];
   $('#lg-name').textContent = EV.event_name;
@@ -987,7 +992,10 @@ async function loadTicketsTable(silent) {
       // gente, a un invitado— y antes la unica forma era armarle un grupo falso.
       // No aparece en boletos de grupo: alli la botella es del representante y
       // moverla desde aqui dejaria dos reclamando la misma en la barra.
-      if (!t.group_id) {
+      // Y solo para el organizador: el colider reparte botellas por el grupo de
+      // 10, donde van amarradas a diez boletos vendidos. El servidor lo rechaza
+      // igual, pero un boton que no se puede usar tampoco debe verse.
+      if (!t.group_id && !SOY_COLIDER) {
         const bt = document.createElement('button');
         bt.className = 'iconbtn'; bt.textContent = '\u{1F37E}';
         const pinta = () => {

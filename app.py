@@ -1441,7 +1441,7 @@ def me():
     if s["role"] == "seller":
         return jsonify(role="seller", name=s["seller"]["name"], **info)
     return jsonify(role="admin", name=s["admin"]["username"],
-                   admin_id=s["admin"]["id"], **info)
+                   admin_id=s["admin"]["id"], es_colider=es_colider(s), **info)
 
 def puede_gestionar(db, admin, sel):
     """¿Puede editar / desactivar / eliminar a este vendedor?
@@ -2187,9 +2187,21 @@ def toggle_botella(tid):
     al que trajo gente, a un invitado, a alguien con quien ya se habló. Sin esto la
     única forma era armarle un grupo falso. El boleto ya sabía llevar la marca —es la
     misma que usa el representante— y el de la barra la lee igual: no hay una lista
-    aparte que consultar ni un concepto nuevo que aprender."""
-    s = require_panel()
+    aparte que consultar ni un concepto nuevo que aprender.
+
+    SOLO EL ADMIN. Una botella suelta es un regalo que no le cuesta nada a quien la
+    da y sí a quien la paga; el colíder la reparte por el grupo de 10, donde va
+    amarrada a diez boletos vendidos. Que la pueda soltar de a una, sin venta que la
+    respalde, es dinero de la barra saliendo por una decisión que no es suya."""
+    # El colíder cae en require_admin() como si no tuviera sesión. Aquí se le dice
+    # lo que pasa: un "sin sesión" lo manda a volver a entrar y a intentarlo otra
+    # vez, cuando el problema no es su sesión sino que esto no le toca.
+    s = require_admin()
     if not s:
+        actual = current_session()
+        if actual and es_colider(actual):
+            return jsonify(error="Solo el organizador da botellas sueltas. Tú las "
+                                 "repartes armando un grupo de 10."), 403
         return jsonify(error="sin sesión"), 401
     db = get_db()
     t = db.execute("SELECT * FROM tickets WHERE id=?", (tid,)).fetchone()
@@ -2197,13 +2209,6 @@ def toggle_botella(tid):
         return jsonify(error="no existe"), 404
     if t["status"] == "void":
         return jsonify(error="Ese boleto está anulado"), 400
-    # mismo candado que anular: el colíder solo dentro de su grupo
-    duenio = mi_ambito(s)
-    if duenio:
-        sel = db.execute("SELECT owner_admin_id FROM sellers WHERE id=?",
-                         (t["seller_id"],)).fetchone() if t["seller_id"] else None
-        if not sel or sel["owner_admin_id"] != duenio:
-            return jsonify(error="Ese boleto no es de tu grupo"), 403
     # Dentro de un grupo la botella es del representante y ahí no se toca: moverla
     # por aquí dejaría dos boletos reclamando la misma en la barra.
     if t["group_id"]:
