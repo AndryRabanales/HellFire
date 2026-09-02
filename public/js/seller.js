@@ -709,31 +709,24 @@ let _searchTimer = null;
    nada. Si tiene forma de botón, que lo sea — ordena al revés. */
 let H_VIEJOS_PRIMERO = false;
 
-/* Lo suyo, en corto: cuánto lleva ganado y cuántos boletos colocó.
+/* Lo suyo, en corto: lo que vendió.
 
-   Se enseña SIEMPRE, aunque vaya en cero. Lo escondí primero pensando que un "$0"
-   desanimaba, pero el que ya vendió y todavía no cobra es justo el que entra a
-   buscar este dato: no encontrarlo se siente peor que ver el cero. Cuando aún no
-   hay pago, el número va apagado y manda el conteo de boletos, que sí es suyo. */
+   Antes esta tarjeta abría con "cuánto llevas ganado". Se quitó: la comisión ya no
+   se descuenta en el corte —el vendedor entrega el 100% y lo suyo se le paga
+   aparte—, así que ese número lo tenía que sostener un trato fuera del sistema.
+   Enseñarlo era prometer una cuenta que aquí ya no vive. Lo que sí es suyo y
+   siempre estuvo bien es cuánto colocó. */
 function pintarMio() {
   const caja = $('#h-mio');
   if (!caja) return;
-  const ganado = (CATALOG && CATALOG.mi_ganado) || 0;
   const boletos = (CATALOG && CATALOG.mi_boletos) || 0;
   const vendido = (CATALOG && CATALOG.mi_vendido) || 0;
-  if (!boletos && !ganado) { caja.innerHTML = ''; return; }
-  // Una sola cifra manda —lo suyo— y el resto la acompaña. Antes eran dos columnas
-  // partidas por una línea y ninguna de las dos se veía como la importante.
+  if (!boletos) { caja.innerHTML = ''; return; }
   caja.innerHTML = `
-    <div class="mio${ganado > 0 ? '' : ' sinpago'}">
-      <div class="mio-lab">Tu corte</div>
-      <div class="mio-big">${fmtMoney(ganado)}</div>
-      <div class="mio-sub">${ganado > 0 ? 'ya te lo pagaron'
-                                        : 'se te entrega cuando hagas cuentas'}</div>
-      <div class="mio-pie">
-        <span>${boletos} boleto${boletos === 1 ? '' : 's'} vendido${boletos === 1 ? '' : 's'}</span>
-        <b>${fmtMoney(vendido)}</b>
-      </div>
+    <div class="mio">
+      <div class="mio-lab">Lo que llevas vendido</div>
+      <div class="mio-big">${fmtMoney(vendido)}</div>
+      <div class="mio-sub">${boletos} boleto${boletos === 1 ? '' : 's'} colocado${boletos === 1 ? '' : 's'}</div>
     </div>`;
 }
 
@@ -963,16 +956,11 @@ function panelDudas() {
     duda('Se me borró un boleto',
          'En <b>Ver mi historial</b> están todos. Búscalo por nombre y descárgalo otra vez.') +
     duda('¿Cuándo me pagan?',
-         // Dos tratos distintos, y decirle el que no es lo deja esperando un descuento
-         // que nunca llega, o un pago que ya se le hizo de otra forma.
-         CATALOG && CATALOG.mi_en_grupo
-           ? 'Cobras el boleto completo y se lo entregas <b>íntegro a tu líder</b>: al '
-             + 'entregar no se descuenta nada. <b>Lo tuyo te lo paga él aparte</b>, y '
-             + 'cada pago queda con fecha. Lo que llevas recibido sale arriba en '
-             + '<b>Ver mi historial</b>.'
-           : 'Cobras el boleto completo. En el corte entregas y ahí se te descuenta tu '
-             + 'comisión. Todo queda con fecha, y lo que llevas ganado sale arriba en '
-             + '<b>Ver mi historial</b>.') +
+         // Ya no hay dos tratos: todos entregan completo y lo suyo se les paga aparte.
+         // Antes esta respuesta prometía un descuento en el corte que ya no ocurre.
+         'Cobras el boleto completo y en el corte lo entregas <b>íntegro</b>: al '
+         + 'entregar no se descuenta nada. <b>Lo tuyo te lo pagan aparte</b>, y cada '
+         + 'entrega que hagas queda con su fecha en el sistema.') +
     duda('Se cayó el internet a media venta',
          'Dale a <b>GENERAR</b> otra vez sin miedo: el sistema sabe que es la misma venta y <b>no la duplica</b>.');
 }

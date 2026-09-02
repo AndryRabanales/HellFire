@@ -1528,8 +1528,11 @@ function pintaCuenta(s, c) {
   // falta por cobrar. Lo ya cobrado congeló el suyo en cada corte; recalcularlo le
   // reclamaría de nuevo la comisión que legítimamente ya se llevó.
   const pendiente = c.balance;
-  const seQueda   = pendiente * c.commission_pct / 100;
-  const teEntrega = pendiente - seQueda;
+  // El porcentaje ya NO se descuenta: el vendedor entrega el 100% y lo suyo se le
+  // paga aparte. Se sigue calculando para enseñárselo —los dos necesitan ver de
+  // cuánto es el trato— pero el efectivo que cambia de manos es el completo.
+  const leToca    = pendiente * c.commission_pct / 100;
+  const teEntrega = pendiente;
   const hayCortes = c.payments.length;
   const alCorriente = pendiente <= 0.005;
   const avance = c.sold > 0 ? Math.round(c.settled_amount / c.sold * 100) : 0;
@@ -1583,15 +1586,19 @@ function pintaCuenta(s, c) {
       ${c.commission_pct > 0 || c.can_commission ? `
       <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:9px">
         <div class="muted" style="font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          <span>Se queda</span>${c.can_commission
+          <span>Le toca</span>${c.can_commission
             ? `<button id="cta-com" class="btn sm ghost" style="width:auto;flex:none;padding:5px 11px;font-size:12px;
                  border-color:rgba(243,210,122,.5);color:#f3d27a">${c.commission_pct}% ▾</button>`
             : `<b style="color:#f3d27a">${c.commission_pct}%</b>`}</div>
-        <div style="font:700 16px 'Space Grotesk';color:#f3d27a">${seQueda > 0.005 ? '− ' + fmtMoney(seQueda) : '—'}</div>
-      </div>` : ''}
+        <div style="font:700 16px 'Space Grotesk';color:#f3d27a">${leToca > 0.005 ? fmtMoney(leToca) : '—'}</div>
+      </div>
+      <!-- Sin esta línea el renglón de arriba se lee como un descuento, que es
+           exactamente la confusión que se vino a quitar. -->
+      <div class="muted" style="font-size:10.5px;margin-top:3px;text-align:right">
+        no se descuenta \u00b7 se le paga aparte</div>` : ''}
       <div style="border-top:1px solid rgba(255,120,40,.25);margin:11px 0 9px"></div>
       <div class="row" style="justify-content:space-between;align-items:baseline">
-        <div style="font:700 13px Manrope;color:var(--cream)">Te entrega hoy</div>
+        <div style="font:700 13px Manrope;color:var(--cream)">Te entrega hoy \u00b7 completo</div>
         <div style="font:800 26px 'Space Grotesk';color:var(--ember)">${fmtMoney(teEntrega)}</div>
       </div>`}
       <!-- Los porcentajes de un toque, plegados: se abren solo cuando se van a usar. -->
@@ -1885,7 +1892,7 @@ async function descargarEstadoCuenta(s, c) {
   x.fillText(s.name, pad, 134);
 
   // mismo criterio que la pantalla: lo ya cobrado no se recalcula (ver pintaCuenta)
-  const comisionTotal = c.commission_total;
+  const comisionTotal = c.commission_total;   // solo lo de los cortes VIEJOS
   const falta = c.balance * (1 - c.commission_pct / 100);
 
   let y = 186;
@@ -1906,11 +1913,10 @@ async function descargarEstadoCuenta(s, c) {
   linea('Vendido en toda la temporada', fmtMoney(c.sold), 'rgba(246,241,231,.55)');
   // En un grupo la comisión no es de cada vendedor: es del colíder sobre el total.
   // Sin decirlo, un 0% en la ficha se lee como un error o como un castigo.
-  linea(c.en_grupo
-          ? (comisionTotal > 0.005 ? 'Comisión de sus cortes anteriores'
-                                   : 'Su comisión · la lleva su colíder')
-          : `Su comisión (${c.commission_pct}%)`,
-        '− ' + fmtMoney(comisionTotal), '#f3d27a');
+  // Solo si de verdad se llevó algo en su día: la comisión ya no se descuenta al
+  // entregar, así que en las cuentas nuevas este renglón no tiene nada que decir.
+  if (comisionTotal > 0.005)
+    linea('Comisión de sus cortes anteriores', '− ' + fmtMoney(comisionTotal), '#f3d27a');
   x.strokeStyle = 'rgba(255,120,40,.3)'; x.lineWidth = 1;
   x.beginPath(); x.moveTo(pad, y - 22); x.lineTo(W - pad, y - 22); x.stroke();
   linea('Ya entregó' + (c.payments.length ? ` en ${c.payments.length} corte` + (c.payments.length > 1 ? 's' : '') : ''), fmtMoney(c.cash_total), '#f6f1e7');

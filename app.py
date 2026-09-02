@@ -1558,7 +1558,7 @@ def catalog():
     # Lo que YA LE PAGARON. Va discreto y solo si hay algo: el vendedor tiene derecho
     # a ver lo suyo sin tener que preguntarlo, y así un "a mí nunca me dieron nada"
     # se resuelve mirando la pantalla en vez de discutiendo.
-    mi_ganado = mi_boletos = mi_vendido = 0
+    mi_boletos = mi_vendido = 0
     mi_en_grupo = False
     if s.get("seller"):
         sid_mio = s["seller"]["id"]
@@ -1569,13 +1569,9 @@ def catalog():
         r = db.execute("SELECT tutorial_seen, hidden FROM sellers WHERE id=?",
                        (sid_mio,)).fetchone()
         pendiente = bool(r and not r["tutorial_seen"] and not r["hidden"])
-        # Un solo número para los dos casos: el vendedor suelto se queda su comisión
-        # al entregar, y el de un grupo la recibe de su colíder. Los dos preguntan lo
-        # mismo —"¿cuánto llevo ganado?"— y no tienen por qué saber la diferencia.
-        mi_ganado = (db.execute("SELECT COALESCE(SUM(commission_cents),0) c "
-                                "FROM seller_payments WHERE seller_id=?",
-                                (sid_mio,)).fetchone()["c"]
-                     + pagado_a(db, sid_mio))
+        # Su ganancia ya no se lleva en el sistema: entrega el 100% y lo suyo se le
+        # paga aparte. Enseñarle un número que el sistema no puede sostener era
+        # prometerle una cuenta que no existe.
         mi_boletos = boletos_de(db, sid_mio)
         mi_vendido = vendido_cents(db, sid_mio)
     return jsonify(types=types, faculties=facs, group=group_info,
@@ -1584,7 +1580,7 @@ def catalog():
                    # vendedor no puede prometer un cronómetro que no existe
                    flash_manual=flash_manual(db),
                    tutorial_pendiente=pendiente,
-                   mi_ganado=money(mi_ganado), mi_boletos=mi_boletos,
+                   mi_boletos=mi_boletos,
                    mi_vendido=money(mi_vendido), mi_en_grupo=mi_en_grupo,
                    event_name=setting(db, "event_name"),
                    event_subtitle=setting(db, "event_subtitle"),
@@ -3412,9 +3408,15 @@ def add_seller_payment(sid):
     if ya + abono > vendido:
         falta = (vendido - ya) / 100
         return jsonify(error=f"Se pasa de lo que debe. Su saldo pendiente es ${falta:,.2f}"), 400
+    # La comisión dejó de descontarse en el corte: el vendedor entrega el 100% y lo
+    # suyo se le paga aparte, fuera del sistema. Restarla aquí era la fuente de la
+    # confusión —tres números distintos para una sola entrega— y además obligaba a
+    # cuadrar de cabeza cuánto efectivo tenía que aparecer en la mesa.
+    # El porcentaje SÍ se sigue congelando en la fila: es la referencia de qué trato
+    # tenía ese día, y sin él un corte viejo no se puede explicar.
     pct = comision_pct(db, sid)
-    comision = int(round(abono * pct / 100))
-    efectivo = abono - comision
+    comision = 0
+    efectivo = abono
     db.execute("""INSERT INTO seller_payments
         (seller_id, seller_name, amount_cents, commission_cents, cash_cents,
          commission_pct, note, created_by, owner_admin_id, created_at)
@@ -3427,8 +3429,7 @@ def add_seller_payment(sid):
     db.execute("UPDATE sellers SET paid_cents=? WHERE id=?", (ya + abono, sid))
     saldo = vendido - (ya + abono)
     audit(db, s["admin"]["username"], "pago",
-          f"Recibió ${efectivo/100:,.2f} de '{sel['name']}' (abono ${abono/100:,.2f}, "
-          f"comisión ${comision/100:,.2f}) · saldo ${saldo/100:,.2f}")
+          f"Recibió ${efectivo/100:,.2f} de '{sel['name']}' · saldo ${saldo/100:,.2f}")
     db.commit()
     out = estado_cuenta(db, sid)
     out["seller_name"] = sel["name"]
@@ -3556,8 +3557,11 @@ def export_seller_payments(sid):
     # Mismo criterio que la pantalla: la comisión NO se recalcula con el % de hoy.
     # Cada corte congeló el suyo; aplicarle el de ahora a todo lo vendido le
     # reclamaría de nuevo lo que ya se llevó —y este archivo se le manda a él—.
+    # La comisión ya no se descuenta al entregar: el vendedor da el 100%. Este total
+    # es solo lo que se llevó en los cortes VIEJOS, cuando sí se restaba, y por eso
+    # el renglón aparece únicamente si tiene algo que decir.
     comision_total = c["commission_total"]
-    falta = c["balance"] * (1 - c["commission_pct"] / 100)
+    falta = c["balance"]
 
     wb = Workbook()
     ws = wb.active
@@ -3570,14 +3574,12 @@ def export_seller_payments(sid):
     ws["A2"] = "Generado el " + now_dt().strftime("%d/%m/%Y %H:%M")
     ws.cell(row=3, column=1, value="Boletos vendidos").font = etiqueta
     ws.cell(row=3, column=2, value=c["sold_tickets"])
-    if c["en_grupo"]:
-        etq_com = ("Comisión de sus cortes anteriores" if comision_total > 0.005
-                   else "Su comisión · la lleva su colíder")
-    else:
-        etq_com = f"Su comisión ({c['commission_pct']:g}%)"
     resumen = [
         ("Vendió en boletos", c["sold"]),
-        (etq_com, -comision_total),
+    ]
+    if comision_total > 0.005:
+        resumen.append(("Comisión de sus cortes anteriores", -comision_total))
+    resumen += [
         ("Ya entregó" + (f" en {len(c['payments'])} corte(s)" if c["payments"] else ""),
          c["cash_total"]),
         ("Le falta entregar", max(0, falta)),
@@ -4009,6 +4011,14 @@ def delete_admin(aid):
     db.execute("DELETE FROM sellers WHERE owner_admin_id=? AND es_lider=1 "
                "AND id NOT IN (SELECT seller_id FROM tickets WHERE seller_id IS NOT NULL)",
                (aid,))
+    # Su ficha personal llevaba el 20% del trato de colíder, escrito a mano en su
+    # fila. Al dejar de serlo se vuelve un vendedor más, y ese 20% ya no tiene de
+    # dónde salir: cobraba sobre lo que juntaba su grupo, y ya no tiene grupo. Se
+    # devuelve a la comisión general. (Los de su equipo se corrigen solos: al salir
+    # del grupo dejan de ser "de colíder" y caen al general por su cuenta. El suyo
+    # no, porque el valor estaba escrito y un valor escrito siempre gana.)
+    db.execute("UPDATE sellers SET commission_pct=NULL "
+               "WHERE owner_admin_id=? AND es_lider=1", (aid,))
     db.execute("UPDATE sellers SET owner_admin_id=?, owner_admin_name=?, es_lider=0 "
                "WHERE owner_admin_id=?",
                (s["admin"]["id"], s["admin"]["username"], aid))
