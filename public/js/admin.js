@@ -1093,10 +1093,37 @@ function renderGroupFilterCounts() {
 
 async function loadGroups(silent) {
   const r = await API.get('/api/admin/groups');
-  const sig = JSON.stringify(r.groups.map(g => [g.id, g.names.length, g.representative]));
+  const sueltas = r.sueltas || [];
+  const sig = JSON.stringify([r.groups.map(g => [g.id, g.names.length, g.representative]),
+                              sueltas.map(t => t.id)]);
   if (silent && sig === _sigGrupos) return;
   _sigGrupos = sig;
   GR_ALL = r.groups;
+
+  // Las botellas sueltas ANTES de los grupos: son las que se dan a mano, una por una,
+  // y las que nadie más tiene apuntadas. Un grupo de 10 deja rastro solo —diez
+  // boletos y su estrella—; una botella suelta solo existe si alguien la ve aquí.
+  const cajaSueltas = $('#gr-sueltas');
+  if (cajaSueltas) {
+    cajaSueltas.innerHTML = !sueltas.length ? '' : `
+      <div class="card" style="border-color:rgba(243,210,122,.35);background:rgba(243,210,122,.05)">
+        <div class="row" style="justify-content:space-between;align-items:baseline">
+          <div style="font:800 15px Manrope;color:#f3d27a">\u{1F37E} Botellas fuera de grupo</div>
+          <div style="font:800 18px 'Space Grotesk';color:#f3d27a">${sueltas.length}</div>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:2px">
+          Dadas a mano desde Boletos. En la barra reclaman con su boleto, igual que un representante.</div>
+        <div class="mt10" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:0 14px;
+             border-top:1px solid rgba(243,210,122,.2);padding-top:10px">
+          ${sueltas.map(t => `
+            <div style="padding:5px 0;line-height:1.35">
+              <div style="font:700 12.5px Manrope;color:var(--cream)">${esc(t.buyer_name)}</div>
+              <div class="muted" style="font-size:10px">${esc(t.folio)} \u00b7 ${esc(t.type_name)}
+                \u00b7 vendi\u00f3 ${esc(t.seller_name)}</div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }
   renderGroupFilterCounts();
   const list = $('#gr-list');
   const shown = GR_FILTER ? GR_ALL.filter(g => String(g.size) === GR_FILTER) : GR_ALL;

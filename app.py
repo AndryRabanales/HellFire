@@ -1854,7 +1854,17 @@ def list_groups():
                     "representative": r["representative"], "seller_name": r["seller_name"],
                     "owner_admin_name": r["owner_admin_name"],
                     "created_at": r["created_at"], "tickets": folios})
-    return jsonify(groups=out)
+    # Las botellas que se dieron FUERA de un grupo. Se podían marcar una por una en
+    # Boletos, pero no había dónde verlas juntas: el día del evento la barra necesita
+    # una lista, y "búscalo entre los boletos" no es una lista. Van aquí, que es
+    # donde ya se viene a preguntar quién tiene botella.
+    sueltas = [{"id": t["id"], "folio": t["folio"], "buyer_name": t["buyer_name"],
+                "type_name": t["type_name"], "status": t["status"],
+                "seller_name": t["seller_name"], "created_at": t["created_at"]}
+               for t in db.execute(
+                   "SELECT * FROM tickets WHERE es_representante=1 AND group_id IS NULL "
+                   "AND status!='void' ORDER BY id DESC LIMIT 300").fetchall()]
+    return jsonify(groups=out, sueltas=sueltas)
 
 @app.get("/api/my-tickets")
 def my_tickets():
