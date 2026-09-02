@@ -3235,25 +3235,20 @@ def es_de_colider(db, sid):
 
 
 def comision_pct(db, sid=None):
-    """La comisión de ESTE vendedor sobre lo que entrega.
+    """El porcentaje de ESTE vendedor. Hoy es una ETIQUETA: no se descuenta en el
+    corte —todos entregan el 100%— y solo dice de cuánto es el trato.
 
-    En el grupo de un colíder es CERO, y no es un castigo: ahí el trato es otro. Su
-    gente entrega el 100% —si vendió $500, entran $500 completos—, el colíder cobra
-    su porcentaje sobre lo que junte TODO el grupo, y de ahí reparte a los suyos si
-    quiere. Si además cada vendedor se quedara su 10%, esas ventas pagarían 30%.
+    Antes los de un grupo iban forzados a cero, y con razón: si el colíder cobraba
+    sobre todo lo que juntaba el grupo y además cada quien se quedaba su parte al
+    entregar, esas ventas pagaban comisión dos veces. Ese riesgo desapareció el día
+    que dejó de restarse nada: ahora un cero solo servía para no decirle a nadie de
+    su equipo cuánto le toca.
 
-    Fuera de un grupo: el valor propio manda y, si no tiene, la general. Un 0
-    explícito es "sin comisión" y NO cae al general —por eso se compara contra None y
-    no por verdadero o falso, que trataría el 0 como "sin definir"—."""
+    El valor propio manda y, si no tiene, la general. Un 0 escrito es "sin comisión"
+    y NO cae al general —por eso se compara contra None y no por verdadero o falso,
+    que trataría el 0 como "sin definir"—."""
     if sid is not None:
         r = db.execute("SELECT commission_pct FROM sellers WHERE id=?", (sid,)).fetchone()
-        if es_de_colider(db, sid):
-            # Cero es lo que aplica POR DEFECTO en un grupo. Pero si el organizador le
-            # escribió un porcentaje a mano a ese vendedor, manda el suyo: es un trato
-            # que ya se habló con la persona, y el sistema no está para desdecirlo.
-            if r is not None and r["commission_pct"] is not None:
-                return max(0.0, min(100.0, float(r["commission_pct"])))
-            return 0.0
         if r is not None and r["commission_pct"] is not None:
             return max(0.0, min(100.0, float(r["commission_pct"])))
     return comision_general(db)
@@ -3368,9 +3363,12 @@ def list_seller_payments(sid):
     # porcentaje es del COLÍDER, así que solo su propia ficha lo lleva. A un vendedor
     # de su equipo se le sigue diciendo que no —esas ventas pagarían dos veces—.
     out["es_lider"] = bool(sel["es_lider"])
+    # Al de un grupo también se le puede escribir su porcentaje: ya no se descuenta
+    # de nada, así que no hay doble cobro que evitar, y sin eso su ficha no podía
+    # decirle a nadie cuánto le toca. Quien NO lo mueve sigue siendo el colíder: el
+    # trato con su gente lo pone el organizador.
     out["can_commission"] = ((not es_colider(s))
-                             and puede_gestionar(db, s["admin"], sel)
-                             and (not out["en_grupo"] or out["es_lider"]))
+                             and puede_gestionar(db, s["admin"], sel))
     out["commission_min"] = COMISION_COLIDER_MIN if out["es_lider"] else 0
     return jsonify(**out)
 

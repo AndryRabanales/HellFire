@@ -1632,11 +1632,6 @@ function pintaCuenta(s, c) {
           ? 'Comisión de cuando era vendedor suelto' : 'Se ha quedado de comisión'}</div>
         <div style="font:700 15px 'Space Grotesk';color:#f3d27a">${fmtMoney(c.commission_total)}</div>
       </div>` : ''}
-      ${c.en_grupo ? `
-      <div class="row" style="justify-content:space-between;align-items:baseline;margin-top:7px">
-        <div class="muted" style="font-size:12px">Ya le pagaron de la comisión del grupo</div>
-        <div style="font:700 15px 'Space Grotesk';color:${c.recibido > 0 ? '#7ee0a0' : 'var(--cream-45)'}">${fmtMoney(c.recibido)}</div>
-      </div>` : ''}
       <div style="border-top:1px solid rgba(255,120,40,.18);margin:10px 0 8px"></div>
       <div class="row" style="justify-content:space-between;align-items:baseline">
         <div class="muted" style="font-size:12px">Vendido en toda la temporada</div>
@@ -1666,42 +1661,16 @@ function pintaCuenta(s, c) {
     ${c.sold_tickets ? `<button class="btn sm ghost mt8" id="pg-vertk" style="width:100%">
       \u25a4 Ver sus ${c.sold_tickets} boleto(s) \u00b7 a qui\u00e9n le vendi\u00f3</button>` : ''}
 
-    <!-- El reparto: en un grupo el vendedor entrega el 100% y el colíder le paga de
-         su comisión. Sin este botón el reparto se quedaba fuera del sistema y no
-         había forma de comprobar a quién se le dio cuánto. -->
-    ${c.en_grupo && c.can_edit ? `
-    <div class="card mt12" style="border-color:rgba(126,224,160,.35)">
-      <div class="row" style="justify-content:space-between;align-items:baseline">
-        <div class="label" style="margin:0">Pagarle de tu comisión</div>
-        <div style="font:800 17px 'Space Grotesk';color:#7ee0a0">${fmtMoney(c.recibido)}</div>
-      </div>
-      <div class="muted" style="font-size:10.5px;margin-top:2px">ya recibido en total</div>
-      <div class="row mt8" style="gap:6px;flex-wrap:wrap">
-        <button class="btn sm ghost tp-q" data-m="${(c.sold * 0.10).toFixed(2)}"
-          style="width:auto;flex:none;padding:8px 12px;font-size:12px">10% de lo que vendió
-          \u00b7 ${fmtMoney(c.sold * 0.10)}</button>
-        <button class="btn sm ghost tp-q" data-m="${(c.cash_total * 0.10).toFixed(2)}"
-          style="width:auto;flex:none;padding:8px 12px;font-size:12px">10% de lo que entregó
-          \u00b7 ${fmtMoney(c.cash_total * 0.10)}</button>
-      </div>
-      <div class="row mt8" style="gap:7px;align-items:center">
-        <input class="input" id="tp-monto" type="number" min="0" step="1" inputmode="decimal"
-          placeholder="Otro monto ($)" style="flex:1;padding:11px">
-        <button class="btn sm" id="tp-ok" style="width:auto;flex:none;padding:11px 16px">Pagar</button>
-      </div>
-      <div class="err mt8" id="tp-err"></div>
-      ${(c.recibidos || []).length ? `<div class="tp-hist">${c.recibidos.map(p => `
-        <div class="tp-row">
-          <span>${esc(String(p.created_at).slice(0, 16))}${p.note ? ' \u00b7 ' + esc(p.note) : ''}</span>
-          <b>${fmtMoney(p.amount)}</b>
-          <button class="tp-del" data-id="${p.id}" title="Deshacer este pago">\u2715</button>
-        </div>`).join('')}</div>` : ''}
-    </div>` : ''}
+    <!-- El reparto que el colíder le hacía a los suyos vivía aquí. Se retiró junto
+         con lo demás: ahora TODOS entregan el 100% y lo de cada quien se paga por
+         fuera, así que llevar la cuenta de uno solo de esos pagos —el del colíder—
+         y no la de los demás contaba a medias algo que ya no es del sistema. Lo
+         que se registró en su momento sigue guardado. -->
 
     ${c.can_edit && c.balance > 0.005 ? `
     <div class="card mt12">
       <div class="label">Registrar una entrega</div>
-      <div class="muted" style="margin-bottom:8px;font-size:11px">\u00bfCu\u00e1nto de su cuenta est\u00e1 cubriendo con este pago? La comisi\u00f3n y el efectivo salen solos.</div>
+      <div class="muted" style="margin-bottom:8px;font-size:11px">\u00bfCu\u00e1nto de su cuenta est\u00e1 cubriendo con este pago? Eso mismo es lo que te entrega en efectivo.</div>
       <input class="input" id="pg-amount" type="number" min="0" max="${c.balance}" step="0.01" placeholder="Cubre de su cuenta ($)">
       <div class="row mt8" style="gap:6px;flex-wrap:wrap">
         <button class="btn sm ghost" id="pg-todo" style="width:auto">Liquida todo (${fmtMoney(c.balance)})</button>
