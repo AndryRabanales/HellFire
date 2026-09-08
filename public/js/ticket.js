@@ -94,14 +94,15 @@ function ticketTypeLabel(ticket) {
      general (UADY/Externo) → rojo
      VIP                    → dorado
      Ultra VIP              → agua, tipo diamante
-     Backstage              → rojo intenso, y con CONTORNO en vez de relleno: el mismo
-                              trato discreto del UADY y el Externo. Lo que de verdad lo
-                              identifica es su flyer, no la insignia. */
+     Backstage              → morado, el mismo del flyer que ya está subido, y con
+                              CONTORNO en vez de relleno: el trato discreto del UADY y
+                              el Externo. Lo que de verdad identifica la zona es el
+                              flyer; la insignia solo confirma. */
 const TONO = {
   general:   { grad: ['#ff7a4d', '#c81e3a'], texto: '#fff3ee', tinta: '#ff8a5c' },
   vip:       { grad: ['#f3d27a', '#d9a53a'], texto: '#3a1e00', tinta: '#f3d27a' },
   ultra:     { grad: ['#bff5ff', '#38bdf8'], texto: '#04283a', tinta: '#9fe8ff' },
-  backstage: { grad: ['#ff3b4d', '#a3000f'], texto: '#fff0f0', tinta: '#ff4d5e' },
+  backstage: { grad: ['#e4b7ff', '#8b2fd6'], texto: '#2b0a45', tinta: '#cba0ff' },
 };
 /* La estrella es de las categorías altas: VIP y Ultra VIP la llevan, la general no.
    Se decide aquí una sola vez porque la usan el boleto, la tabla y el apartado de
@@ -162,10 +163,10 @@ function ticketBadgeSpec(ticket) {
              grad: t.grad, textColor: t.texto };
   }
   if (esBackstage(ticket)) {
-    // Contorno vacío, como el UADY y el Externo, pero en rojo intenso. El relleno se
-    // queda para VIP y Ultra VIP; aquí lo que identifica la zona es el flyer.
+    // Contorno vacío, como el UADY y el Externo, pero morado. El relleno se queda para
+    // VIP y Ultra VIP; aquí lo que identifica la zona es el flyer.
     return { text: '★ BACKSTAGE', ghost: true,
-             ghostStroke: 'rgba(255,45,60,.85)', ghostText: '#ff4d5e' };
+             ghostStroke: 'rgba(168,85,247,.85)', ghostText: '#cba0ff' };
   }
   if (esCategoriaAlta(ticket)) {
     // el nombre real, para que "Ultra VIP" no salga como "VIP", y su color propio
