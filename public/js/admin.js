@@ -3293,6 +3293,10 @@ const FLYER_META = {
               sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
                         faculty_name: '', type_name: 'Ultra VIP', type_is_vip: 1,
                         price: 900, phase_name: 'Fase 1' } },
+  backstage: { label: '★ Flyer Backstage',
+               sample: { folio: 'HF-0001', qr_payload: 'demo', buyer_name: 'Nombre del Comprador',
+                         faculty_name: '', type_name: 'Backstage', type_is_vip: 1,
+                         price: 1500, phase_name: 'Fase 1' } },
   cortesiaexterno: { label: 'Flyer Cortesía Externo',
                      sample: { folio: 'INV-0001', qr_payload: 'demo', buyer_name: 'Invitado Especial',
                                faculty_name: '', type_name: 'Externo', type_is_vip: 0,
@@ -3305,6 +3309,10 @@ const FLYER_META = {
                    sample: { folio: 'INV-0001', qr_payload: 'demo', buyer_name: 'Invitado Especial',
                              faculty_name: '', type_name: 'Ultra VIP', type_is_vip: 1,
                              price: 0, es_cortesia: true } },
+  cortesiabackstage: { label: '★ Flyer Cortesía Backstage',
+                       sample: { folio: 'INV-0001', qr_payload: 'demo', buyer_name: 'Invitado Especial',
+                                 faculty_name: '', type_name: 'Backstage', type_is_vip: 1,
+                                 price: 0, es_cortesia: true } },
   // Las de REDES van con un nombre LARGO de muestra a propósito: así, al subir la
   // imagen, se ve de una vez si el peor caso cabe en la línea. Con un nombre corto
   // todo se ve bien y el problema aparece con el invitado número 40.
@@ -3317,11 +3325,14 @@ const FLYER_META = {
   redesultra: { redes: true, label: 'Para redes · Ultra VIP (4:5)',
                 sample: { buyer_name: 'María Fernanda Villanueva Escamilla',
                           type_name: 'Ultra VIP', type_is_vip: 1, es_cortesia: true } },
+  redesbackstage: { redes: true, label: 'Para redes · Backstage (4:5)',
+                    sample: { buyer_name: 'María Fernanda Villanueva Escamilla',
+                              type_name: 'Backstage', type_is_vip: 1, es_cortesia: true } },
 };
-const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip',
+const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip', 'backstage',
                         'grupo10vip', 'grupo10ultra',
-                        'cortesiaexterno', 'cortesiavip', 'cortesiaultra',
-                        'redesexterno', 'redesvip', 'redesultra'];
+                        'cortesiaexterno', 'cortesiavip', 'cortesiaultra', 'cortesiabackstage',
+                        'redesexterno', 'redesvip', 'redesultra', 'redesbackstage'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
 const FLY_ED = {};
 for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null };

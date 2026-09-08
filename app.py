@@ -409,6 +409,12 @@ DEFAULT_SETTINGS = {
     "flyer_focus_cortesiavip": "", "flyer_scale_cortesiavip": "",
     "flyer_data_cortesiaultra": "", "flyer_mime_cortesiaultra": "",
     "flyer_focus_cortesiaultra": "", "flyer_scale_cortesiaultra": "",
+    # Backstage (Ultra VIP Diamante): la zona junto a la cabina. Es un tipo aparte
+    # con su propio flyer, no una variante del Ultra VIP.
+    "flyer_data_backstage": "", "flyer_mime_backstage": "",
+    "flyer_focus_backstage": "", "flyer_scale_backstage": "",
+    "flyer_data_cortesiabackstage": "", "flyer_mime_cortesiabackstage": "",
+    "flyer_focus_cortesiabackstage": "", "flyer_scale_cortesiabackstage": "",
     # La invitación para REDES: la misma cortesía pero en 4:5, sin QR y con el nombre
     # del invitado encima. Es para que la presuma sin publicar su boleto de verdad.
     "flyer_data_redesexterno": "", "flyer_mime_redesexterno": "",
@@ -432,20 +438,22 @@ def set_setting(db, key, value):
     db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
-FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip",
+FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip", "backstage",
                   "grupo10vip", "grupo10ultra",
-                  "cortesiaexterno", "cortesiavip", "cortesiaultra",
-                  "redesexterno", "redesvip", "redesultra")
+                  "cortesiaexterno", "cortesiavip", "cortesiaultra", "cortesiabackstage",
+                  "redesexterno", "redesvip", "redesultra", "redesbackstage")
 FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
                "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
                "grupo10vip": "Grupo de 10 · VIP", "grupo10ultra": "Grupo de 10 · Ultra VIP",
                "cortesiaexterno": "Cortesía Externo", "cortesiavip": "Cortesía VIP",
                "cortesiaultra": "Cortesía Ultra VIP",
+               "backstage": "Backstage", "cortesiabackstage": "Cortesía Backstage",
                "redesexterno": "Para redes · Externo", "redesvip": "Para redes · VIP",
-               "redesultra": "Para redes · Ultra VIP"}
+               "redesultra": "Para redes · Ultra VIP",
+               "redesbackstage": "Para redes · Backstage"}
 # Las de redes son 4:5 y llevan el nombre encima. Van aparte porque no son un boleto:
 # no llevan QR y su medida es la del feed de Instagram, no la del boleto.
-FLYER_REDES = ("redesexterno", "redesvip", "redesultra")
+FLYER_REDES = ("redesexterno", "redesvip", "redesultra", "redesbackstage")
 # cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
 # relacionado antes de caer al flyer legado de una sola imagen
 FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
@@ -456,7 +464,10 @@ FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",
                    # mientras no suban el suyo, la cortesía usa el flyer del tipo que
                    # le toca: se ve bien desde el primer invitado, sin configurar nada
                    "cortesiaexterno": "externo", "cortesiavip": "vip",
-                   "cortesiaultra": "ultravip"}
+                   "cortesiaultra": "ultravip",
+                   # mientras no suba el flyer del backstage, usa el de Ultra VIP:
+                   # es la zona más cercana y no se ve como un boleto ajeno
+                   "backstage": "ultravip", "cortesiabackstage": "backstage"}
 # Las de redes NO tienen respaldo a propósito: son 4:5 y con el nombre encima. Caer
 # en el flyer del boleto sacaría una imagen de otra medida y con el diseño movido.
 # Si no está subida, no se ofrece el botón — mejor eso que mandarla mal hecha.

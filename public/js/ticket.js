@@ -61,6 +61,7 @@ function flyerVariantFor(ticket) {
   // venta a un invitado le enseñaría cuánto "vale" algo que se le regaló.
   if (ticket.es_cortesia) {
     const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
+    if (t === 'backstage') return 'cortesiabackstage';
     if (t === 'ultravip') return 'cortesiaultra';
     return ticket.type_is_vip ? 'cortesiavip' : 'cortesiaexterno';
   }
@@ -73,6 +74,8 @@ function flyerVariantFor(ticket) {
   // se compara contra el NOMBRE del tipo, para que un tipo nuevo que cree el admin
   // (ej. "Ultra VIP") use su propio flyer en vez de caer en el de VIP o Externo
   const n = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
+  // el backstage se vende como tipo propio, con su flyer propio
+  if (n === 'backstage') return 'backstage';
   if (n === 'ultravip') return 'ultravip';
   if (n === 'uady') return 'uady';
   if (ticket.type_is_vip) return 'vip';
@@ -512,6 +515,7 @@ const REDES = { x0: 0.109, x1: 0.678, linea: 0.4975, alto: 0.052, aire: 0.019 };
 
 function redesVariantFor(ticket) {
   const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
+  if (t === 'backstage') return 'redesbackstage';
   if (t === 'ultravip') return 'redesultra';
   return ticket.type_is_vip ? 'redesvip' : 'redesexterno';
 }
