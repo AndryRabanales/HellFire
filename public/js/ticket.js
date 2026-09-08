@@ -93,11 +93,14 @@ function ticketTypeLabel(ticket) {
    boleto sale con la insignia de una categoría y el precio de otra.
      general (UADY/Externo) → rojo
      VIP                    → dorado
-     Ultra VIP              → agua, tipo diamante  */
+     Ultra VIP              → agua, tipo diamante
+     Backstage              → morado. Es el único tono que no comparte familia con
+                              los otros tres, así que ni con poca luz se confunde. */
 const TONO = {
-  general: { grad: ['#ff7a4d', '#c81e3a'], texto: '#fff3ee', tinta: '#ff8a5c' },
-  vip:     { grad: ['#f3d27a', '#d9a53a'], texto: '#3a1e00', tinta: '#f3d27a' },
-  ultra:   { grad: ['#bff5ff', '#38bdf8'], texto: '#04283a', tinta: '#9fe8ff' },
+  general:   { grad: ['#ff7a4d', '#c81e3a'], texto: '#fff3ee', tinta: '#ff8a5c' },
+  vip:       { grad: ['#f3d27a', '#d9a53a'], texto: '#3a1e00', tinta: '#f3d27a' },
+  ultra:     { grad: ['#bff5ff', '#38bdf8'], texto: '#04283a', tinta: '#9fe8ff' },
+  backstage: { grad: ['#e4b7ff', '#8b2fd6'], texto: '#2b0a45', tinta: '#cba0ff' },
 };
 /* La estrella es de las categorías altas: VIP y Ultra VIP la llevan, la general no.
    Se decide aquí una sola vez porque la usan el boleto, la tabla y el apartado de
@@ -109,14 +112,20 @@ function estrellaDe(ticket) {
 function esUltra(ticket) {
   return (ticket.type_name || '').toLowerCase().replace(/\s+/g, '') === 'ultravip';
 }
+function esBackstage(ticket) {
+  return (ticket.type_name || '').toLowerCase().replace(/\s+/g, '') === 'backstage';
+}
 /* Categoría alta = VIP marcado, O llamarse Ultra VIP. Lo segundo hace falta porque
    el tipo se crea a mano y la casilla "VIP ★" se olvida: sin esto, un Ultra VIP sin
    palomita salía con la insignia sosa de un boleto general, que es lo contrario de
    lo que se cobró. */
 function esCategoriaAlta(ticket) {
-  return !!ticket.type_is_vip || esUltra(ticket);
+  return !!ticket.type_is_vip || esUltra(ticket) || esBackstage(ticket);
 }
 function tonoDe(ticket) {
+  // el backstage va antes que el VIP: lleva la palomita de VIP marcada, así que sin
+  // esto salía dorado, idéntico al boleto de $500 y sin nada que lo distinga
+  if (esBackstage(ticket)) return TONO.backstage;
   if (esUltra(ticket)) return TONO.ultra;
   return ticket.type_is_vip ? TONO.vip : TONO.general;
 }
