@@ -3335,7 +3335,8 @@ const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip', 'backst
                         'redesexterno', 'redesvip', 'redesultra', 'redesbackstage'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
 const FLY_ED = {};
-for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1, file: null, ui: null };
+for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1,
+  nomy: 0.4785, nomx: 0.3935, nomw: 0.569, file: null, ui: null };
 
 function loadImg(src) {
   return new Promise(res => {
@@ -3377,6 +3378,17 @@ function buildFlyerEditor(variant) {
         <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Zoom</div><span class="muted" data-f="sv">1.0×</span></div>
         <input type="range" min="1" max="3" step="0.05" value="1" style="width:100%;accent-color:var(--ember)" data-f="scale">
       </div>
+      ${meta.redes ? `
+      <div class="mt8" style="border-top:1px solid var(--line);padding-top:10px">
+        <div class="label" style="margin:0 0 2px">Dónde va el nombre</div>
+        <div class="muted" style="font-size:10.5px;line-height:1.45;margin-bottom:8px">Muévelo hasta que caiga en el hueco que dejó tu diseño. Cada flyer guarda el suyo.</div>
+        <div class="row" style="justify-content:space-between"><div class="label" style="margin:0">Altura</div><span class="muted" data-f="nyv">—</span></div>
+        <input type="range" min="0.05" max="0.95" step="0.005" value="0.4785" style="width:100%;accent-color:var(--ember)" data-f="nomy">
+        <div class="row mt8" style="justify-content:space-between"><div class="label" style="margin:0">De lado a lado</div><span class="muted" data-f="nxv">—</span></div>
+        <input type="range" min="0.05" max="0.95" step="0.005" value="0.3935" style="width:100%;accent-color:var(--ember)" data-f="nomx">
+        <div class="row mt8" style="justify-content:space-between"><div class="label" style="margin:0">Ancho</div><span class="muted" data-f="nwv">—</span></div>
+        <input type="range" min="0.15" max="0.95" step="0.005" value="0.569" style="width:100%;accent-color:var(--ember)" data-f="nomw">
+      </div>` : ''}
       <div class="row mt8" style="gap:6px">
         <button class="btn sm grow" data-f="save">Guardar</button>
         <button class="btn ghost sm" style="width:auto" data-f="reset">↺</button>
@@ -3386,12 +3398,21 @@ function buildFlyerEditor(variant) {
     <div class="muted mt8" data-f="none" style="font-size:11px"></div>`;
   const q = k => root.querySelector(`[data-f="${k}"]`);
   st.ui = { wrap: q('wrap'), cv: q('cv'), focus: q('focus'), scale: q('scale'),
-            fv: q('fv'), sv: q('sv'), ok: q('ok'), none: q('none'), file: q('file') };
+            fv: q('fv'), sv: q('sv'), ok: q('ok'), none: q('none'), file: q('file'),
+            nomy: q('nomy'), nomx: q('nomx'), nomw: q('nomw'),
+            nyv: q('nyv'), nxv: q('nxv'), nwv: q('nwv') };
 
   const sync = () => {
     st.ui.focus.value = st.focus; st.ui.scale.value = st.scale;
     st.ui.fv.textContent = st.focus < 0.34 ? 'arriba' : st.focus > 0.66 ? 'abajo' : 'centro';
     st.ui.sv.textContent = Number(st.scale).toFixed(1) + '×';
+    // los porcentajes son más fáciles de dictar por teléfono que 0.4785
+    if (st.ui.nomy) {
+      st.ui.nomy.value = st.nomy; st.ui.nomx.value = st.nomx; st.ui.nomw.value = st.nomw;
+      st.ui.nyv.textContent = Math.round(st.nomy * 100) + '%';
+      st.ui.nxv.textContent = Math.round(st.nomx * 100) + '%';
+      st.ui.nwv.textContent = Math.round(st.nomw * 100) + '%';
+    }
   };
   st.sync = sync;
 
@@ -3407,7 +3428,17 @@ function buildFlyerEditor(variant) {
   });
   st.ui.focus.addEventListener('input', () => { st.focus = parseFloat(st.ui.focus.value); sync(); renderFlyerPreview(variant); });
   st.ui.scale.addEventListener('input', () => { st.scale = parseFloat(st.ui.scale.value); sync(); renderFlyerPreview(variant); });
-  q('reset').addEventListener('click', () => { st.focus = 0.5; st.scale = 1; sync(); renderFlyerPreview(variant); });
+  ['nomy', 'nomx', 'nomw'].forEach(k => {
+    if (!st.ui[k]) return;
+    st.ui[k].addEventListener('input', () => {
+      st[k] = parseFloat(st.ui[k].value); sync(); renderFlyerPreview(variant);
+    });
+  });
+  q('reset').addEventListener('click', () => {
+    st.focus = 0.5; st.scale = 1;
+    st.nomy = 0.4785; st.nomx = 0.3935; st.nomw = 0.569;
+    sync(); renderFlyerPreview(variant);
+  });
 
   // arrastrar la imagen para moverla verticalmente
   let dragging = false, startY = 0, startFocus = 0.5;
@@ -3434,12 +3465,17 @@ function buildFlyerEditor(variant) {
         fd.append('variant', variant);
         fd.append('flyer_focus', st.focus);
         fd.append('flyer_scale', st.scale);
+        fd.append('flyer_nomy', st.nomy);
+        fd.append('flyer_nomx', st.nomx);
+        fd.append('flyer_nomw', st.nomw);
         await API.post('/api/admin/flyer', fd);
         st.isNew = false;
         st.ui.ok.textContent = 'Guardado ✓ — los boletos ' + FLYER_META[variant].label.replace(/^★?\s*Flyer\s*/, '') + ' usarán este flyer';
       } else {
         await API.post('/api/admin/settings', {
           ['flyer_focus_' + variant]: st.focus, ['flyer_scale_' + variant]: st.scale,
+          ['flyer_nomy_' + variant]: st.nomy, ['flyer_nomx_' + variant]: st.nomx,
+          ['flyer_nomw_' + variant]: st.nomw,
         });
         st.ui.ok.textContent = 'Posición guardada ✓';
       }
@@ -3468,7 +3504,9 @@ async function renderFlyerPreview(variant) {
   // el zoom o cambiar la imagen no hacía nada. Se veía como "el botón no sirve".
   try {
     const st = FLY_ED[variant];
-    const ev = { ...EV, ['flyer_focus_' + variant]: st.focus, ['flyer_scale_' + variant]: st.scale };
+    const ev = { ...EV, ['flyer_focus_' + variant]: st.focus, ['flyer_scale_' + variant]: st.scale,
+                 ['flyer_nomy_' + variant]: st.nomy, ['flyer_nomx_' + variant]: st.nomx,
+                 ['flyer_nomw_' + variant]: st.nomw };
     const cv = FLYER_META[variant].redes
       ? await renderPresumible(FLYER_META[variant].sample, ev, st.img)
       : await renderTicket(FLYER_META[variant].sample, ev, st.img);
@@ -3670,6 +3708,9 @@ async function loadSettings() {
     const st = FLY_ED[v];
     st.focus = parseFloat(s['flyer_focus_' + v]) || 0.5;
     st.scale = parseFloat(s['flyer_scale_' + v]) || 1;
+    st.nomy = parseFloat(s['flyer_nomy_' + v]) || 0.4785;
+    st.nomx = parseFloat(s['flyer_nomx_' + v]) || 0.3935;
+    st.nomw = parseFloat(s['flyer_nomw_' + v]) || 0.569;
     st.isNew = false;
     st.sync();
     // Antes, sin imagen propia el bloque entero se escondía: se apretaba la variante

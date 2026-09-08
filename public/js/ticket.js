@@ -526,10 +526,19 @@ async function downloadTicket(ticket, ev) {
    ================================================================== */
 
 // Dónde cae el nombre, en fracciones del lienzo para que no dependa de la resolución
-// del archivo que suban. Medido sobre el diseño: la línea de NOMBRE COMPLETO va a la
-// mitad de la altura, y el hueco arranca en el margen izquierdo y termina antes de
-// la máscara.
-const REDES = { x0: 0.109, x1: 0.678, linea: 0.4975, alto: 0.052, aire: 0.019 };
+// del archivo que suban. Estos son los valores por omisión —los que estaban fijos en
+// el código, medidos sobre los primeros diseños—, pero cada variante puede traer los
+// suyos desde Ajustes: el flyer del backstage dejó el hueco a la izquierda de la
+// botella, no a media hoja, y con un valor único para todos el nombre se encimaba.
+const REDES = { nomy: 0.4785, nomx: 0.3935, nomw: 0.569, alto: 0.052 };
+
+function redesNombrePos(ev, variant) {
+  const n = (k, d) => {
+    const v = parseFloat(ev && ev['flyer_' + k + '_' + variant]);
+    return Number.isFinite(v) ? v : d;
+  };
+  return { nomy: n('nomy', REDES.nomy), nomx: n('nomx', REDES.nomx), nomw: n('nomw', REDES.nomw) };
+}
 
 function redesVariantFor(ticket) {
   const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
@@ -565,8 +574,9 @@ async function renderPresumible(ticket, ev, imgOverride) {
 
   const nombre = (ticket.buyer_name || '').trim();
   if (nombre) {
-    const x0 = W * REDES.x0, x1 = W * REDES.x1;
-    const ancho = x1 - x0;
+    const pos = redesNombrePos(ev, variant);
+    const ancho = W * pos.nomw;
+    const cx = W * pos.nomx;
     // Un renglón siempre. Si el nombre es largo, la letra se encoge hasta caber: es
     // preferible una letra más chica a un nombre cortado o encimado en la línea.
     let px = Math.round(H * REDES.alto);
@@ -586,7 +596,7 @@ async function renderPresumible(ticket, ev, imgOverride) {
     // letra, un nombre corto quedaba con 38px de hueco y uno largo con 8: cada
     // invitación se veía distinta. Fijo, todas las de la tanda quedan a la misma
     // altura sobre la línea, que es lo que las hace ver de la misma serie.
-    ctx.fillText(nombre, x0 + ancho / 2, H * (REDES.linea - REDES.aire), ancho);
+    ctx.fillText(nombre, cx, H * pos.nomy, ancho);
   }
   return cv;
 }

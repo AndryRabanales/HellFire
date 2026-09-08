@@ -423,6 +423,13 @@ DEFAULT_SETTINGS = {
     "flyer_focus_redesvip": "", "flyer_scale_redesvip": "",
     "flyer_data_redesultra": "", "flyer_mime_redesultra": "",
     "flyer_focus_redesultra": "", "flyer_scale_redesultra": "",
+    # Dónde cae el nombre del invitado en la imagen de redes. Es por variante porque
+    # cada diseño deja el hueco en otro lado: el del backstage lo tiene a la izquierda
+    # de la botella, no a media hoja como los demás.
+    "flyer_nomy_redesexterno": "", "flyer_nomx_redesexterno": "", "flyer_nomw_redesexterno": "",
+    "flyer_nomy_redesvip": "", "flyer_nomx_redesvip": "", "flyer_nomw_redesvip": "",
+    "flyer_nomy_redesultra": "", "flyer_nomx_redesultra": "", "flyer_nomw_redesultra": "",
+    "flyer_nomy_redesbackstage": "", "flyer_nomx_redesbackstage": "", "flyer_nomw_redesbackstage": "",
     # El interruptor de la venta flash. Con "1" hay flash AHORA, sin esperar fecha.
     "flash_manual": "0",
     "seller_commission_pct": "10",   # % de comisión del vendedor sobre lo que entrega
@@ -496,6 +503,11 @@ def flyer_info(db):
                                         or setting(db, "flyer_focus") or 0.5)
         out[f"flyer_scale_{v}"] = float(setting(db, f"flyer_scale_{v}")
                                         or setting(db, "flyer_scale") or 1)
+        # Los valores por omisión son los que estaban fijos en el código: así, un
+        # flyer que nadie ha reacomodado se sigue viendo igual que siempre.
+        out[f"flyer_nomy_{v}"] = float(setting(db, f"flyer_nomy_{v}") or 0.4785)
+        out[f"flyer_nomx_{v}"] = float(setting(db, f"flyer_nomx_{v}") or 0.3935)
+        out[f"flyer_nomw_{v}"] = float(setting(db, f"flyer_nomw_{v}") or 0.569)
     return out
 
 def flash_manual(db):
@@ -4735,6 +4747,13 @@ def save_settings():
         if f"flyer_scale_{v}" in b:
             set_setting(db, f"flyer_scale_{v}", _clamp(b[f"flyer_scale_{v}"], 1, 3, 1))
             changed.append(f"flyer_scale_{v}")
+        # dónde cae el nombre del invitado en la imagen de redes
+        for clave, lo, hi, por_omision in ((f"flyer_nomy_{v}", 0.05, 0.95, 0.4785),
+                                           (f"flyer_nomx_{v}", 0.05, 0.95, 0.3935),
+                                           (f"flyer_nomw_{v}", 0.15, 0.95, 0.569)):
+            if clave in b:
+                set_setting(db, clave, _clamp(b[clave], lo, hi, por_omision))
+                changed.append(clave)
     audit(db, s["admin"]["username"], "ajustes", f"Actualizó ajustes: {', '.join(changed)}")
     db.commit()
     return jsonify(ok=True)
@@ -4761,6 +4780,11 @@ def upload_flyer():
     set_setting(db, f"flyer_mime_{variant}", mimes[ext])
     set_setting(db, f"flyer_focus_{variant}", _clamp(request.form.get("flyer_focus"), 0, 1, 0.5))
     set_setting(db, f"flyer_scale_{variant}", _clamp(request.form.get("flyer_scale"), 1, 3, 1))
+    for campo, lo, hi, por_omision in (("flyer_nomy", 0.05, 0.95, 0.4785),
+                                       ("flyer_nomx", 0.05, 0.95, 0.3935),
+                                       ("flyer_nomw", 0.15, 0.95, 0.569)):
+        if request.form.get(campo) is not None:
+            set_setting(db, f"{campo}_{variant}", _clamp(request.form.get(campo), lo, hi, por_omision))
     audit(db, s["admin"]["username"], "ajustes", f"Subió el flyer {FLYER_LABEL[variant]}")
     db.commit()
     return jsonify(ok=True)
