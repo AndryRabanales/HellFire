@@ -94,13 +94,14 @@ function ticketTypeLabel(ticket) {
      general (UADY/Externo) → rojo
      VIP                    → dorado
      Ultra VIP              → agua, tipo diamante
-     Backstage              → morado. Es el único tono que no comparte familia con
-                              los otros tres, así que ni con poca luz se confunde. */
+     Backstage              → rojo intenso, y con CONTORNO en vez de relleno: el mismo
+                              trato discreto del UADY y el Externo. Lo que de verdad lo
+                              identifica es su flyer, no la insignia. */
 const TONO = {
   general:   { grad: ['#ff7a4d', '#c81e3a'], texto: '#fff3ee', tinta: '#ff8a5c' },
   vip:       { grad: ['#f3d27a', '#d9a53a'], texto: '#3a1e00', tinta: '#f3d27a' },
   ultra:     { grad: ['#bff5ff', '#38bdf8'], texto: '#04283a', tinta: '#9fe8ff' },
-  backstage: { grad: ['#e4b7ff', '#8b2fd6'], texto: '#2b0a45', tinta: '#cba0ff' },
+  backstage: { grad: ['#ff3b4d', '#a3000f'], texto: '#fff0f0', tinta: '#ff4d5e' },
 };
 /* La estrella es de las categorías altas: VIP y Ultra VIP la llevan, la general no.
    Se decide aquí una sola vez porque la usan el boleto, la tabla y el apartado de
@@ -160,6 +161,12 @@ function ticketBadgeSpec(ticket) {
                ? ' · ' + (ticket.type_name || '').toUpperCase() : ''),
              grad: t.grad, textColor: t.texto };
   }
+  if (esBackstage(ticket)) {
+    // Contorno vacío, como el UADY y el Externo, pero en rojo intenso. El relleno se
+    // queda para VIP y Ultra VIP; aquí lo que identifica la zona es el flyer.
+    return { text: '★ BACKSTAGE', ghost: true,
+             ghostStroke: 'rgba(255,45,60,.85)', ghostText: '#ff4d5e' };
+  }
   if (esCategoriaAlta(ticket)) {
     // el nombre real, para que "Ultra VIP" no salga como "VIP", y su color propio
     const t = tonoDe(ticket);
@@ -181,10 +188,11 @@ function drawTicketBadge(ctx, spec, x, y, maxW) {
   const tw = ctx.measureText(spec.text).width;
   const bh = 30, bw = tw + 26;
   if (spec.ghost) {
-    ctx.strokeStyle = 'rgba(255,150,80,.55)';
+    // el naranja es el contorno de siempre (UADY, Externo); el backstage manda el suyo
+    ctx.strokeStyle = spec.ghostStroke || 'rgba(255,150,80,.55)';
     ctx.lineWidth = 1.4;
     roundRect(ctx, x, y, bw, bh, 8); ctx.stroke();
-    ctx.fillStyle = '#ffb27a';
+    ctx.fillStyle = spec.ghostText || '#ffb27a';
   } else {
     const gg = ctx.createLinearGradient(x, y, x + bw, y + bh);
     gg.addColorStop(0, spec.grad[0]); gg.addColorStop(1, spec.grad[1]);
