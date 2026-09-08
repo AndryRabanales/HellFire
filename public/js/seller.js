@@ -118,6 +118,11 @@ function aplicarCierre() {
   return cerradas;
 }
 
+function sel_agotado() {
+  const t = (CATALOG.types || []).find(x => x.id === SELECTED_TYPE);
+  return !!(t && t.agotado);
+}
+
 function renderTypes() {
   const box = $('#f-types');
   box.innerHTML = '';
@@ -132,13 +137,30 @@ function renderTypes() {
           ? `<span class="tantes">${fmtMoney(t.normal_cents / 100)}</span> ${fmtMoney(t.price_cents / 100)}`
           : fmtMoney(t.price_cents / 100))
       : '<span style="color:var(--cream-45);font-size:12px">Por definir</span>';
-    el.innerHTML = `<div class="tname">${esc(t.name)}</div><div class="tprice">${priceLabel}</div>`;
+    // Un tipo con cupo —hoy solo el backstage— deja de venderse cuando se llena.
+    // Se pinta AGOTADO en vez de desaparecer: si se esfuma, el vendedor no sabe si
+    // se acabó o si nunca existió, y va a preguntar.
+    if (t.agotado) {
+      el.classList.add('agotado');
+      el.innerHTML = `<div class="tname">${esc(t.name)}</div>` +
+        `<div class="tprice">${priceLabel}</div><div class="tcupo">Agotado</div>`;
+      el.title = 'Ya no quedan lugares de ' + t.name;
+      box.appendChild(el);
+      return;                                    // sin listener: no se puede elegir
+    }
+    // Los últimos lugares se avisan: es lo que hace que el vendedor cierre hoy.
+    const pocos = t.libres !== null && t.libres !== undefined && t.libres <= 10;
+    el.innerHTML = `<div class="tname">${esc(t.name)}</div><div class="tprice">${priceLabel}</div>` +
+      (pocos ? `<div class="tcupo pocos">Quedan ${t.libres}</div>` : '');
     el.addEventListener('click', () => { SELECTED_TYPE = t.id; renderTypes(); });
     box.appendChild(el);
   });
   // La facultad solo se pide para tipos que la requieren (UADY). Antes también se
   // mostraba SIN tipo elegido; ahora que tras cada venta el formulario se queda en
   // pantalla, eso dejaba un "Elige facultad..." colgando después de cada boleto.
+  // Se le pudo agotar entre que lo eligió y que le dio a generar: al refrescar el
+  // catálogo el tipo se suelta solo, para que no se quede con uno que ya no existe.
+  if (sel_agotado()) SELECTED_TYPE = null;
   const sel = CATALOG.types.find(t => t.id === SELECTED_TYPE);
   const showFac = !!sel && !!sel.needs_faculty;
   $('#f-faculty-block').style.display = showFac ? '' : 'none';

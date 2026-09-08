@@ -362,6 +362,16 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
 .typeopt.sel{background:linear-gradient(180deg,rgba(255,110,30,.2),rgba(255,110,30,.08));
   border-color:var(--ember);box-shadow:0 0 16px rgba(255,110,30,.32)}
 .typeopt:active{transform:scale(.96)}
+/* Un tipo con el cupo lleno. No desaparece: se apaga y se marca, porque el vendedor
+   tiene que poder decirle al comprador "ese ya se acabó" y no "ese no existe". */
+.typeopt.agotado{opacity:.5;cursor:not-allowed;border-style:dashed;
+  border-color:rgba(255,120,40,.22);background:rgba(255,255,255,.015)}
+.typeopt.agotado:active{transform:none}
+.typeopt.agotado .tprice{text-decoration:line-through;color:var(--cream-45)}
+.typeopt .tcupo{font:700 9px "Space Grotesk";letter-spacing:.1em;text-transform:uppercase;
+  color:var(--cream-45);margin-top:3px}
+/* Los ultimos lugares en ambar: es informacion de venta, no un error. */
+.typeopt .tcupo.pocos{color:#f3d27a}
 .typeopt.sel .tname{color:var(--ember-soft)}
 .typeopt.sel .tprice{color:var(--cream)}
 

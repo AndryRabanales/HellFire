@@ -227,7 +227,11 @@ CREATE TABLE IF NOT EXISTS ticket_types (
   is_vip INTEGER NOT NULL DEFAULT 0,
   active INTEGER NOT NULL DEFAULT 1,
   needs_faculty INTEGER NOT NULL DEFAULT 1,  -- UADY la pide, VIP/Externo no
-  flash_price_cents INTEGER        -- lo que cuesta cuando NO hay fase corriendo y se prende el flash
+  flash_price_cents INTEGER,       -- lo que cuesta cuando NO hay fase corriendo y se prende el flash
+  -- Cuántos lugares hay de este tipo. NULL = sin tope, que es como funcionan todos
+  -- salvo el backstage: esa zona es un espacio físico junto a la cabina y no crece
+  -- porque se vendan más boletos.
+  cupo INTEGER
 );
 CREATE TABLE IF NOT EXISTS price_phases (
   -- fases de precio por tipo: al llegar la fecha de cada fase, el precio cambia solo
@@ -650,6 +654,7 @@ def init_db():
                    "paid_cents INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
                    "needs_faculty INTEGER NOT NULL DEFAULT 1")
+        db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS cupo INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phase_name TEXT")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_size INTEGER")
@@ -704,6 +709,8 @@ def init_db():
         ttcols = [r["name"] for r in db.execute("PRAGMA table_info(ticket_types)").fetchall()]
         if "needs_faculty" not in ttcols:
             db.execute("ALTER TABLE ticket_types ADD COLUMN needs_faculty INTEGER NOT NULL DEFAULT 1")
+        if "cupo" not in ttcols:
+            db.execute("ALTER TABLE ticket_types ADD COLUMN cupo INTEGER")
         tkcols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "group_id" not in tkcols:
             db.execute("ALTER TABLE tickets ADD COLUMN group_id INTEGER")
@@ -1527,10 +1534,14 @@ def catalog():
     types = []
     for r in db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY price_cents").fetchall():
         price, phase, normal = effective_price(db, r)
+        libres = lugares_libres(db, r)
         types.append({"id": r["id"], "name": r["name"], "is_vip": r["is_vip"],
                       "needs_faculty": r["needs_faculty"],
                       "price_cents": price, "phase": phase,
                       "normal_cents": normal,
+                      # cupo: None en todos menos el backstage
+                      "cupo": (r["cupo"] if "cupo" in r.keys() else None),
+                      "libres": libres, "agotado": libres is not None and libres <= 0,
                       "next_phase": next_phase(db, r)})
     facs = [dict(r) for r in db.execute(
         "SELECT id, name FROM faculties WHERE active=1 ORDER BY name").fetchall()]
@@ -1539,7 +1550,8 @@ def catalog():
     # era el descuento ahora se le paga al vendedor como comisión.
     # Los tipos que pueden ir en grupo: todos los que no piden facultad. Se manda la
     # lista completa para que la boletera ofrezca Externo, VIP y Ultra VIP.
-    opciones = [t for t in types if not t["needs_faculty"] and t["price_cents"] > 0]
+    opciones = [t for t in types if not t["needs_faculty"] and t["price_cents"] > 0
+                and not t["agotado"]]
     externo = next((t for t in opciones if t["name"] == "Externo"), None)
     group_info = None
     if opciones:
@@ -1699,6 +1711,15 @@ def create_ticket():
                     (body.get("type_id"),)).fetchone()
     if not tt:
         return jsonify(error="Elige un tipo de boleto válido"), 400
+    # El cupo se revisa AQUI, en el servidor, no en la pantalla. La boletera ya lo
+    # pinta agotado, pero dos vendedores pueden estar en el último lugar al mismo
+    # tiempo: el segundo tiene que rebotar aunque su pantalla dijera que sí.
+    # El código de invitados es la excepción, igual que con las ventas cerradas: es
+    # privado del organizador, y el tope existe para que los 64 promotores no vendan
+    # de más, no para que él no pueda meter a alguien a último momento.
+    libres = lugares_libres(db, tt)
+    if libres is not None and libres <= 0 and not is_guest_seller(s["seller"]):
+        return jsonify(error=f"{tt['name']} está agotado: ya no quedan lugares."), 409
     # la facultad solo se pide para tipos que la requieren (UADY); Externo y VIP no
     if tt["needs_faculty"]:
         fac = db.execute("SELECT * FROM faculties WHERE id=? AND active=1",
@@ -1797,6 +1818,16 @@ def create_group():
         fila, precio, fase, normal = cache[tid]
         tipos.append(fila)
         precios.append((precio, fase, normal))
+    # Un grupo pide varios lugares del mismo tipo de una vez: se revisa el total, no
+    # de uno en uno. Con 3 lugares libres y 4 integrantes de backstage, el grupo entero
+    # se rechaza antes de generar nada; a medias quedarían boletos huérfanos cobrados.
+    from collections import Counter as _C
+    for nombre, piden in _C(t["name"] for t in tipos).items():
+        tt_ = next(t for t in tipos if t["name"] == nombre)
+        libres = lugares_libres(db, tt_)
+        if libres is not None and piden > libres:
+            return jsonify(error=f"{nombre}: el grupo pide {piden} lugares y solo "
+                                 f"quedan {libres}."), 409
     seller_id, seller_name, seller_code = s["seller"]["id"], s["seller"]["name"], s["seller"]["code"]
     gcur = db.execute("INSERT INTO groups(size, names, representative, seller_id, seller_name, created_at) "
                       "VALUES(?,?,?,?,?,?)",
@@ -2247,11 +2278,13 @@ def list_types():
     out = []
     for r in db.execute("SELECT * FROM ticket_types ORDER BY id").fetchall():
         price, phase, _n = effective_price(db, r)
+        libres = lugares_libres(db, r)
         phases = [dict(p) for p in db.execute(
             "SELECT * FROM price_phases WHERE type_id=? ORDER BY starts_on, id",
             (r["id"],)).fetchall()]
         fila = {**dict(r), "current_price_cents": price,
-                "current_phase": phase, "phases": phases}
+                "current_phase": phase, "phases": phases,
+                "libres": libres, "agotado": libres is not None and libres <= 0}
         if not duenio:
             fila["sold"] = db.execute(
                 "SELECT COUNT(*) c FROM tickets WHERE type_id=? AND status!='void'",
@@ -2645,8 +2678,20 @@ def edit_type(tid):
     active = 1 if b.get("active", t["active"]) else 0
     is_vip = 1 if b.get("is_vip", t["is_vip"]) else 0
     needs_fac = 1 if b.get("needs_faculty", t["needs_faculty"]) else 0
-    db.execute("UPDATE ticket_types SET name=?, price_cents=?, active=?, is_vip=?, needs_faculty=? WHERE id=?",
-               (name, price, active, is_vip, needs_fac, tid))
+    # El cupo: vacío o cero significa SIN TOPE, que es como está todo menos el
+    # backstage. Bajarlo por debajo de lo ya vendido no borra nada —esos boletos
+    # existen y valen— pero deja el tipo agotado desde ese momento.
+    cupo_antes = t["cupo"] if "cupo" in t.keys() else None
+    cupo = cupo_antes
+    if "cupo" in b:
+        try:
+            v = b.get("cupo")
+            cupo = None if v in (None, "", 0, "0") else max(1, int(v))
+        except (TypeError, ValueError):
+            return jsonify(error="El cupo tiene que ser un número entero"), 400
+    db.execute("UPDATE ticket_types SET name=?, price_cents=?, active=?, is_vip=?, "
+               "needs_faculty=?, cupo=? WHERE id=?",
+               (name, price, active, is_vip, needs_fac, cupo, tid))
     if price != t["price_cents"]:
         # RF-38/90: cambio de precio auditado; boletos previos no cambian (RF-40)
         audit(db, s["admin"]["username"], "precio",
@@ -2663,6 +2708,11 @@ def edit_type(tid):
         manual = set(json.loads(setting(db, "facultad_manual") or "[]"))
         manual.add(tid) if needs_fac else manual.discard(tid)
         set_setting(db, "facultad_manual", json.dumps(sorted(manual)))
+    if cupo != cupo_antes:
+        ya = ocupados_de(db, tid)
+        audit(db, s["admin"]["username"], "catalogo",
+              f"'{name}': cupo {cupo_antes or 'sin tope'} → {cupo or 'sin tope'} "
+              f"(lleva {ya} generado{'s' if ya != 1 else ''})")
     db.commit()
     return jsonify(ok=True)
 
@@ -3235,6 +3285,22 @@ def comision_general(db):
         return 10.0
 
 COMISION_COLIDER_MIN = 20.0   # el trato con un colíder nunca baja de aquí
+
+def ocupados_de(db, tid):
+    """Boletos vivos de este tipo. Cuenta las cortesías: el cupo del backstage es un
+    espacio físico junto a la cabina, y quien entra de cortesía ocupa el mismo lugar
+    que quien pagó. Los anulados NO cuentan: esa venta se cayó y el lugar se libera."""
+    return db.execute("SELECT COUNT(*) AS n FROM tickets WHERE type_id=? AND status!='void'",
+                      (tid,)).fetchone()["n"]
+
+
+def lugares_libres(db, tt):
+    """Cuántos quedan. None = este tipo no tiene tope (así son todos menos backstage)."""
+    cupo = tt["cupo"] if "cupo" in tt.keys() else None
+    if not cupo:
+        return None
+    return max(0, int(cupo) - ocupados_de(db, tt["id"]))
+
 
 def es_de_colider(db, sid):
     """¿Este vendedor pertenece al grupo de un colíder? (incluye la ficha del propio

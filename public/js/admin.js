@@ -3000,9 +3000,26 @@ function editType(t) {
   // junto al botón— el tipo se quedaba sin categoría alta para siempre, sin estrella
   // y con la insignia sosa de un boleto general, cobrando precio de VIP.
   modal(`<div class="h1" style="font-size:18px">Editar · ${esc(t.name)}</div>
-    <div class="muted" style="margin-top:4px">${esc(t.name)}${t.is_vip ? ' — VIP ★' : ''} · siempre disponible</div>
+    <div class="muted" style="margin-top:4px">${esc(t.name)}${t.is_vip ? ' — VIP ★' : ''}${
+      t.cupo ? ` · ${t.sold || 0} de ${t.cupo} lugares` : ' · sin l\u00edmite de lugares'}</div>
     <div class="label mt16">Precio ($)</div>
     <input class="input" id="et-price" type="number" min="1" value="${t.price_cents / 100}">
+
+    <!-- El cupo. Casi ningún tipo lo lleva: la pista crece con la gente. El backstage
+         no, porque es un espacio físico junto a la cabina. Por eso el campo se explica
+         y arranca vacío. -->
+    <div class="label mt16">L\u00edmite de lugares</div>
+    <input class="input" id="et-cupo" type="number" min="1" placeholder="Sin l\u00edmite"
+      value="${t.cupo || ''}">
+    <div class="muted" style="font-size:11px;margin-top:4px">${t.cupo
+      ? `Llevas <b style="color:var(--cream)">${t.sold || 0}</b> generado(s) y quedan
+         <b style="color:${(t.libres || 0) > 0 ? 'var(--ok)' : 'var(--danger)'}">${t.libres || 0}</b>.
+         Al llenarse, los vendedores lo ven <b>agotado</b> y no lo pueden generar.
+         D\u00e9jalo vac\u00edo para quitarle el tope.`
+      : `D\u00e9jalo vac\u00edo y se vende sin tope, como la pista. P\u00f3nle un n\u00famero solo si
+         es una zona con lugares contados \u2014el backstage, por ejemplo\u2014: al llenarse,
+         los vendedores lo ver\u00e1n agotado.`}</div>
+    <div class="muted" style="font-size:11px;margin-top:3px">Cuentan los boletos vivos, cortes\u00edas incluidas. Un boleto anulado libera su lugar.</div>
     <label class="row mt16" style="gap:8px;cursor:pointer">
       <input type="checkbox" id="et-vip" ${t.is_vip ? 'checked' : ''}>
       <span style="font:600 13px Manrope;color:var(--cream)">Categoría alta (VIP ★)</span></label>
@@ -3046,10 +3063,16 @@ function editType(t) {
     if (!(price > 0)) { $('#et-err').textContent = 'Escribe un precio válido'; return; }
     try {
       // el resto de propiedades quedan intactas en el backend
+      const cupoTxt = $('#et-cupo').value.trim();
+      const cupo = cupoTxt === '' ? null : parseInt(cupoTxt, 10);
+      if (cupoTxt !== '' && !(cupo > 0)) {
+        $('#et-err').textContent = 'El límite de lugares tiene que ser un número mayor a cero, o vacío';
+        return;
+      }
       await API.put('/api/admin/ticket-types/' + t.id,
                     { price, needs_faculty: $('#et-fac').checked,
                       is_vip: $('#et-vip').checked,
-                      active: $('#et-act').checked });
+                      active: $('#et-act').checked, cupo });
       closeModal(); toast('Guardado'); loadCatalogs();
     } catch (e) { if (!guard(e)) $('#et-err').textContent = e.message; }
   };
