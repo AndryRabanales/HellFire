@@ -231,7 +231,11 @@ CREATE TABLE IF NOT EXISTS ticket_types (
   -- Cuántos lugares hay de este tipo. NULL = sin tope, que es como funcionan todos
   -- salvo el backstage: esa zona es un espacio físico junto a la cabina y no crece
   -- porque se vendan más boletos.
-  cupo INTEGER
+  cupo INTEGER,
+  -- Cerrar a mano, sin contar nada. Es lo que de verdad se usa: el organizador no
+  -- sabe de antemano cuántos backstage va a vender, sabe cuándo ya fueron
+  -- suficientes. El tipo se sigue viendo, pero AGOTADO.
+  cerrado INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS price_phases (
   -- fases de precio por tipo: al llegar la fecha de cada fase, el precio cambia solo
@@ -655,6 +659,8 @@ def init_db():
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
                    "needs_faculty INTEGER NOT NULL DEFAULT 1")
         db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS cupo INTEGER")
+        db.execute("ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "
+                   "cerrado INTEGER NOT NULL DEFAULT 0")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_id INTEGER")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS phase_name TEXT")
         db.execute("ALTER TABLE tickets ADD COLUMN IF NOT EXISTS group_size INTEGER")
@@ -711,6 +717,8 @@ def init_db():
             db.execute("ALTER TABLE ticket_types ADD COLUMN needs_faculty INTEGER NOT NULL DEFAULT 1")
         if "cupo" not in ttcols:
             db.execute("ALTER TABLE ticket_types ADD COLUMN cupo INTEGER")
+        if "cerrado" not in ttcols:
+            db.execute("ALTER TABLE ticket_types ADD COLUMN cerrado INTEGER NOT NULL DEFAULT 0")
         tkcols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "group_id" not in tkcols:
             db.execute("ALTER TABLE tickets ADD COLUMN group_id INTEGER")
@@ -1539,8 +1547,9 @@ def catalog():
                       "needs_faculty": r["needs_faculty"],
                       "price_cents": price, "phase": phase,
                       "normal_cents": normal,
-                      # cupo: None en todos menos el backstage
+                      # cupo: None mientras nadie le ponga tope numérico
                       "cupo": (r["cupo"] if "cupo" in r.keys() else None),
+                      "cerrado": esta_cerrado(db, r),
                       "libres": libres, "agotado": libres is not None and libres <= 0,
                       "next_phase": next_phase(db, r)})
     facs = [dict(r) for r in db.execute(
@@ -1719,7 +1728,9 @@ def create_ticket():
     # de más, no para que él no pueda meter a alguien a último momento.
     libres = lugares_libres(db, tt)
     if libres is not None and libres <= 0 and not is_guest_seller(s["seller"]):
-        return jsonify(error=f"{tt['name']} está agotado: ya no quedan lugares."), 409
+        return jsonify(error=(f"La venta de {tt['name']} está cerrada."
+                              if esta_cerrado(db, tt)
+                              else f"{tt['name']} está agotado: ya no quedan lugares.")), 409
     # la facultad solo se pide para tipos que la requieren (UADY); Externo y VIP no
     if tt["needs_faculty"]:
         fac = db.execute("SELECT * FROM faculties WHERE id=? AND active=1",
@@ -2284,7 +2295,8 @@ def list_types():
             (r["id"],)).fetchall()]
         fila = {**dict(r), "current_price_cents": price,
                 "current_phase": phase, "phases": phases,
-                "libres": libres, "agotado": libres is not None and libres <= 0}
+                "libres": libres, "agotado": libres is not None and libres <= 0,
+                "cerrado": esta_cerrado(db, r)}
         if not duenio:
             fila["sold"] = db.execute(
                 "SELECT COUNT(*) c FROM tickets WHERE type_id=? AND status!='void'",
@@ -2689,9 +2701,11 @@ def edit_type(tid):
             cupo = None if v in (None, "", 0, "0") else max(1, int(v))
         except (TypeError, ValueError):
             return jsonify(error="El cupo tiene que ser un número entero"), 400
+    cerrado_antes = 1 if (t["cerrado"] if "cerrado" in t.keys() else 0) else 0
+    cerrado = 1 if b.get("cerrado", cerrado_antes) else 0
     db.execute("UPDATE ticket_types SET name=?, price_cents=?, active=?, is_vip=?, "
-               "needs_faculty=?, cupo=? WHERE id=?",
-               (name, price, active, is_vip, needs_fac, cupo, tid))
+               "needs_faculty=?, cupo=?, cerrado=? WHERE id=?",
+               (name, price, active, is_vip, needs_fac, cupo, cerrado, tid))
     if price != t["price_cents"]:
         # RF-38/90: cambio de precio auditado; boletos previos no cambian (RF-40)
         audit(db, s["admin"]["username"], "precio",
@@ -2713,6 +2727,13 @@ def edit_type(tid):
         audit(db, s["admin"]["username"], "catalogo",
               f"'{name}': cupo {cupo_antes or 'sin tope'} → {cupo or 'sin tope'} "
               f"(lleva {ya} generado{'s' if ya != 1 else ''})")
+    if cerrado != cerrado_antes:
+        # Cerrar la venta de un tipo es cortar dinero que estaba entrando: tiene que
+        # quedar escrito quién lo hizo, cuándo y con cuántos boletos encima.
+        ya = ocupados_de(db, tid)
+        audit(db, s["admin"]["username"], "catalogo",
+              f"{'Cerró' if cerrado else 'Reabrió'} la venta de '{name}' "
+              f"(lleva {ya} boleto{'s' if ya != 1 else ''} generado{'s' if ya != 1 else ''})")
     db.commit()
     return jsonify(ok=True)
 
@@ -3294,8 +3315,20 @@ def ocupados_de(db, tid):
                       (tid,)).fetchone()["n"]
 
 
+def esta_cerrado(db, tt):
+    """¿Se cerró a mano? Es el caso normal: casi nunca se sabe de antemano cuántos
+    lugares hay, se sabe cuándo ya fueron suficientes."""
+    return bool(tt["cerrado"]) if "cerrado" in tt.keys() else False
+
+
 def lugares_libres(db, tt):
-    """Cuántos quedan. None = este tipo no tiene tope (así son todos menos backstage)."""
+    """Cuántos quedan. None = sin tope numérico, que es como está todo.
+
+    Un tipo cerrado a mano devuelve 0: para todo lo de abajo —la boletera, los
+    grupos, el candado del servidor— cerrado y agotado son lo mismo, y así el
+    mecanismo del AGOTADO sirve para los dos casos sin duplicarse."""
+    if esta_cerrado(db, tt):
+        return 0
     cupo = tt["cupo"] if "cupo" in tt.keys() else None
     if not cupo:
         return None

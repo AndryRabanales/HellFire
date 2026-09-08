@@ -144,7 +144,8 @@ function renderTypes() {
       el.classList.add('agotado');
       el.innerHTML = `<div class="tname">${esc(t.name)}</div>` +
         `<div class="tprice">${priceLabel}</div><div class="tcupo">Agotado</div>`;
-      el.title = 'Ya no quedan lugares de ' + t.name;
+      el.title = t.cerrado ? 'La venta de ' + t.name + ' está cerrada'
+                           : 'Ya no quedan lugares de ' + t.name;
       box.appendChild(el);
       return;                                    // sin listener: no se puede elegir
     }

@@ -3000,15 +3000,25 @@ function editType(t) {
   // junto al botón— el tipo se quedaba sin categoría alta para siempre, sin estrella
   // y con la insignia sosa de un boleto general, cobrando precio de VIP.
   modal(`<div class="h1" style="font-size:18px">Editar · ${esc(t.name)}</div>
-    <div class="muted" style="margin-top:4px">${esc(t.name)}${t.is_vip ? ' — VIP ★' : ''}${
-      t.cupo ? ` · ${t.sold || 0} de ${t.cupo} lugares` : ' · sin l\u00edmite de lugares'}</div>
+    <div class="muted" style="margin-top:4px">${esc(t.name)}${t.is_vip ? ' — VIP ★' : ''} · ${
+      t.cerrado ? '<b style="color:var(--danger)">venta cerrada</b>'
+                : (t.cupo ? `${t.sold || 0} de ${t.cupo} lugares` : 'sin l\u00edmite de lugares')}</div>
     <div class="label mt16">Precio ($)</div>
     <input class="input" id="et-price" type="number" min="1" value="${t.price_cents / 100}">
 
-    <!-- El cupo. Casi ningún tipo lo lleva: la pista crece con la gente. El backstage
-         no, porque es un espacio físico junto a la cabina. Por eso el campo se explica
-         y arranca vacío. -->
-    <div class="label mt16">L\u00edmite de lugares</div>
+    <!-- Cerrar a mano. Es lo que de verdad se usa: casi nunca se sabe de antemano
+         cuántos lugares hay, se sabe cuándo ya fueron suficientes. Va ANTES del campo
+         numérico porque es el control que se toca. -->
+    <label class="row mt16" style="gap:8px;cursor:pointer">
+      <input type="checkbox" id="et-cerrado" ${t.cerrado ? 'checked' : ''}>
+      <span style="font:600 13px Manrope;color:var(--cream)">Cerrar la venta de este tipo</span></label>
+    <div class="muted" style="font-size:11px;margin-top:4px">Los vendedores lo siguen viendo, pero
+      <b>AGOTADO</b>: apagado y sin poder tocarlo. T\u00fa s\u00ed puedes seguir generando con el
+      c\u00f3digo de invitados. Se reabre cuando quieras.</div>
+
+    <!-- El tope numérico. Casi ningún tipo lo lleva: la pista crece con la gente.
+         Queda para cuando el espacio sí esté contado de antemano. -->
+    <div class="label mt16">L\u00edmite de lugares (opcional)</div>
     <input class="input" id="et-cupo" type="number" min="1" placeholder="Sin l\u00edmite"
       value="${t.cupo || ''}">
     <div class="muted" style="font-size:11px;margin-top:4px">${t.cupo
@@ -3072,7 +3082,8 @@ function editType(t) {
       await API.put('/api/admin/ticket-types/' + t.id,
                     { price, needs_faculty: $('#et-fac').checked,
                       is_vip: $('#et-vip').checked,
-                      active: $('#et-act').checked, cupo });
+                      active: $('#et-act').checked, cupo,
+                      cerrado: $('#et-cerrado').checked });
       closeModal(); toast('Guardado'); loadCatalogs();
     } catch (e) { if (!guard(e)) $('#et-err').textContent = e.message; }
   };
