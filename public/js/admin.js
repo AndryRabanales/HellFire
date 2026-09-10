@@ -186,12 +186,9 @@ async function loadSummary(silent) {
   const puerta = s.total_tickets + cort;
   const entraron = s.entered + (s.cortesias_entered || 0);
   $('#sum-stats').innerHTML = `
-    <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}
-      <small>de paga</small></div></div>
-    ${cort ? `<div class="stat st-cort"><div class="sk">Cortesías</div><div class="sv">${cort}
-      <small>no pagan</small></div></div>` : ''}
-    ${cort ? `<div class="stat st-puerta"><div class="sk">Total en la puerta</div><div class="sv">${puerta}
-      <small>personas</small></div></div>` : ''}
+    <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}</div></div>
+    ${cort ? `<div class="stat st-cort"><div class="sk">Cortesías</div><div class="sv">${cort}</div></div>` : ''}
+    ${cort ? `<div class="stat st-puerta"><div class="sk">Total de boletos</div><div class="sv">${puerta}</div></div>` : ''}
     <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
     <div class="stat"><div class="sk">Cobrado a vendedores</div><div class="sv">${fmtMoney(s.collected)} <small>de ${fmtMoney(s.total)}</small></div></div>
     <div class="stat"><div class="sk">Ya ingresaron</div><div class="sv">${entraron} <small>de ${puerta}</small></div></div>`;
@@ -210,6 +207,35 @@ async function loadSummary(silent) {
       <div class="muted" style="font-size:12px;margin-top:3px">cobró <b style="color:var(--cream)">${fmtMoney(a.collected)}</b> de <b>${fmtMoney(a.sold)}</b></div>
     </div>`;
   }).join('') || '<div class="muted">Sin datos aún</div>';
+}
+
+/* ---------------------------------------------------------- ocultar las cifras
+
+   En la oficina la pantalla se ve desde atrás. El panel enseña cuánto se vendió y
+   cuánto falta por cobrar, y eso no tiene por qué leerlo cualquiera que pase.
+   El interruptor difumina las cifras —no las borra ni las cambia— y se acuerda de
+   cómo lo dejaste, para que al volver a entrar siga tapado. */
+const PRIVADO_KEY = 'hf_privado';
+
+function leerPrivado() {
+  try { return localStorage.getItem(PRIVADO_KEY) === '1'; } catch (e) { return false; }
+}
+
+function pintaPrivado(on) {
+  document.body.classList.toggle('privado', on);
+  const b = $('#btn-privado');
+  if (b) {
+    b.textContent = on ? '👁' : '👁';
+    b.classList.toggle('activo', on);
+    b.title = on ? 'Mostrar las cifras' : 'Ocultar las cifras (por si alguien ve tu pantalla)';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+}
+
+function togglePrivado() {
+  const on = !document.body.classList.contains('privado');
+  try { localStorage.setItem(PRIVADO_KEY, on ? '1' : '0'); } catch (e) {}
+  pintaPrivado(on);
 }
 
 /* ------------------------------------------------ el interruptor de la venta flash
@@ -3769,6 +3795,11 @@ $('#btn-st-save').addEventListener('click', async () => {
 /* ---------------- arranque ---------------- */
 $('#btn-login').addEventListener('click', login);
 $('#lg-pass').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+// el ojo se enciende antes que nada: si quedó tapado, no debe alcanzar a verse
+// destapado ni un instante mientras carga el panel
+pintaPrivado(leerPrivado());
+$('#btn-privado').addEventListener('click', togglePrivado);
+
 $('#btn-logout').addEventListener('click', async () => {
   try { await API.post('/api/logout'); } catch (_) {}
   API.setToken(null); show('login');

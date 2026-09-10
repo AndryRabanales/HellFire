@@ -610,6 +610,18 @@ table.data tr.void td.strike{text-decoration:line-through}
 .stat.st-cort .sk{color:#f3d27a}
 .stat.st-puerta{background:rgba(120,220,160,.07);border-color:rgba(120,220,160,.26)}
 .stat.st-puerta .sk{color:#7fd6a2}
+
+/* ---- ocultar cifras: el difuminado se pone en el <body> y baja solo a los números,
+   así ninguna pantalla nueva se olvida de taparse ---- */
+.ojo{background:none;border:1px solid var(--line);border-radius:10px;color:var(--cream-45);
+     font-size:14px;line-height:1;padding:7px 9px;cursor:pointer;transition:.15s}
+.ojo:hover{color:var(--cream);border-color:var(--ember-dim)}
+.ojo.activo{color:#f3d27a;border-color:rgba(243,210,122,.45);background:rgba(243,210,122,.1)}
+body.privado .stat .sv,
+body.privado #sum-by-admin b,
+body.privado #sum-by-admin .badge{
+  filter:blur(9px);user-select:none;-webkit-user-select:none;pointer-events:none}
+body.privado .stat .sv{filter:blur(11px)}
 @media (max-width:700px){
   /* los montos de las tarjetas (Resumen, Gastos) no necesitan ser tan grandes
      en el teléfono — antes esta regla estaba ANTES de la base de arriba en el
