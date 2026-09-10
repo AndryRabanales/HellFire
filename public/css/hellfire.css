@@ -604,6 +604,12 @@ table.data tr.void td.strike{text-decoration:line-through}
 .stat .sk{font:600 8.5px "Space Grotesk";letter-spacing:.14em;text-transform:uppercase;color:var(--ember-dim)}
 .stat .sv{font:800 24px "Space Grotesk";color:var(--cream);margin-top:4px}
 .stat .sv small{font-size:13px;color:var(--cream-45)}
+/* la cortesía y el total de puerta cuentan gente, no dinero: se distinguen para
+   que nadie los sume al monto de un vistazo */
+.stat.st-cort{background:rgba(243,210,122,.08);border-color:rgba(243,210,122,.28)}
+.stat.st-cort .sk{color:#f3d27a}
+.stat.st-puerta{background:rgba(120,220,160,.07);border-color:rgba(120,220,160,.26)}
+.stat.st-puerta .sk{color:#7fd6a2}
 @media (max-width:700px){
   /* los montos de las tarjetas (Resumen, Gastos) no necesitan ser tan grandes
      en el teléfono — antes esta regla estaba ANTES de la base de arriba en el

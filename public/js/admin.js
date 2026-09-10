@@ -179,11 +179,22 @@ async function loadSummary(silent) {
   // los precios y la fase que viene salen del catálogo: se pide una vez, para que el
   // "?" pueda decir cuándo suben en vez de mandarlo a preguntar
   if (s.soy_colider && !GUIA_CAT) API.get('/api/catalog').then(c => { GUIA_CAT = c; }).catch(() => {});
+  // La puerta no cuenta dinero, cuenta gente: las cortesías no pagan pero sí entran.
+  // Por eso van en su propia tarjeta y el total de la puerta las suma, mientras que
+  // el monto y la cobranza las siguen dejando fuera.
+  const cort = s.cortesias || 0;
+  const puerta = s.total_tickets + cort;
+  const entraron = s.entered + (s.cortesias_entered || 0);
   $('#sum-stats').innerHTML = `
-    <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}</div></div>
+    <div class="stat"><div class="sk">Boletos vendidos</div><div class="sv">${s.total_tickets}
+      <small>de paga</small></div></div>
+    ${cort ? `<div class="stat st-cort"><div class="sk">Cortesías</div><div class="sv">${cort}
+      <small>no pagan</small></div></div>` : ''}
+    ${cort ? `<div class="stat st-puerta"><div class="sk">Total en la puerta</div><div class="sv">${puerta}
+      <small>personas</small></div></div>` : ''}
     <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
     <div class="stat"><div class="sk">Cobrado a vendedores</div><div class="sv">${fmtMoney(s.collected)} <small>de ${fmtMoney(s.total)}</small></div></div>
-    <div class="stat"><div class="sk">Ya ingresaron</div><div class="sv">${s.entered} <small>de ${s.total_tickets}</small></div></div>`;
+    <div class="stat"><div class="sk">Ya ingresaron</div><div class="sv">${entraron} <small>de ${puerta}</small></div></div>`;
   // desglose de cobranza por admin
   $('#sum-by-admin').innerHTML = (s.by_admin || []).map(a => {
     const falta = a.sold - a.collected;

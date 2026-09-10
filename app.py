@@ -2087,6 +2087,14 @@ def admin_summary():
     paid = db.execute(
         "SELECT COALESCE(SUM(paid_cents),0) AS c FROM sellers WHERE hidden=0" +
         (" AND owner_admin_id=?" if duenio else ""), par).fetchone()["c"]
+    # Las cortesías viven fuera de todo lo de arriba: las genera el vendedor oculto y
+    # NOT_GUEST las deja fuera, que es lo correcto para el dinero —no pagan— pero no
+    # para la puerta: esa gente sí entra y hay que contarla para saber a cuántos se
+    # les abre. Van aparte, nunca sumadas al monto.
+    cor = db.execute("""SELECT
+        SUM(CASE WHEN status!='void' THEN 1 ELSE 0 END) AS n,
+        SUM(CASE WHEN status='used' THEN 1 ELSE 0 END) AS entered
+        FROM tickets WHERE es_cortesia=1""").fetchone() if not duenio else None
     # desglose por admin: cuánto han vendido sus vendedores y cuánto ya cobró (todos lo ven)
     by_admin = db.execute(f"""
         SELECT COALESCE(s.owner_admin_name, 'Sin asignar') AS admin_name,
@@ -2110,6 +2118,8 @@ def admin_summary():
         falta_tour = bool(r and not r["tutorial_seen"])
     return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0),
                    entered=tot["entered"] or 0, collected=money(paid), by_admin=admins,
+                   cortesias=(cor["n"] or 0) if cor else 0,
+                   cortesias_entered=(cor["entered"] or 0) if cor else 0,
                    soy_colider=bool(duenio), yo=s["admin"]["username"],
                    tutorial_pendiente=falta_tour)
 
