@@ -714,7 +714,26 @@ function verColider(g) {
     </div>
     <div class="muted" style="font-size:10.5px;margin-top:8px">Toca a cualquiera para
       abrir su cuenta: ahí se le cobra y se le paga.</div>
-    <button class="btn mt16" onclick="closeModal()">Cerrar</button>`);
+    ${falta > 0.005 && !SOY_COLIDER ? `
+      <button class="btn mt16" id="cl-todo" style="width:100%">
+        Ya me entregó todo · ${fmtMoney(falta)}</button>
+      <div class="muted" style="font-size:10.5px;margin-top:6px">Salda de un golpe a
+        los ${venden.filter(m => m.monto - m.cobrado > 0.005).length} que deben, cada
+        uno con su fila. Úsalo cuando el colíder trae el dinero de todo el grupo.</div>` : ''}
+    <button class="btn ghost mt12" onclick="closeModal()">Cerrar</button>`);
+
+  const btnTodo = $('#cl-todo');
+  if (btnTodo) btnTodo.onclick = async () => {
+    if (!confirm(`¿${esc(g.nombre)} ya te entregó ${fmtMoney(falta)} de todo su grupo?\n\n`
+               + 'Se va a registrar el saldo completo de cada uno de sus vendedores.')) return;
+    btnTodo.disabled = true;
+    try {
+      const r = await API.post(`/api/admin/colider/${g.id}/cobrar-todo`, {});
+      toast(`Cobrado ${fmtMoney(r.total)} en ${r.vendedores} vendedor(es)`);
+      closeModal();
+      loadRanking();
+    } catch (e) { if (!guard(e)) toast(e.message); btnTodo.disabled = false; }
+  };
   $$('#modal .cl-m').forEach(f => {
     f.onclick = () => paySeller({ id: Number(f.dataset.id), name: f.dataset.n,
                                   total: Number(f.dataset.t) });

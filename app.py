@@ -3566,6 +3566,58 @@ def add_seller_payment(sid):
     out["can_edit"] = True
     return jsonify(**out)
 
+@app.post("/api/admin/colider/<int:aid>/cobrar-todo")
+def cobrar_grupo_completo(aid):
+    """El colíder llega con el dinero de TODO su grupo y se salda de un golpe.
+
+    Antes había que abrir la ficha de cada vendedor y capturar su saldo uno por uno.
+    Con un grupo de diez eso son diez capturas para una sola entrega, y basta con
+    equivocarse en una para que el corte no cuadre y nadie sepa en cuál fue.
+
+    El dinero se sigue registrando vendedor por vendedor —cada quien con su fila y su
+    porcentaje congelado, para poder demostrarle después cómo pagó—, pero en una sola
+    transacción y con una nota que dice que llegó por mano del colíder.
+
+    Solo un admin de verdad: el colíder no puede saldarse a sí mismo su propio grupo,
+    que es exactamente el agujero que ya cuidaba puede_cobrar()."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="Solo un administrador puede cobrarle a un grupo completo."), 403
+    db = get_db()
+    lider = db.execute("SELECT * FROM admins WHERE id=? AND role='colider'", (aid,)).fetchone()
+    if not lider:
+        return jsonify(error="Ese colíder no existe"), 404
+    filas = db.execute("SELECT * FROM sellers WHERE owner_admin_id=? AND deleted=0 AND hidden=0",
+                       (aid,)).fetchall()
+    pendientes = []
+    for sel in filas:
+        vendido = vendido_cents(db, sel["id"])
+        ya = sum(p["amount_cents"] for p in pagos_de(db, sel["id"]))
+        falta = vendido - ya
+        if falta > 0:
+            pendientes.append((sel, falta, ya))
+    if not pendientes:
+        return jsonify(error="Este grupo ya no debe nada."), 400
+    nota = f"Entregado por el colíder {lider['username']}"
+    total = 0
+    for sel, falta, ya in pendientes:
+        pct = comision_pct(db, sel["id"])
+        db.execute("""INSERT INTO seller_payments
+            (seller_id, seller_name, amount_cents, commission_cents, cash_cents,
+             commission_pct, note, created_by, owner_admin_id, created_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (sel["id"], sel["name"], falta, 0, falta, pct, nota,
+             s["admin"]["username"], sel["owner_admin_id"], now_iso()))
+        db.execute("UPDATE sellers SET paid_cents=? WHERE id=?", (ya + falta, sel["id"]))
+        total += falta
+    audit(db, s["admin"]["username"], "pago",
+          f"Cobró completo el grupo de '{lider['username']}': ${total/100:,.2f} "
+          f"en {len(pendientes)} vendedor(es)")
+    db.commit()
+    return jsonify(ok=True, total=money(total), vendedores=len(pendientes),
+                   detalle=[{"name": sel["name"], "amount": money(falta)}
+                            for sel, falta, _ in pendientes])
+
 # ------------------------------- lo que el colíder le reparte a su gente
 
 def pagado_a(db, sid):
