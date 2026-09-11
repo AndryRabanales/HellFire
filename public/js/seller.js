@@ -650,9 +650,9 @@ function showSoloResult(t, bajoAutomatico) {
         <button class="u-dl" id="solo-dl">${DL_ICON}<span>Descargar</span></button>
       </div>
       ${hayPresumible(t, CATALOG) ? `<div class="u-fila" style="margin-top:8px">
-        <div class="u-datos"><div class="u-meta">Para que la presuma, sin el QR</div></div>
+        <div class="u-datos"><div class="u-meta">Para que la suba a sus redes · sin el QR</div></div>
         <button class="u-dl" id="solo-ig" style="border-color:rgba(243,210,122,.5);color:#f3d27a">
-          ${DL_ICON}<span>Invitación</span></button>
+          <span style="font-size:15px">★</span><span>Para redes</span></button>
       </div>` : ''}
     </div>`;
   if (bajoAutomatico) DOWNLOADED.add(t.id);
@@ -669,11 +669,12 @@ function showSoloResult(t, bajoAutomatico) {
   const ig = $('#solo-ig');
   if (ig) ig.addEventListener('click', async () => {
     ig.disabled = true;
-    try { if (await downloadPresumible(t, CATALOG)) toast('Invitación descargada ✓'); }
+    try { if (await downloadPresumible(t, CATALOG)) toast('Imagen para redes descargada ✓'); }
     catch (e) { toast(e.message); }
     finally { ig.disabled = false; }
   });
   $('#solo-result').classList.remove('hidden');
+  explicarArchivos();
 }
 
 function exitSoloResult() {
@@ -783,7 +784,8 @@ async function loadHistory() {
         b.className = 'iconbtn';
         const already = DOWNLOADED.has(t.id);
         if (already) b.classList.add('grabbed');
-        b.title = already ? 'Ya descargado · toca para volver a descargarlo' : 'Descargar imagen';
+        b.title = already ? 'Ya descargado · toca para volver a descargarlo'
+                          : 'Boleto con QR · se muestra en la puerta, NO se publica';
         b.innerHTML = already ? CHECK_ICON : DL_ICON;
         b.addEventListener('click', async () => {
           b.disabled = true;
@@ -798,20 +800,20 @@ async function loadHistory() {
           } finally { b.disabled = false; }
         });
         row.appendChild(b);
-        // La invitación para redes vive junto a su boleto: quien reparte cortesías
-        // baja las dos de un tirón, sin ir a buscarlas a otra pantalla.
+        // La imagen para redes vive junto a su boleto: el vendedor baja las dos desde
+        // el mismo renglón, sin ir a buscarlas a otra pantalla.
         if (hayPresumible(t, CATALOG)) {
           const ig = document.createElement('button');
           ig.className = 'iconbtn';
           ig.textContent = '★';
-          ig.title = 'Descargar su invitación para redes (sin QR)';
+          ig.title = 'Imagen para sus redes · sin QR, se puede publicar';
           ig.style.color = '#f3d27a';
           ig.style.borderColor = 'rgba(243,210,122,.5)';
           ig.style.background = 'rgba(243,210,122,.1)';
           ig.style.marginLeft = '6px';
           ig.addEventListener('click', async () => {
             ig.disabled = true;
-            try { if (await downloadPresumible(t, CATALOG)) toast('Invitación descargada ✓'); }
+            try { if (await downloadPresumible(t, CATALOG)) toast('Imagen para redes descargada ✓'); }
             catch (e) { toast(e.message); }
             finally { ig.disabled = false; }
           });
@@ -954,6 +956,7 @@ function panelVender() {
     ${paso(2, 'Toca el <b>tipo</b> de boleto')}
     ${paso(3, 'Dale a <b>GENERAR</b> — se descarga solo')}
     ${paso(4, '<b>Envíaselo al comprador</b>. Esa imagen es su boleto')}
+    ${paso(5, 'Si sale la <b>★</b>, mándale también esa: es la de sus redes')}
   </div>`;
 }
 
@@ -976,6 +979,19 @@ function panelDudas() {
          'Por eso el sistema no te deja generar el grupo hasta que marques a uno — y ' +
          'conviene que sea alguien que <b>sí vaya a ir</b>.<br><br>' +
          'El grupo <b>no</b> tiene descuento: los diez pagan precio normal y el beneficio es la botella.') +
+    duda('¿Qué es la ★ que sale junto a la descarga?',
+         'Son <b>dos imágenes distintas</b> y no hay que confundirlas:<br><br>' +
+         '<b>La flecha</b> baja el <b>boleto con QR</b>. Ese es el que se muestra en la ' +
+         'puerta, junto con una <b>identificación con el mismo nombre</b>. Dile al ' +
+         'comprador que <b>NO lo publique en sus redes</b>: al que le haga captura de ' +
+         'pantalla puede entrar con él, y el que se queda afuera es el que pagó.<br><br>' +
+         '<b>La ★</b> baja la <b>imagen para redes</b>. Es el mismo diseño pero <b>sin QR</b>, ' +
+         'con su nombre y su zona. Esa sí la puede subir a donde quiera, y además te ' +
+         'hace publicidad.<br><br>' +
+         'Mándale las dos y explícale cuál es cuál.') +
+    duda('¿Por qué no baja la ★ en algunos boletos?',
+         'Porque a ese tipo de boleto todavía no le suben su imagen de redes. El boleto ' +
+         'con QR se descarga igual y sirve perfecto; la otra aparece en cuanto esté lista.') +
     duda('Se me borró un boleto',
          'En <b>Ver mi historial</b> están todos. Búscalo por nombre y descárgalo otra vez.') +
     duda('¿Cuándo me pagan?',
@@ -1030,6 +1046,7 @@ const TOUR = [
   { sel: '#f-buyer',      txt: 'Aquí escribes el <b>nombre</b> de quien te compra.' },
   { sel: '#f-types',      txt: 'Aquí eliges el <b>tipo</b> de boleto.' },
   { sel: '#btn-generate', txt: 'Le das aquí y <b>el boleto se descarga solo</b>. Envíaselo al comprador: esa imagen es su boleto.' },
+
   // El tour es de un vistazo, no un manual: dice QUÉ hace el botón y qué hace la
   // estrella, en un renglón. Lo demás vive en el "?", que se lee cuando hace falta.
   { sel: '#btn-group-10', txt: '¿Van <b>10 juntos</b>? Aquí. Marca <b>★</b> a uno: ese recoge la botella.' },
@@ -1132,6 +1149,29 @@ const TOUR_GRUPO = [
   { sel: '#group-names .repbtn',  txt: 'Marca con <b>\u2605</b> a uno: es quien recoge la <b>botella</b> en la barra.' },
   { sel: '#btn-generate-group',   txt: 'Aqu\u00ed se generan <b>los diez boletos</b> de una vez. Despu\u00e9s descargas cada uno.' },
 ];
+
+/* Los dos archivos son lo que más se confunde, y equivocarse cuesta caro: si el
+   comprador publica el del QR, cualquiera le hace captura y entra con su boleto.
+   Por eso este recorrido salta la PRIMERA vez que genera un boleto —cuando los dos
+   botones ya están en pantalla— y no al entrar, donde todavía no existen. */
+const TOUR_ARCHIVOS = [
+  { sel: '#solo-dl', txt: 'La <b>flecha</b> baja el boleto <b>con QR</b>. Ese se muestra en la puerta junto con su identificación. Dile que <b>no lo publique</b>: quien le haga captura entra con él.' },
+  { sel: '#solo-ig', txt: 'La <b>★</b> baja la imagen <b>para sus redes</b>. No lleva QR, así que esa sí la puede subir a donde quiera.' },
+];
+
+const LLAVE_TOUR_ARCHIVOS = 'of_tour_archivos';
+function explicarArchivos() {
+  try { if (localStorage.getItem(LLAVE_TOUR_ARCHIVOS) === '1') return; } catch (e) { return; }
+  // La comprobación va DENTRO de la espera, no antes: al generar el primer boleto el
+  // tour de bienvenida puede seguir en pantalla, y preguntando afuera este se saltaba
+  // justo en la única vez que de verdad hacía falta.
+  setTimeout(() => {
+    if ($('#tour') || !$('#solo-ig')) return;   // sin la estrella no tiene qué señalar
+    correrTour(TOUR_ARCHIVOS, () => {
+      try { localStorage.setItem(LLAVE_TOUR_ARCHIVOS, '1'); } catch (e) {}
+    });
+  }, 1200);
+}
 
 const LLAVE_TOUR_GRUPO = 'of_tour_grupo';
 function grupoYaExplicado() {

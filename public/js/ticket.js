@@ -512,20 +512,11 @@ async function downloadTicket(ticket, ev) {
   a.click();
   setTimeout(() => a.remove(), 1000);
   soltar();
-
-  // Y detrás, la imagen para presumir. Son DOS archivos de una sola descarga: el
-  // vendedor manda los dos por WhatsApp y no tiene que acordarse de nada.
-  //
-  // El respiro de 900 ms no es adorno: el navegador bloquea la segunda descarga si
-  // sale pegada a la primera, y se perdía sin avisar.
-  //
-  // Si algo falla aquí NO se cae el boleto: la de redes es el extra, el boleto es lo
-  // que deja entrar a la fiesta.
-  if (hayPresumible(ticket, ev)) {
-    setTimeout(() => { downloadPresumible(ticket, ev).catch(() => {}); }, 900);
-  } else {
-    avisaFaltaRedes(ticket);
-  }
+  // La segunda imagen NO baja sola detrás de esta. Se probó y no es de fiar: Android
+  // y varios navegadores bloquean la segunda descarga sin avisar, así que la mitad de
+  // los vendedores se quedaba sin ella creyendo que la tenía. Ahora cada una lleva su
+  // botón: la flecha baja el boleto, la estrella baja la de redes.
+  if (!hayPresumible(ticket, ev)) avisaFaltaRedes(ticket);
   return true;
 }
 
@@ -634,8 +625,11 @@ async function renderPresumible(ticket, ev, imgOverride) {
     // tiene que verse igual la haya pagado o se la hayan regalado. La fase no delata
     // nada —una cortesía también se genera dentro de una fase— y de paso le dice al
     // que la ve que el precio de ese momento ya pasó.
+    // La misma imagen sirve para los dos, lo único que cambia es esta línea: el
+    // invitado lleva CORTESÍA donde el que pagó lleva su fase. Nunca el precio.
     const zona = (ticketTypeLabel(ticket) || '').toUpperCase();
-    const linea2 = [estrellaDe(ticket) + zona, (ticket.phase_name || '').toUpperCase()]
+    const detalle = ticket.es_cortesia ? 'CORTESÍA' : (ticket.phase_name || '').toUpperCase();
+    const linea2 = [estrellaDe(ticket) + zona, detalle]
       .filter(t => t && t.trim()).join(' · ');
     if (linea2) {
       let p2 = Math.max(Math.round(H * 0.016), Math.round(px * 0.42));
