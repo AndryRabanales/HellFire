@@ -211,21 +211,67 @@ async function loadSummary(silent) {
 
 /* ---------------------------------------------------------- ocultar las cifras
 
-   En la oficina la pantalla se ve desde atrás. El panel enseña cuánto se vendió y
-   cuánto falta por cobrar, y eso no tiene por qué leerlo cualquiera que pase.
-   El interruptor difumina las cifras —no las borra ni las cambia— y se acuerda de
-   cómo lo dejaste, para que al volver a entrar siga tapado. */
+   En la oficina la pantalla se ve desde atrás, y no todo el que pasa tiene por qué
+   saber cuánto se vendió ni quién debe.
+
+   La primera versión tapaba una lista fija de clases y por eso se escapaban cosas:
+   hay 117 lugares distintos que pintan dinero en veinte clases, y cada pantalla nueva
+   nacía destapada. Ahora es al revés: se BUSCA la cifra. Cualquier pantalla, la de hoy
+   y la de mañana, queda tapada sin que nadie se acuerde de agregarla.
+
+   Se difumina, no se borra ni se cambia el texto: así el panel sigue funcionando igual
+   y nada depende de que se restaure bien al destapar. */
 const PRIVADO_KEY = 'hf_privado';
+const RE_CIFRA = /\$\s?-?[\d.,]+/;
 
 function leerPrivado() {
-  try { return localStorage.getItem(PRIVADO_KEY) === '1'; } catch (e) { return false; }
+  // Por omisión TAPADO. Si es la primera vez en este teléfono, más vale que arranque
+  // cubierto y que se destape a propósito: al revés, la primera mirada ya se perdió.
+  try {
+    const v = localStorage.getItem(PRIVADO_KEY);
+    return v === null ? true : v === '1';
+  } catch (e) { return true; }
+}
+
+/* Marca lo que hay que tapar. Se llama tras cada repintado, así que tiene que ser
+   barato: solo mira elementos chicos, no contenedores enteros. Difuminar una tarjeta
+   completa taparía también su rótulo, y entonces no se sabría ni qué está oculto. */
+function marcarCifras(raiz) {
+  const zona = raiz || document.body;
+  zona.querySelectorAll('.stat .sv, .badge').forEach(el => el.classList.add('cifra'));
+  zona.querySelectorAll('b, strong, span, div, td, em, i').forEach(el => {
+    if (el.classList.contains('cifra')) return;
+    // solo hojas o casi: un div con media pantalla adentro no se difumina entero
+    if (el.querySelectorAll('*').length > 2) return;
+    if (RE_CIFRA.test(el.textContent)) el.classList.add('cifra');
+  });
+  // Si quedó marcado un envoltorio Y lo que trae dentro, se suelta el de afuera: tapar
+  // la tarjeta entera se lleva también su rótulo, y entonces ni se sabe qué está oculto.
+  // Queda "Monto total" legible con el número borroso, que es justo lo que se busca.
+  zona.querySelectorAll('.cifra').forEach(el => {
+    if (el.querySelector('.cifra')) el.classList.remove('cifra');
+  });
+}
+
+let _obsPrivado = null;
+function vigilarCifras() {
+  if (_obsPrivado) return;
+  // El panel se repinta solo cada 2.5 s. Sin esto, cada latido devolvía las cifras
+  // a la vista durante el rato que tardaba en volverse a marcar.
+  _obsPrivado = new MutationObserver(ms => {
+    if (!document.body.classList.contains('privado')) return;
+    ms.forEach(m => m.addedNodes.forEach(n => {
+      if (n.nodeType === 1) marcarCifras(n.parentElement || n);
+    }));
+  });
+  _obsPrivado.observe(document.body, { childList: true, subtree: true });
 }
 
 function pintaPrivado(on) {
   document.body.classList.toggle('privado', on);
+  if (on) { marcarCifras(); vigilarCifras(); }
   const b = $('#btn-privado');
   if (b) {
-    b.textContent = on ? '👁' : '👁';
     b.classList.toggle('activo', on);
     b.title = on ? 'Mostrar las cifras' : 'Ocultar las cifras (por si alguien ve tu pantalla)';
     b.setAttribute('aria-pressed', on ? 'true' : 'false');

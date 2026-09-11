@@ -617,11 +617,11 @@ table.data tr.void td.strike{text-decoration:line-through}
      font-size:14px;line-height:1;padding:7px 9px;cursor:pointer;transition:.15s}
 .ojo:hover{color:var(--cream);border-color:var(--ember-dim)}
 .ojo.activo{color:#f3d27a;border-color:rgba(243,210,122,.45);background:rgba(243,210,122,.1)}
-body.privado .stat .sv,
-body.privado #sum-by-admin b,
-body.privado #sum-by-admin .badge{
-  filter:blur(9px);user-select:none;-webkit-user-select:none;pointer-events:none}
-body.privado .stat .sv{filter:blur(11px)}
+body.privado .cifra{filter:blur(8px);user-select:none;-webkit-user-select:none;
+  pointer-events:none}
+/* las tarjetas del resumen llevan la letra más grande: con el mismo desenfoque
+   todavía se adivinaba el número de lejos */
+body.privado .stat .sv.cifra{filter:blur(12px)}
 @media (max-width:700px){
   /* los montos de las tarjetas (Resumen, Gastos) no necesitan ser tan grandes
      en el teléfono — antes esta regla estaba ANTES de la base de arriba en el
