@@ -621,28 +621,13 @@ async function renderPresumible(ticket, ev, imgOverride) {
     // altura sobre la línea, que es lo que las hace ver de la misma serie.
     ctx.fillText(nombre, cx, H * pos.nomy, ancho);
 
-    // Debajo, la zona y la fase. NUNCA el precio ni la palabra cortesía: la imagen
-    // tiene que verse igual la haya pagado o se la hayan regalado. La fase no delata
-    // nada —una cortesía también se genera dentro de una fase— y de paso le dice al
-    // que la ve que el precio de ese momento ya pasó.
-    // La misma imagen sirve para los dos, lo único que cambia es esta línea: el
-    // invitado lleva CORTESÍA donde el que pagó lleva su fase. Nunca el precio.
-    const zona = (ticketTypeLabel(ticket) || '').toUpperCase();
-    const detalle = ticket.es_cortesia ? 'CORTESÍA' : (ticket.phase_name || '').toUpperCase();
-    const linea2 = [estrellaDe(ticket) + zona, detalle]
-      .filter(t => t && t.trim()).join(' · ');
-    if (linea2) {
-      let p2 = Math.max(Math.round(H * 0.016), Math.round(px * 0.42));
-      ctx.font = `800 ${p2}px Manrope, sans-serif`;
-      while (p2 > Math.round(H * 0.012) && ctx.measureText(linea2).width > ancho) {
-        p2 -= 1;
-        ctx.font = `800 ${p2}px Manrope, sans-serif`;
-      }
-      ctx.fillStyle = '#151210';
-      ctx.globalAlpha = 0.72;
-      ctx.fillText(linea2, cx, H * pos.nomy + Math.round(px * 0.92), ancho);
-      ctx.globalAlpha = 1;
-    }
+    // Aquí se escribía también el tipo y la fase. Se quitó: los diseños ya los traen
+    // impresos —"TIPO DE BOLETO · ULTRA VIP", "ACCESO"— así que salía repetido y, peor,
+    // encimado sobre el rótulo de NOMBRE COMPLETO del propio diseño.
+    //
+    // Lo que distingue a una cortesía de un boleto pagado es la IMAGEN, no el texto:
+    // cada una tiene la suya. Aquí solo va el nombre, que es el único hueco que el
+    // diseño deja en blanco a propósito.
   }
   return cv;
 }
