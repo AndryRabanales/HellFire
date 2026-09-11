@@ -430,6 +430,9 @@ DEFAULT_SETTINGS = {
     "flyer_nomy_redesvip": "", "flyer_nomx_redesvip": "", "flyer_nomw_redesvip": "",
     "flyer_nomy_redesultra": "", "flyer_nomx_redesultra": "", "flyer_nomw_redesultra": "",
     "flyer_nomy_redesbackstage": "", "flyer_nomx_redesbackstage": "", "flyer_nomw_redesbackstage": "",
+    "flyer_data_redesuady": "", "flyer_mime_redesuady": "",
+    "flyer_focus_redesuady": "", "flyer_scale_redesuady": "",
+    "flyer_nomy_redesuady": "", "flyer_nomx_redesuady": "", "flyer_nomw_redesuady": "",
     # El interruptor de la venta flash. Con "1" hay flash AHORA, sin esperar fecha.
     "flash_manual": "0",
     "seller_commission_pct": "10",   # % de comisión del vendedor sobre lo que entrega
@@ -448,19 +451,20 @@ def set_setting(db, key, value):
 FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip", "backstage",
                   "grupo10vip", "grupo10ultra",
                   "cortesiaexterno", "cortesiavip", "cortesiaultra", "cortesiabackstage",
-                  "redesexterno", "redesvip", "redesultra", "redesbackstage")
+                  "redesuady", "redesexterno", "redesvip", "redesultra", "redesbackstage")
 FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
                "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
                "grupo10vip": "Grupo de 10 · VIP", "grupo10ultra": "Grupo de 10 · Ultra VIP",
                "cortesiaexterno": "Cortesía Externo", "cortesiavip": "Cortesía VIP",
                "cortesiaultra": "Cortesía Ultra VIP",
                "backstage": "Backstage", "cortesiabackstage": "Cortesía Backstage",
+               "redesuady": "Para redes · UADY",
                "redesexterno": "Para redes · Externo", "redesvip": "Para redes · VIP",
                "redesultra": "Para redes · Ultra VIP",
                "redesbackstage": "Para redes · Backstage"}
 # Las de redes son 4:5 y llevan el nombre encima. Van aparte porque no son un boleto:
 # no llevan QR y su medida es la del feed de Instagram, no la del boleto.
-FLYER_REDES = ("redesexterno", "redesvip", "redesultra", "redesbackstage")
+FLYER_REDES = ("redesuady", "redesexterno", "redesvip", "redesultra", "redesbackstage")
 # cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
 # relacionado antes de caer al flyer legado de una sola imagen
 FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",

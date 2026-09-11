@@ -512,11 +512,38 @@ async function downloadTicket(ticket, ev) {
   a.click();
   setTimeout(() => a.remove(), 1000);
   soltar();
+
+  // Y detrás, la imagen para presumir. Son DOS archivos de una sola descarga: el
+  // vendedor manda los dos por WhatsApp y no tiene que acordarse de nada.
+  //
+  // El respiro de 900 ms no es adorno: el navegador bloquea la segunda descarga si
+  // sale pegada a la primera, y se perdía sin avisar.
+  //
+  // Si algo falla aquí NO se cae el boleto: la de redes es el extra, el boleto es lo
+  // que deja entrar a la fiesta.
+  if (hayPresumible(ticket, ev)) {
+    setTimeout(() => { downloadPresumible(ticket, ev).catch(() => {}); }, 900);
+  } else {
+    avisaFaltaRedes(ticket);
+  }
   return true;
 }
 
+/* Cuando a un tipo le falta su imagen de redes, el boleto baja solo y sin ruido. Eso
+   se puede quedar semanas sin que nadie note que falta, así que se avisa —pero UNA
+   vez por tipo y por sesión: un aviso en cada descarga se vuelve ruido y se ignora,
+   que es peor que no avisar. */
+const _avisados = new Set();
+function avisaFaltaRedes(ticket) {
+  const v = redesVariantFor(ticket);
+  if (_avisados.has(v) || typeof toast !== 'function') return;
+  _avisados.add(v);
+  toast('Falta subir la imagen para redes de ' + (ticket.type_name || 'este tipo')
+        + ': por ahora solo baja el boleto.');
+}
+
 /* ==================================================================
-   La invitación PARA REDES. Solo cortesías.
+   La imagen PARA REDES. Para TODOS, no solo cortesías.
 
    No es un boleto y por eso no comparte nada con renderTicket(): no lleva QR —ese es
    justo el punto, que la puedan publicar sin regalar su entrada— ni banda inferior, y
@@ -544,13 +571,18 @@ function redesVariantFor(ticket) {
   const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
   if (t === 'backstage') return 'redesbackstage';
   if (t === 'ultravip') return 'redesultra';
+  if (t === 'uady') return 'redesuady';
   return ticket.type_is_vip ? 'redesvip' : 'redesexterno';
 }
 
-/* ¿Se le puede ofrecer? Solo si es cortesía Y su imagen está subida. Sin imagen no
-   hay respaldo posible: el flyer del boleto tiene otra medida y otro diseño. */
+/* ¿Se le puede ofrecer? Solo hace falta que la imagen de ese tipo esté subida. Sin
+   imagen no hay respaldo posible: el flyer del boleto tiene otra medida y otro diseño.
+
+   Antes esto pedía que fuera cortesía. Ya no: la imagen es LA MISMA para todos y no
+   dice ni el precio ni cómo entró, así que un invitado y alguien que pagó publican
+   exactamente lo mismo y nadie puede distinguirlos. Esa es justo la gracia. */
 function hayPresumible(ticket, ev) {
-  return !!(ticket && ticket.es_cortesia && ev && ev['flyer_' + redesVariantFor(ticket)]);
+  return !!(ticket && ev && ev['flyer_' + redesVariantFor(ticket)]);
 }
 
 async function renderPresumible(ticket, ev, imgOverride) {
@@ -597,6 +629,26 @@ async function renderPresumible(ticket, ev, imgOverride) {
     // invitación se veía distinta. Fijo, todas las de la tanda quedan a la misma
     // altura sobre la línea, que es lo que las hace ver de la misma serie.
     ctx.fillText(nombre, cx, H * pos.nomy, ancho);
+
+    // Debajo, la zona y la fase. NUNCA el precio ni la palabra cortesía: la imagen
+    // tiene que verse igual la haya pagado o se la hayan regalado. La fase no delata
+    // nada —una cortesía también se genera dentro de una fase— y de paso le dice al
+    // que la ve que el precio de ese momento ya pasó.
+    const zona = (ticketTypeLabel(ticket) || '').toUpperCase();
+    const linea2 = [estrellaDe(ticket) + zona, (ticket.phase_name || '').toUpperCase()]
+      .filter(t => t && t.trim()).join(' · ');
+    if (linea2) {
+      let p2 = Math.max(Math.round(H * 0.016), Math.round(px * 0.42));
+      ctx.font = `800 ${p2}px Manrope, sans-serif`;
+      while (p2 > Math.round(H * 0.012) && ctx.measureText(linea2).width > ancho) {
+        p2 -= 1;
+        ctx.font = `800 ${p2}px Manrope, sans-serif`;
+      }
+      ctx.fillStyle = '#151210';
+      ctx.globalAlpha = 0.72;
+      ctx.fillText(linea2, cx, H * pos.nomy + Math.round(px * 0.92), ancho);
+      ctx.globalAlpha = 1;
+    }
   }
   return cv;
 }
@@ -605,8 +657,8 @@ async function downloadPresumible(ticket, ev) {
   const cv = await renderPresumible(ticket, ev);
   const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
   if (!blob) throw new Error('No se pudo generar la invitación');
-  const slug = (ticket.buyer_name || 'invitacion').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'invitacion';
+  const slug = (ticket.buyer_name || 'hellfire').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'hellfire';
   const url = URL.createObjectURL(blob);
   const soltar = () => setTimeout(() => URL.revokeObjectURL(url), 60000);
   if (navegadorIncrustado() || !soportaDescarga()) {
@@ -616,7 +668,7 @@ async function downloadPresumible(ticket, ev) {
   }
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'invitacion_' + slug + '.png';
+  a.download = 'hellfire_' + slug + '.png';
   a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
