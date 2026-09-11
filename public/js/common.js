@@ -88,3 +88,45 @@ function toast(msg) {
 }
 
 const STATUS_ES = { active: 'ACTIVO', void: 'ANULADO' };
+
+/* ------------------------------------------------------------------ aviso de versión
+
+   Se sube un arreglo, se despliega bien, y la persona sigue viendo la pantalla vieja
+   porque su navegador no volvió a pedir el HTML. Desde afuera parece que el arreglo
+   nunca se hizo, y se pierde media conversación averiguando que era el caché.
+
+   Esto compara el sello con el que cargó la página contra el que sirve el servidor.
+   Si no coinciden, sale una barra arriba. NO recarga solo: quien está a media captura
+   de un boleto no puede perderla porque salió una versión nueva. */
+(function avisoDeVersion() {
+  const tag = document.querySelector('script[src*="/js/"], link[href*="/css/"]');
+  const mio = tag && (tag.src || tag.href || '').match(/[?&]v=([^&"']+)/);
+  if (!mio) return;                       // sin sello no hay con qué comparar
+  const MIA = mio[1];
+
+  function barra() {
+    if (document.getElementById('hf-nueva')) return;
+    const d = document.createElement('div');
+    d.id = 'hf-nueva';
+    d.innerHTML = 'Hay una versión nueva del sistema '
+      + '<button type="button">Actualizar</button>';
+    d.querySelector('button').onclick = () => location.reload();
+    document.body.appendChild(d);
+  }
+
+  async function revisar() {
+    if (document.hidden) return;
+    try {
+      const r = await fetch('/api/version', { cache: 'no-store' });
+      if (!r.ok) return;
+      const { v } = await r.json();
+      if (v && String(v) !== MIA) { barra(); clearInterval(t); }
+    } catch (e) { /* sin internet no se avisa nada */ }
+  }
+  const t = setInterval(revisar, 60000);
+  // Y también al volver a la pantalla. En el teléfono la gente sale y entra de la app
+  // todo el día: ese es el momento en que más seguido se topa con la versión vieja, y
+  // esperar al siguiente minuto la deja usando la de antes justo cuando vuelve.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) revisar(); });
+  setTimeout(revisar, 4000);
+})();

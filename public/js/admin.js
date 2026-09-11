@@ -3549,10 +3549,53 @@ function buildFlyerEditor(variant) {
   return root;
 }
 
-// construir un editor por variante, una sola vez
+/* Veinte editores uno detrás de otro no se pueden leer: para llegar al de redes hay
+   que pasar por todos los demás, y a simple vista no se distingue el flyer del boleto
+   del que se publica. Se agrupan por para-qué-sirven y cada grupo abre y cierra, así
+   que en pantalla solo está el que se está tocando. */
+const FLYER_SECCIONES = [
+  { t: 'Boletos', d: 'El flyer que lleva el boleto con QR, uno por tipo.',
+    v: ['uady', 'externo', 'vip', 'ultravip', 'backstage'] },
+  { t: 'Grupos de 10', d: 'El boleto de cada integrante de un grupo.',
+    v: ['grupo10', 'grupo10vip', 'grupo10ultra'] },
+  { t: 'Cortesías', d: 'El boleto del invitado. No dice precio.',
+    v: ['cortesiaexterno', 'cortesiavip', 'cortesiaultra', 'cortesiabackstage'] },
+  { t: 'Para redes · de venta', d: 'La imagen que publica quien COMPRÓ su boleto. Sin QR, 4:5.',
+    v: ['redespagoexterno', 'redespagovip', 'redespagoultra', 'redespagobackstage'] },
+  { t: 'Para redes · de cortesía', d: 'La que publica un INVITADO. Sin QR, 4:5.',
+    v: ['redesexterno', 'redesvip', 'redesultra', 'redesbackstage'] },
+];
+
 (() => {
   const cont = $('#flyer-editors');
-  for (const v of FLYER_VARIANTS) cont.appendChild(buildFlyerEditor(v));
+  const puestos = new Set();
+  FLYER_SECCIONES.forEach((sec, i) => {
+    const hay = sec.v.filter(v => FLYER_META[v]);
+    if (!hay.length) return;
+    const caja = document.createElement('details');
+    caja.className = 'fly-sec';
+    if (i === 0) caja.open = true;          // la primera abierta: enseña de qué va esto
+    caja.innerHTML = `<summary><b>${esc(sec.t)}</b><span>${hay.length}</span>
+      <i>${esc(sec.d)}</i></summary>`;
+    const dentro = document.createElement('div');
+    dentro.className = 'fly-sec-body';
+    hay.forEach(v => { dentro.appendChild(buildFlyerEditor(v)); puestos.add(v); });
+    caja.appendChild(dentro);
+    cont.appendChild(caja);
+  });
+  // Red de seguridad: si mañana se agrega una variante y nadie la mete a una sección,
+  // sale igual al final en vez de desaparecer sin que nadie lo note.
+  const sueltas = FLYER_VARIANTS.filter(v => !puestos.has(v));
+  if (sueltas.length) {
+    const caja = document.createElement('details');
+    caja.className = 'fly-sec';
+    caja.innerHTML = `<summary><b>Otros</b><span>${sueltas.length}</span></summary>`;
+    const dentro = document.createElement('div');
+    dentro.className = 'fly-sec-body';
+    sueltas.forEach(v => dentro.appendChild(buildFlyerEditor(v)));
+    caja.appendChild(dentro);
+    cont.appendChild(caja);
+  }
 })();
 
 let _fpBusy = {};

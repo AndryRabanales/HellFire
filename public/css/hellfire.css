@@ -1406,3 +1406,33 @@ button.rd-p:active{transform:scale(.97)}
 /* Gastos lleva cuatro botones con texto: esos sí pueden bajar de renglón. Los de
    icono, no — son tres cuadros y caben siempre. */
 .td-acc.envuelve{flex-wrap:wrap;justify-content:flex-start}
+
+/* barra de "hay versión nueva": arriba de todo y por encima de cualquier ventanilla,
+   porque si queda debajo de un modal no sirve de nada */
+#hf-nueva{position:fixed;top:0;left:0;right:0;z-index:2147483647;
+  background:linear-gradient(90deg,#ff7a2e,#c0501e);color:#160603;
+  font:700 12.5px Manrope,sans-serif;letter-spacing:.2px;
+  padding:9px 14px;display:flex;align-items:center;justify-content:center;gap:12px;
+  box-shadow:0 4px 18px rgba(0,0,0,.45)}
+#hf-nueva button{background:#160603;color:#ffb27a;border:none;border-radius:999px;
+  font:800 12px Manrope,sans-serif;padding:6px 14px;cursor:pointer}
+#hf-nueva button:hover{background:#2a0d05}
+
+/* ---- flyers agrupados por sección ---- */
+.fly-sec{border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden;
+  background:rgba(255,110,30,.03)}
+.fly-sec>summary{list-style:none;cursor:pointer;padding:13px 15px;display:flex;
+  align-items:center;gap:10px;flex-wrap:wrap;user-select:none}
+.fly-sec>summary::-webkit-details-marker{display:none}
+.fly-sec>summary::after{content:'▾';margin-left:auto;color:var(--ember-dim);
+  transition:transform .18s;font-size:13px}
+.fly-sec[open]>summary::after{transform:rotate(180deg)}
+.fly-sec>summary b{font:800 13.5px Manrope,sans-serif;color:var(--cream)}
+.fly-sec>summary span{font:800 9.5px "Space Grotesk";letter-spacing:.1em;
+  color:var(--ember-dim);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
+.fly-sec>summary i{flex:1 0 100%;font:italic 500 10.5px Manrope,sans-serif;
+  color:var(--cream-45);margin-top:1px}
+.fly-sec[open]>summary{border-bottom:1px solid var(--line)}
+.fly-sec-body{padding:13px;display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
+@media (max-width:700px){ .fly-sec-body{grid-template-columns:1fr;padding:10px} }

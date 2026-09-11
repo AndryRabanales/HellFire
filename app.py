@@ -4936,6 +4936,18 @@ def admin_page():
 def scan_page():
     return pagina("scan.html")
 
+@app.get("/api/version")
+def app_version():
+    """El sello de esta versión del CSS y el JS.
+
+    Existe por un problema real y repetido: se sube un arreglo, se despliega bien, y
+    la persona sigue viendo la pantalla vieja porque su navegador no volvió a pedir el
+    HTML. Desde afuera parece que el arreglo no se hizo.
+
+    El panel lo consulta cada rato y, si no coincide con el que cargó, avisa. No
+    recarga solo: quien está a media captura no puede perderla por una actualización."""
+    return jsonify(v=ASSET_V)
+
 @app.get("/sw.js")
 def service_worker():
     # service worker de autodestrucción: limpia el escáner viejo de celulares que lo instalaron
