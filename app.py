@@ -430,9 +430,20 @@ DEFAULT_SETTINGS = {
     "flyer_nomy_redesvip": "", "flyer_nomx_redesvip": "", "flyer_nomw_redesvip": "",
     "flyer_nomy_redesultra": "", "flyer_nomx_redesultra": "", "flyer_nomw_redesultra": "",
     "flyer_nomy_redesbackstage": "", "flyer_nomx_redesbackstage": "", "flyer_nomw_redesbackstage": "",
-    "flyer_data_redesuady": "", "flyer_mime_redesuady": "",
-    "flyer_focus_redesuady": "", "flyer_scale_redesuady": "",
-    "flyer_nomy_redesuady": "", "flyer_nomx_redesuady": "", "flyer_nomw_redesuady": "",
+    # Los de VENTA: mismo formato que los de cortesía pero con el diseño que NO dice
+    # cortesía. Van en su propio espacio porque son otra imagen, no otro texto.
+    "flyer_data_redespagoexterno": "", "flyer_mime_redespagoexterno": "",
+    "flyer_focus_redespagoexterno": "", "flyer_scale_redespagoexterno": "",
+    "flyer_nomy_redespagoexterno": "", "flyer_nomx_redespagoexterno": "", "flyer_nomw_redespagoexterno": "",
+    "flyer_data_redespagovip": "", "flyer_mime_redespagovip": "",
+    "flyer_focus_redespagovip": "", "flyer_scale_redespagovip": "",
+    "flyer_nomy_redespagovip": "", "flyer_nomx_redespagovip": "", "flyer_nomw_redespagovip": "",
+    "flyer_data_redespagoultra": "", "flyer_mime_redespagoultra": "",
+    "flyer_focus_redespagoultra": "", "flyer_scale_redespagoultra": "",
+    "flyer_nomy_redespagoultra": "", "flyer_nomx_redespagoultra": "", "flyer_nomw_redespagoultra": "",
+    "flyer_data_redespagobackstage": "", "flyer_mime_redespagobackstage": "",
+    "flyer_focus_redespagobackstage": "", "flyer_scale_redespagobackstage": "",
+    "flyer_nomy_redespagobackstage": "", "flyer_nomx_redespagobackstage": "", "flyer_nomw_redespagobackstage": "",
     # El interruptor de la venta flash. Con "1" hay flash AHORA, sin esperar fecha.
     "flash_manual": "0",
     "seller_commission_pct": "10",   # % de comisión del vendedor sobre lo que entrega
@@ -451,20 +462,24 @@ def set_setting(db, key, value):
 FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip", "backstage",
                   "grupo10vip", "grupo10ultra",
                   "cortesiaexterno", "cortesiavip", "cortesiaultra", "cortesiabackstage",
-                  "redesuady", "redesexterno", "redesvip", "redesultra", "redesbackstage")
+                  "redesexterno", "redesvip", "redesultra", "redesbackstage",
+                  "redespagoexterno", "redespagovip", "redespagoultra", "redespagobackstage")
 FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
                "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
                "grupo10vip": "Grupo de 10 · VIP", "grupo10ultra": "Grupo de 10 · Ultra VIP",
                "cortesiaexterno": "Cortesía Externo", "cortesiavip": "Cortesía VIP",
                "cortesiaultra": "Cortesía Ultra VIP",
                "backstage": "Backstage", "cortesiabackstage": "Cortesía Backstage",
-               "redesuady": "Para redes · UADY",
-               "redesexterno": "Para redes · Externo", "redesvip": "Para redes · VIP",
-               "redesultra": "Para redes · Ultra VIP",
-               "redesbackstage": "Para redes · Backstage"}
+               "redesexterno": "Redes · Cortesía General", "redesvip": "Redes · Cortesía VIP",
+               "redesultra": "Redes · Cortesía Ultra VIP",
+               "redesbackstage": "Redes · Cortesía Backstage",
+               "redespagoexterno": "Redes · General", "redespagovip": "Redes · VIP",
+               "redespagoultra": "Redes · Ultra VIP",
+               "redespagobackstage": "Redes · Backstage"}
 # Las de redes son 4:5 y llevan el nombre encima. Van aparte porque no son un boleto:
 # no llevan QR y su medida es la del feed de Instagram, no la del boleto.
-FLYER_REDES = ("redesuady", "redesexterno", "redesvip", "redesultra", "redesbackstage")
+FLYER_REDES = ("redesexterno", "redesvip", "redesultra", "redesbackstage",
+               "redespagoexterno", "redespagovip", "redespagoultra", "redespagobackstage")
 # cadena de respaldo: si no han subido el flyer del tipo, usa el de un tipo
 # relacionado antes de caer al flyer legado de una sola imagen
 FLYER_FALLBACK = {"uady": "gen", "externo": "gen", "grupo10": "externo",

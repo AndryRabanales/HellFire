@@ -558,12 +558,17 @@ function redesNombrePos(ev, variant) {
   return { nomy: n('nomy', REDES.nomy), nomx: n('nomx', REDES.nomx), nomw: n('nomw', REDES.nomw) };
 }
 
+/* La imagen de redes depende de DOS cosas: de qué zona es el boleto y de si se pagó
+   o fue cortesía. No es el mismo diseño: el de cortesía lleva la palabra impresa y el
+   de venta no, y eso no se puede arreglar escribiendo encima.
+
+   El UADY no tiene la suya: es boleto general igual que el Externo y comparten flyer. */
 function redesVariantFor(ticket) {
   const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
-  if (t === 'backstage') return 'redesbackstage';
-  if (t === 'ultravip') return 'redesultra';
-  if (t === 'uady') return 'redesuady';
-  return ticket.type_is_vip ? 'redesvip' : 'redesexterno';
+  const zona = t === 'backstage' ? 'backstage'
+             : t === 'ultravip'  ? 'ultra'
+             : ticket.type_is_vip ? 'vip' : 'externo';
+  return (ticket.es_cortesia ? 'redes' : 'redespago') + zona;
 }
 
 /* ¿Se le puede ofrecer? Solo hace falta que la imagen de ese tipo esté subida. Sin
