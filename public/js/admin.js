@@ -3417,16 +3417,25 @@ const FLYER_META = {
                        sample: { folio: 'INV-0001', qr_payload: 'demo', buyer_name: 'Invitado Especial',
                                  faculty_name: '', type_name: 'Backstage', type_is_vip: 1,
                                  price: 0, es_cortesia: true } },
+  redesexterno: { redes: true, label: 'Redes · Cortesía General (4:5)',
+    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'Externo', type_is_vip: 0, es_cortesia: true } },
+  redesvip: { redes: true, label: 'Redes · Cortesía VIP (4:5)',
+    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'VIP', type_is_vip: 1, es_cortesia: true } },
+  redesultra: { redes: true, label: 'Redes · Cortesía Ultra VIP (4:5)',
+    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'Ultra VIP', type_is_vip: 1, es_cortesia: true } },
+  redesbackstage: { redes: true, label: 'Redes · Cortesía Backstage (4:5)',
+    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'Backstage', type_is_vip: 1, es_cortesia: true } },
   // Las de REDES van con un nombre LARGO de muestra a propósito: así, al subir la
   // imagen, se ve de una vez si el peor caso cabe en la línea. Con un nombre corto
   // todo se ve bien y el problema aparece con el invitado número 40.
 };
-/* Los ocho espacios 4:5 de "para redes" se quitaron: esa imagen ya no se sube, sale
-   del mismo boleto sin el QR. Las que se habían subido siguen guardadas en el servidor
-   por si algún día se vuelven a querer, pero aquí ya no estorban. */
+/* Las 4:5 son SOLO de cortesía: un diseño aparte, con la palabra impresa, que se sube
+   por zona. Quien compra no tiene 4:5 —lleva su propio boleto sin el código— así que
+   los cuatro espacios de venta que llegaron a existir se quitaron. */
 const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip', 'backstage',
                         'grupo10vip', 'grupo10ultra',
-                        'cortesiaexterno', 'cortesiavip', 'cortesiaultra', 'cortesiabackstage'];
+                        'cortesiaexterno', 'cortesiavip', 'cortesiaultra', 'cortesiabackstage',
+                        'redesexterno', 'redesvip', 'redesultra', 'redesbackstage'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
 const FLY_ED = {};
 for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1,
@@ -3593,6 +3602,9 @@ const FLYER_SECCIONES = [
     v: ['grupo10', 'grupo10vip', 'grupo10ultra'] },
   { t: 'Cortesías', d: 'El boleto del invitado. No dice precio.',
     v: ['cortesiaexterno', 'cortesiavip', 'cortesiaultra', 'cortesiabackstage'] },
+  { t: 'Cortesías · para redes (4:5)',
+    d: 'La que publica un invitado. Solo cortesías: quien compra lleva su boleto sin QR.',
+    v: ['redesexterno', 'redesvip', 'redesultra', 'redesbackstage'] },
 ];
 
 (() => {

@@ -568,25 +568,106 @@ async function downloadTicket(ticket, ev) {
 }
 
 /* ==================================================================
-   La imagen PARA REDES.
+   La imagen PARA REDES: la que el comprador publica sin regalar su entrada.
 
-   Es el MISMO boleto, sin el código y sin el precio. Nada más.
+   Hay dos caminos y cada uno tiene su razón:
 
-   Antes era un diseño aparte en 4:5 que había que subir por separado, uno por tipo y
-   por si era cortesía: ocho imágenes que diseñar y mantener, y mientras faltaran el
-   comprador no tenía qué publicar. Ahora sale del flyer que el boleto ya usa, así que
-   funciona desde el primer día y para todos los tipos sin subir nada.
-
-   La cortesía sale distinta sola: su boleto ya usa otro flyer.
+   - CORTESÍA con su 4:5 subida → esa imagen. Es un diseño aparte, en el formato del
+     feed, con la palabra CORTESÍA impresa. Andry la sube por zona.
+   - TODO LO DEMÁS → el mismo boleto sin el código ni el precio. No hay que subir nada
+     y funciona desde el primer día para cualquier tipo.
    ================================================================== */
 
-/* ¿Se le puede ofrecer? Siempre: usa el mismo flyer que su boleto, que ya está ahí. */
+const REDES = { nomy: 0.4785, nomx: 0.3935, nomw: 0.569, alto: 0.052 };
+
+function redesNombrePos(ev, variant) {
+  const n = (k, d) => {
+    const v = parseFloat(ev && ev['flyer_' + k + '_' + variant]);
+    return Number.isFinite(v) ? v : d;
+  };
+  return { nomy: n('nomy', REDES.nomy), nomx: n('nomx', REDES.nomx), nomw: n('nomw', REDES.nomw) };
+}
+
+/* La 4:5 es exclusiva de las cortesías: es un diseño aparte, con la palabra impresa,
+   que Andry sube por zona. Quien compra no tiene 4:5 — lleva su propio boleto sin el
+   código, que sale del flyer que ya usa. */
+function redesVariantFor(ticket) {
+  const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
+  if (t === 'backstage') return 'redesbackstage';
+  if (t === 'ultravip') return 'redesultra';
+  return ticket.type_is_vip ? 'redesvip' : 'redesexterno';
+}
+
+/* ¿Se le puede ofrecer? Siempre. El que compró usa su boleto sin QR, que ya existe;
+   el invitado usa su 4:5 si está subida y, si no, también su boleto sin QR. */
 function hayPresumible(ticket, ev) {
   return !!ticket;
 }
 
+/* Una cortesía con su 4:5 subida lleva ESA. Todo lo demás —los que compran, y las
+   cortesías cuya 4:5 todavía no suben— lleva el boleto sin el código. */
 async function renderPresumible(ticket, ev, imgOverride) {
+  const v = redesVariantFor(ticket);
+  if (ticket.es_cortesia && ev && ev['flyer_' + v]) {
+    return renderPresumible45(ticket, ev, imgOverride);
+  }
   return renderTicket(ticket, ev, imgOverride, true);
+}
+
+async function renderPresumible45(ticket, ev, imgOverride) {
+  await document.fonts.ready;
+  const variant = redesVariantFor(ticket);
+  const flyer = imgOverride !== undefined ? imgOverride
+    : await loadFlyer(variant, ev['flyer_' + variant]);
+  const W = 1080, H = 1350;                 // 4:5 exacto, tamaño de publicación
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#f6f1e7'; ctx.fillRect(0, 0, W, H);
+
+  if (flyer && flyer.width > 0 && flyer.height > 0) {
+    // "cover": llena los 4:5 sin deformar. Si suben algo que no es 4:5, se recorta
+    // por el lado que sobra en vez de estirarse —un nombre estirado se nota—.
+    const s = Math.max(W / flyer.width, H / flyer.height);
+    const dw = flyer.width * s, dh = flyer.height * s;
+    ctx.drawImage(flyer, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  }
+
+  const nombre = (ticket.buyer_name || '').trim();
+  if (nombre) {
+    const pos = redesNombrePos(ev, variant);
+    const ancho = W * pos.nomw;
+    const cx = W * pos.nomx;
+    // Un renglón siempre. Si el nombre es largo, la letra se encoge hasta caber: es
+    // preferible una letra más chica a un nombre cortado o encimado en la línea.
+    let px = Math.round(H * REDES.alto);
+    // El piso tiene que ser BAJO. Con uno alto, un nombre de 35 letras —"María
+    // Fernanda Villanueva Escamilla", nada raro— llegaba al tope todavía sin caber y
+    // el navegador lo APLASTABA a lo ancho para meterlo: las letras salían flacas y
+    // deformes. Prefiero una letra chica y bien hecha. A este piso entra un nombre de
+    // ~50 caracteres a su proporción natural.
+    const minimo = Math.round(H * 0.015);
+    const mide = t => { ctx.font = `700 ${px}px Cinzel, Georgia, serif`; return ctx.measureText(t).width; };
+    while (px > minimo && mide(nombre) > ancho) px -= 1;
+    ctx.font = `700 ${px}px Cinzel, Georgia, serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#151210';
+    // El aire sobre la raya es FIJO, no proporcional a la letra. Atado al tamaño de
+    // letra, un nombre corto quedaba con 38px de hueco y uno largo con 8: cada
+    // invitación se veía distinta. Fijo, todas las de la tanda quedan a la misma
+    // altura sobre la línea, que es lo que las hace ver de la misma serie.
+    ctx.fillText(nombre, cx, H * pos.nomy, ancho);
+
+    // Aquí se escribía también el tipo y la fase. Se quitó: los diseños ya los traen
+    // impresos —"TIPO DE BOLETO · ULTRA VIP", "ACCESO"— así que salía repetido y, peor,
+    // encimado sobre el rótulo de NOMBRE COMPLETO del propio diseño.
+    //
+    // Lo que distingue a una cortesía de un boleto pagado es la IMAGEN, no el texto:
+    // cada una tiene la suya. Aquí solo va el nombre, que es el único hueco que el
+    // diseño deja en blanco a propósito.
+  }
+  return cv;
 }
 
 async function downloadPresumible(ticket, ev) {
