@@ -413,20 +413,36 @@ async function renderTicket(ticket, ev, imgOverride, sinQR) {
     const spec = ticketBadgeSpec(ticket);
     ctx.font = '800 15px Manrope, sans-serif';
     const anchoIns = ctx.measureText(spec.text).width + 26;
-    drawTicketBadge(ctx, spec, cx - anchoIns / 2, FLY + 30, colW);
+    drawTicketBadge(ctx, spec, cx - anchoIns / 2, FLY + 34, colW);
 
-    // 2) la fecha del evento al pie: sin ella la banda se queda corta de abajo, y de
-    //    paso el que ve la historia se entera de cuándo es sin abrir nada
+    // 2) el pie: una raya corta y debajo la fecha. Sin la raya el texto quedaba
+    //    flotando y la banda se veía cortada por abajo; con ella el bloque cierra.
+    //    La fecha además le dice al que ve la historia cuándo es, sin abrir nada.
     const pie = (ev && (ev.event_date_text || ev.event_name) || '').toUpperCase();
     if (pie) {
-      ctx.textAlign = 'center';
+      const rayaY = FLY + BAND - 62;
+      const rayaW = 46;
+      ctx.strokeStyle = 'rgba(255,150,80,.35)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - rayaW - 16, rayaY); ctx.lineTo(cx - 16, rayaY);
+      ctx.moveTo(cx + 16, rayaY); ctx.lineTo(cx + rayaW + 16, rayaY);
+      ctx.stroke();
+      // un rombo al centro, el mismo remate que lleva el oficio
       ctx.fillStyle = 'rgba(255,150,80,.5)';
+      ctx.beginPath();
+      ctx.moveTo(cx, rayaY - 4); ctx.lineTo(cx + 4, rayaY);
+      ctx.lineTo(cx, rayaY + 4); ctx.lineTo(cx - 4, rayaY);
+      ctx.closePath(); ctx.fill();
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255,150,80,.55)';
       ctx.font = '600 15px "Space Grotesk", monospace';
-      letterSpaced(ctx, pie, cx, FLY + BAND - 34, 3);
+      letterSpaced(ctx, pie, cx, FLY + BAND - 30, 3);
     }
 
     // 3) el nombre, grande y centrado en lo que queda
-    const arriba = FLY + 78, abajo = FLY + BAND - (pie ? 72 : 40);
+    const arriba = FLY + 82, abajo = FLY + BAND - (pie ? 84 : 40);
     const hayFac = !!ticket.faculty_name;
     const l = medirNombre(ctx, ticket.buyer_name, colW, nameFontFor(ticket.buyer_name));
     const alto = l.lineas.length * l.alto + (hayFac ? 30 : 0);
