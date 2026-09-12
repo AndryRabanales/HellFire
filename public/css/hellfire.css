@@ -1445,3 +1445,11 @@ button.rd-p:active{transform:scale(.97)}
 .fly-sec-body{padding:13px;display:grid;gap:12px;
   grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
 @media (max-width:700px){ .fly-sec-body{grid-template-columns:1fr;padding:10px} }
+
+/* Dar de alta va en su propia caja y con título: sin eso, el campo de crear se ve
+   igual que el de buscar y uno escribe el nombre de alguien que YA existe para
+   encontrarlo... y lo da de alta otra vez */
+.alta{border:1px dashed rgba(255,120,40,.28);border-radius:14px;padding:11px 12px;
+  background:rgba(255,110,30,.035)}
+.alta-t{font:700 9.5px "Space Grotesk";letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ember-dim);margin-bottom:7px}

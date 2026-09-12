@@ -266,15 +266,27 @@
   </section>
 
   <section id="tab-vendedores" class="mt16 hidden">
-    <div class="row" style="gap:7px;flex-wrap:nowrap">
-      <input class="input grow" id="sl-name" placeholder="Nuevo vendedor…" style="padding:10px;font-size:14px">
-      <button class="btn sm" id="btn-sl-create" style="flex:none;padding:10px 14px">+ Crear</button>
-      <button class="btn sm ghost" id="btn-sl-bulk" style="flex:none;padding:10px 12px" title="Cargar una lista">Varios</button>
+    <div class="row" style="gap:7px">
+      <input class="input grow" id="sl-q" placeholder="⌕ Buscar vendedor por nombre o código…" style="padding:11px;font-size:15px">
+      <select class="input" id="sl-filter-admin" style="padding:11px;font-size:14px;width:auto"><option value="">Admin: todos</option></select>
     </div>
-    <div class="err" id="sl-err" style="min-height:0"></div>
-    <div class="row mt8" style="gap:7px">
-      <input class="input grow" id="sl-q" placeholder="⌕ Buscar vendedor…" style="padding:10px;font-size:14px">
-      <select class="input" id="sl-filter-admin" style="padding:10px;font-size:14px;width:auto"><option value="">Admin: todos</option></select>
+    <div class="row mt8" style="gap:7px;flex-wrap:wrap">
+      <select class="input" id="sl-orden" style="padding:11px;font-size:14px;width:auto">
+        <option value="">Orden: por defecto</option>
+        <option value="debe-mas">Falta por cobrar: más ↓</option>
+        <option value="debe-menos">Falta por cobrar: menos ↑</option>
+        <option value="vend-mas">Vendió más ↓</option>
+        <option value="az">Nombre A-Z</option>
+      </select>
+    </div>
+    <div class="alta mt12">
+      <div class="alta-t">Dar de alta a alguien nuevo</div>
+      <div class="row" style="gap:7px;flex-wrap:nowrap">
+        <input class="input grow" id="sl-name" placeholder="Nombre completo del nuevo vendedor" style="padding:10px;font-size:14px">
+        <button class="btn sm" id="btn-sl-create" style="flex:none;padding:10px 14px">+ Crear</button>
+        <button class="btn sm ghost" id="btn-sl-bulk" style="flex:none;padding:10px 12px" title="Cargar una lista">Varios</button>
+      </div>
+      <div class="err" id="sl-err" style="min-height:0"></div>
     </div>
     <!-- Quién está trabajando de verdad. Con 42 vendedores, "no ha vendido" no
          distingue al que batalla del que solo quería su boleto: hay que saber

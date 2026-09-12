@@ -1549,7 +1549,10 @@ async function loadSellers(silent) {
   const fa = ($('#sl-filter-admin') && $('#sl-filter-admin').value) || '';
   // con 30 vendedores, buscar por nombre o código es lo que se usa a diario
   const q = (($('#sl-q') && $('#sl-q').value) || '').trim().toLowerCase();
-  const sig = JSON.stringify([fa, q, ...r.sellers.map(s => [s.id, s.name, s.code, s.active, s.deleted, s.tickets, s.total, s.paid])]);
+  // el orden entra en la firma: sin él, cambiarlo no repintaba porque los datos
+  // eran los mismos y el latido silencioso se saltaba el dibujo
+  const ord = (($('#sl-orden') && $('#sl-orden').value) || '');
+  const sig = JSON.stringify([fa, q, ord, ...r.sellers.map(s => [s.id, s.name, s.code, s.active, s.deleted, s.tickets, s.total, s.paid])]);
   if (silent && sig === _sigSellers) return;
   _sigSellers = sig;
   CACHE.sellers = r.sellers;
@@ -1561,6 +1564,18 @@ async function loadSellers(silent) {
     .filter(s => !fa || (fa === '__none__' ? !s.owner_admin_name : s.owner_admin_name === fa))
     .filter(s => !q || s.name.toLowerCase().includes(q) || (s.code || '').includes(q))
     .filter(s => !_filtroAct || (!s.deleted && estadoVendedor(s) === _filtroAct));
+  /* El orden. Por omisión llega como lo manda el servidor; lo que de verdad se usa es
+     "falta por cobrar", que pone hasta arriba a quien hay que ir a buscar. El que ya
+     saldó cae al final, que es donde estorba menos. */
+  const orden = ($('#sl-orden') || {}).value || '';
+  if (orden) {
+    const falta = s => Math.max(0, (s.total || 0) - (s.paid || 0));
+    shown.sort(
+      orden === 'debe-mas'   ? (a, b) => falta(b) - falta(a)
+    : orden === 'debe-menos' ? (a, b) => falta(a) - falta(b)
+    : orden === 'vend-mas'   ? (a, b) => (b.total || 0) - (a.total || 0)
+    :                          (a, b) => a.name.localeCompare(b.name, 'es'));
+  }
   $('#sl-count').textContent = `${shown.length} vendedor(es)`;
   if (!shown.length) { body.innerHTML = '<tr><td colspan="7" class="muted" style="padding:16px">Ningún vendedor coincide</td></tr>'; return; }
   shown.forEach(s => {
@@ -2073,6 +2088,7 @@ async function descargarEstadoCuenta(s, c) {
 
 $('#sl-filter-admin').addEventListener('change', () => { _sigSellers = ''; loadSellers(); });
 $('#sl-q').addEventListener('input', () => { _sigSellers = ''; loadSellers(); });
+$('#sl-orden').addEventListener('change', () => { _sigSellers = ''; loadSellers(); });
 
 $('#btn-sl-create').addEventListener('click', async () => {
   const btn = $('#btn-sl-create');
