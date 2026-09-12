@@ -396,12 +396,54 @@ async function renderTicket(ticket, ev, imgOverride, sinQR) {
     letterSpaced(ctx, 'ESCANÉALO EN LA PUERTA', qrX + qrSize / 2, qrY + qrSize + 22, 1.6);
   }
 
-  // ---- columna izquierda. El contenido se reparte en TODA la altura de la banda:
-  // la etiqueta arriba, el precio anclado abajo y el nombre ocupando el centro. Así
-  // no queda un hueco muerto abajo y da igual si el nombre usa una línea o dos.
-  // sin QR el nombre se queda con toda la banda: si no, quedaría apretado a la
-  // izquierda con medio boleto vacío al lado
+  // ---- la banda de abajo.
+  //
+  // CON QR va en dos columnas: el texto a la izquierda y el código a la derecha, con
+  // el contenido repartido en toda la altura —etiqueta arriba, precio al pie, nombre
+  // en medio— para que no quede hueco muerto.
+  //
+  // SIN QR se centra todo. Dejar el texto pegado a la izquierda con media banda vacía
+  // se lee como un boleto al que se le borró algo; centrado se lee como una placa con
+  // el nombre, que es lo que es. Y como hay el doble de ancho, el nombre crece.
   const colW = sinQR ? W - padX * 2 : qrX - padX - 28;
+  const cx = W / 2;
+
+  if (sinQR) {
+    // 1) la insignia del tipo, centrada arriba
+    const spec = ticketBadgeSpec(ticket);
+    ctx.font = '800 15px Manrope, sans-serif';
+    const anchoIns = ctx.measureText(spec.text).width + 26;
+    drawTicketBadge(ctx, spec, cx - anchoIns / 2, FLY + 30, colW);
+
+    // 2) la fecha del evento al pie: sin ella la banda se queda corta de abajo, y de
+    //    paso el que ve la historia se entera de cuándo es sin abrir nada
+    const pie = (ev && (ev.event_date_text || ev.event_name) || '').toUpperCase();
+    if (pie) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255,150,80,.5)';
+      ctx.font = '600 15px "Space Grotesk", monospace';
+      letterSpaced(ctx, pie, cx, FLY + BAND - 34, 3);
+    }
+
+    // 3) el nombre, grande y centrado en lo que queda
+    const arriba = FLY + 78, abajo = FLY + BAND - (pie ? 72 : 40);
+    const hayFac = !!ticket.faculty_name;
+    const l = medirNombre(ctx, ticket.buyer_name, colW, nameFontFor(ticket.buyer_name));
+    const alto = l.lineas.length * l.alto + (hayFac ? 30 : 0);
+    let ty = arriba + (abajo - arriba - alto) / 2 + l.tam * 0.78;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f6f1e7';
+    ctx.font = `800 ${l.tam}px ${l.fuente}`;
+    l.lineas.forEach(li => { ctx.fillText(li, cx, ty); ty += l.alto; });
+    if (hayFac) {
+      ctx.fillStyle = 'rgba(246,241,231,.55)';
+      ctx.font = '600 20px Manrope, sans-serif';
+      ctx.fillText(ticket.faculty_name, cx, ty + 4);
+    }
+    ctx.textAlign = 'left';
+    return cv;
+  }
+
   ctx.textAlign = 'left';
 
   // 1) arriba: "a nombre de" + insignia del tipo
@@ -415,14 +457,13 @@ async function renderTicket(ticket, ev, imgOverride, sinQR) {
   const badgeX = padX + anchoEtiqueta + 18;
   drawTicketBadge(ctx, ticketBadgeSpec(ticket), badgeX, FLY + 24, W - badgeX - padX);
 
-  // 2) abajo: el precio, anclado al pie de la banda. En la de redes no va: lo que se
-  // publica no tiene por qué decir cuánto pagó ni en qué fase compró.
+  // 2) abajo: el precio, anclado al pie de la banda
   const precioY = FLY + BAND - 42;
-  if (!sinQR) dibujarPrecio(ctx, ticket, padX, precioY);
+  dibujarPrecio(ctx, ticket, padX, precioY);
 
   // 3) en medio: nombre (1 o 2 líneas) y facultad, centrados en el espacio que sobra
   const nombreArriba = FLY + 62;                 // debajo de la etiqueta
-  const nombreAbajo = sinQR ? FLY + BAND - 34 : precioY - 30;   // encima del precio
+  const nombreAbajo = precioY - 30;              // encima del precio
   const hayFacultad = !!ticket.faculty_name;
   const lineas = medirNombre(ctx, ticket.buyer_name, colW, nameFontFor(ticket.buyer_name));
   const altoBloque = lineas.lineas.length * lineas.alto + (hayFacultad ? 30 : 0);
