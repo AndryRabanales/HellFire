@@ -1063,7 +1063,7 @@ async function loadTicketsTable(silent) {
                   fmtMoney(t.normal_price)}</span> <b>${fmtMoney(t.price)}</b>
                  <div style="font-size:9px;color:#f3d27a;margin-top:2px">⚡ ${esc(t.phase_name || 'FLASH')}</div>`
               : fmtMoney(t.price))}</td>
-      <td data-label="Vendedor">${esc(t.seller_name)} <span class="muted">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
+      <td data-label="Vendedor">${esc(t.seller_name)} <span class="muted cod">(${esc(t.seller_code)})</span>${t.owner_admin_name ? `<div class="muted" style="font-size:9px;margin-top:2px">Admin: ${esc(t.owner_admin_name)}</div>` : ''}</td>
       <td data-label="Fecha" class="muted">${esc(t.created_at)}</td>
       <td data-label="Estado">${estado}</td>`;
     const td = document.createElement('td');
@@ -2171,7 +2171,7 @@ function mostrarCodigos(creados, repetidos) {
 /* Opciones que casi no se usan, fuera de la fila para que no estorben. */
 function menuVendedor(s) {
   modal(`<div class="h1" style="font-size:17px">${esc(s.name)}</div>
-    <div class="muted mt8" style="font-size:12px">Código ${s.code ? esc(s.code) : 'privado'} \u00b7 ${s.tickets} boleto(s) vendidos</div>
+    <div class="muted mt8" style="font-size:12px">Código <span class="cod">${s.code ? esc(s.code) : 'privado'}</span> \u00b7 ${s.tickets} boleto(s) vendidos</div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
       <!-- El colíder da de baja a los suyos: él los dio de alta y sabe quién ya no
            está. Lo único que sigue siendo del organizador es cambiarles el nombre o

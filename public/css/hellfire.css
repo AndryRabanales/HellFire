@@ -622,6 +622,15 @@ body.privado .cifra{filter:blur(8px);user-select:none;-webkit-user-select:none;
 /* las tarjetas del resumen llevan la letra más grande: con el mismo desenfoque
    todavía se adivinaba el número de lejos */
 body.privado .stat .sv.cifra{filter:blur(12px)}
+/* El código del vendedor ES su contraseña: con él cualquiera entra a su panel desde
+   otro teléfono, y el de Invitados genera cortesías gratis. Se tapa igual que el
+   dinero.  Dentro de una ventanilla NO: ahí se abre a propósito para leerlo y
+   dictárselo a alguien. */
+body.privado .codechip,
+body.privado .cod{filter:blur(7px);user-select:none;-webkit-user-select:none}
+body.privado #modal .codechip,
+body.privado #modal .cod,
+body.privado input.codechip{filter:none;user-select:auto}
 @media (max-width:700px){
   /* los montos de las tarjetas (Resumen, Gastos) no necesitan ser tan grandes
      en el teléfono — antes esta regla estaba ANTES de la base de arriba en el
