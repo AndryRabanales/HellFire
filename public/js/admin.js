@@ -222,7 +222,9 @@ async function loadSummary(silent) {
    Se difumina, no se borra ni se cambia el texto: así el panel sigue funcionando igual
    y nada depende de que se restaure bien al destapar. */
 const PRIVADO_KEY = 'hf_privado';
-const RE_CIFRA = /\$\s?-?[\d.,]+/;
+// Qué se considera cifra. No es solo el dinero: el FOLIO delata cuántos boletos van
+// vendidos —"HF-0200" dice doscientos— y es justo lo que no se quiere enseñar.
+const RE_CIFRA = /\$\s?-?[\d.,]+|\b[A-Z]{2,4}-\d{3,}\b|\b\d+\s*(boleto|vendido|persona)/i;
 
 function leerPrivado() {
   // Por omisión TAPADO. Si es la primera vez en este teléfono, más vale que arranque
@@ -3418,28 +3420,13 @@ const FLYER_META = {
   // Las de REDES van con un nombre LARGO de muestra a propósito: así, al subir la
   // imagen, se ve de una vez si el peor caso cabe en la línea. Con un nombre corto
   // todo se ve bien y el problema aparece con el invitado número 40.
-  redesexterno: { redes: true, label: 'Redes · Cortesía General (4:5)',
-    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'Externo', type_is_vip: 0, es_cortesia: true } },
-  redesvip: { redes: true, label: 'Redes · Cortesía VIP (4:5)',
-    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'VIP', type_is_vip: 1, es_cortesia: true } },
-  redesultra: { redes: true, label: 'Redes · Cortesía Ultra VIP (4:5)',
-    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'Ultra VIP', type_is_vip: 1, es_cortesia: true } },
-  redesbackstage: { redes: true, label: 'Redes · Cortesía Backstage (4:5)',
-    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'Backstage', type_is_vip: 1, es_cortesia: true } },
-  redespagoexterno: { redes: true, label: 'Redes · General (UADY y Externo) (4:5)',
-    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'Externo', type_is_vip: 0, phase_name: 'Fase 1' } },
-  redespagovip: { redes: true, label: 'Redes · VIP (4:5)',
-    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'VIP', type_is_vip: 1, phase_name: 'Fase 1' } },
-  redespagoultra: { redes: true, label: 'Redes · Ultra VIP (4:5)',
-    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'Ultra VIP', type_is_vip: 1, phase_name: 'Fase 1' } },
-  redespagobackstage: { redes: true, label: 'Redes · Backstage (4:5)',
-    sample: { buyer_name: 'María Fernanda Villanueva Escamilla', type_name: 'Backstage', type_is_vip: 1, phase_name: 'Fase 1' } },
 };
+/* Los ocho espacios 4:5 de "para redes" se quitaron: esa imagen ya no se sube, sale
+   del mismo boleto sin el QR. Las que se habían subido siguen guardadas en el servidor
+   por si algún día se vuelven a querer, pero aquí ya no estorban. */
 const FLYER_VARIANTS = ['uady', 'externo', 'vip', 'grupo10', 'ultravip', 'backstage',
                         'grupo10vip', 'grupo10ultra',
-                        'cortesiaexterno', 'cortesiavip', 'cortesiaultra', 'cortesiabackstage',
-                        'redesexterno', 'redesvip', 'redesultra', 'redesbackstage',
-                        'redespagoexterno', 'redespagovip', 'redespagoultra', 'redespagobackstage'];
+                        'cortesiaexterno', 'cortesiavip', 'cortesiaultra', 'cortesiabackstage'];
 // estado por variante: imagen, si es nueva (sin subir), posición, zoom y refs de UI
 const FLY_ED = {};
 for (const v of FLYER_VARIANTS) FLY_ED[v] = { img: null, isNew: false, focus: 0.5, scale: 1,
@@ -3606,10 +3593,6 @@ const FLYER_SECCIONES = [
     v: ['grupo10', 'grupo10vip', 'grupo10ultra'] },
   { t: 'Cortesías', d: 'El boleto del invitado. No dice precio.',
     v: ['cortesiaexterno', 'cortesiavip', 'cortesiaultra', 'cortesiabackstage'] },
-  { t: 'Para redes · de venta', d: 'La imagen que publica quien COMPRÓ su boleto. Sin QR, 4:5.',
-    v: ['redespagoexterno', 'redespagovip', 'redespagoultra', 'redespagobackstage'] },
-  { t: 'Para redes · de cortesía', d: 'La que publica un INVITADO. Sin QR, 4:5.',
-    v: ['redesexterno', 'redesvip', 'redesultra', 'redesbackstage'] },
 ];
 
 (() => {

@@ -320,7 +320,7 @@ function loadFlyer(variant, hasFlyer) {
         flyer_vip/flyer_gen:boolean, flyer_focus_vip/gen:0..1, flyer_scale_vip/gen:1..3}
    imgOverride: si se pasa una <img> (o null), se usa esa en vez de cargar /flyer
                 — sirve para la vista previa del admin antes de subir. */
-async function renderTicket(ticket, ev, imgOverride) {
+async function renderTicket(ticket, ev, imgOverride, sinQR) {
   await document.fonts.ready;
   const variant = flyerVariantFor(ticket);   // cada tipo usa SU flyer
   const flyer = imgOverride !== undefined ? imgOverride
@@ -384,18 +384,24 @@ async function renderTicket(ticket, ev, imgOverride) {
   const padX = 44;
   const qrSize = 224;                                  // QR grande, fácil de escanear
   const qrX = W - padX - qrSize, qrY = FLY + 26;
-  ctx.shadowColor = 'rgba(255,110,30,.35)'; ctx.shadowBlur = 24;
-  drawQR(ctx, ticket.qr_payload || ticket.qr_token, qrX, qrY, qrSize);
-  ctx.shadowBlur = 0;
-  ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(255,150,80,.6)';
-  ctx.font = '600 13px "Space Grotesk", monospace';
-  letterSpaced(ctx, 'ESCANÉALO EN LA PUERTA', qrX + qrSize / 2, qrY + qrSize + 22, 1.6);
+  // sinQR: la versión que el comprador publica. Es el MISMO boleto sin el código, para
+  // que presuma sin regalar su entrada —al que le haga captura al QR entra con él—.
+  if (!sinQR) {
+    ctx.shadowColor = 'rgba(255,110,30,.35)'; ctx.shadowBlur = 24;
+    drawQR(ctx, ticket.qr_payload || ticket.qr_token, qrX, qrY, qrSize);
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,150,80,.6)';
+    ctx.font = '600 13px "Space Grotesk", monospace';
+    letterSpaced(ctx, 'ESCANÉALO EN LA PUERTA', qrX + qrSize / 2, qrY + qrSize + 22, 1.6);
+  }
 
   // ---- columna izquierda. El contenido se reparte en TODA la altura de la banda:
   // la etiqueta arriba, el precio anclado abajo y el nombre ocupando el centro. Así
   // no queda un hueco muerto abajo y da igual si el nombre usa una línea o dos.
-  const colW = qrX - padX - 28;          // ancho libre antes del QR
+  // sin QR el nombre se queda con toda la banda: si no, quedaría apretado a la
+  // izquierda con medio boleto vacío al lado
+  const colW = sinQR ? W - padX * 2 : qrX - padX - 28;
   ctx.textAlign = 'left';
 
   // 1) arriba: "a nombre de" + insignia del tipo
@@ -409,13 +415,14 @@ async function renderTicket(ticket, ev, imgOverride) {
   const badgeX = padX + anchoEtiqueta + 18;
   drawTicketBadge(ctx, ticketBadgeSpec(ticket), badgeX, FLY + 24, W - badgeX - padX);
 
-  // 2) abajo: el precio, anclado al pie de la banda
+  // 2) abajo: el precio, anclado al pie de la banda. En la de redes no va: lo que se
+  // publica no tiene por qué decir cuánto pagó ni en qué fase compró.
   const precioY = FLY + BAND - 42;
-  dibujarPrecio(ctx, ticket, padX, precioY);
+  if (!sinQR) dibujarPrecio(ctx, ticket, padX, precioY);
 
   // 3) en medio: nombre (1 o 2 líneas) y facultad, centrados en el espacio que sobra
   const nombreArriba = FLY + 62;                 // debajo de la etiqueta
-  const nombreAbajo = precioY - 30;              // encima del precio
+  const nombreAbajo = sinQR ? FLY + BAND - 34 : precioY - 30;   // encima del precio
   const hayFacultad = !!ticket.faculty_name;
   const lineas = medirNombre(ctx, ticket.buyer_name, colW, nameFontFor(ticket.buyer_name));
   const altoBloque = lineas.lineas.length * lineas.alto + (hayFacultad ? 30 : 0);
@@ -512,129 +519,33 @@ async function downloadTicket(ticket, ev) {
   a.click();
   setTimeout(() => a.remove(), 1000);
   soltar();
-  // La segunda imagen NO baja sola detrás de esta. Se probó y no es de fiar: Android
-  // y varios navegadores bloquean la segunda descarga sin avisar, así que la mitad de
-  // los vendedores se quedaba sin ella creyendo que la tenía. Ahora cada una lleva su
-  // botón: la flecha baja el boleto, la estrella baja la de redes.
-  if (!hayPresumible(ticket, ev)) avisaFaltaRedes(ticket);
+  // La de redes NO baja sola detrás de esta. Se probó y no es de fiar: Android y
+  // varios navegadores bloquean la segunda descarga sin avisar, así que la mitad de
+  // los vendedores se quedaba sin ella creyendo que la tenía. Cada una lleva su botón:
+  // la flecha baja el boleto, la estrella baja la de redes.
   return true;
 }
 
-/* Cuando a un tipo le falta su imagen de redes, el boleto baja solo y sin ruido. Eso
-   se puede quedar semanas sin que nadie note que falta, así que se avisa —pero UNA
-   vez por tipo y por sesión: un aviso en cada descarga se vuelve ruido y se ignora,
-   que es peor que no avisar. */
-const _avisados = new Set();
-function avisaFaltaRedes(ticket) {
-  const v = redesVariantFor(ticket);
-  if (_avisados.has(v) || typeof toast !== 'function') return;
-  _avisados.add(v);
-  toast('Falta subir la imagen para redes de ' + (ticket.type_name || 'este tipo')
-        + ': por ahora solo baja el boleto.');
-}
-
 /* ==================================================================
-   La imagen PARA REDES. Para TODOS, no solo cortesías.
+   La imagen PARA REDES.
 
-   No es un boleto y por eso no comparte nada con renderTicket(): no lleva QR —ese es
-   justo el punto, que la puedan publicar sin regalar su entrada— ni banda inferior, y
-   su medida es 4:5, la del feed de Instagram. La imagen que sube el organizador ya
-   trae todo el diseño (fecha, hora, acceso); lo único que se dibuja encima es el
-   nombre del invitado, sobre la línea que el diseño dejó para eso.
+   Es el MISMO boleto, sin el código y sin el precio. Nada más.
+
+   Antes era un diseño aparte en 4:5 que había que subir por separado, uno por tipo y
+   por si era cortesía: ocho imágenes que diseñar y mantener, y mientras faltaran el
+   comprador no tenía qué publicar. Ahora sale del flyer que el boleto ya usa, así que
+   funciona desde el primer día y para todos los tipos sin subir nada.
+
+   La cortesía sale distinta sola: su boleto ya usa otro flyer.
    ================================================================== */
 
-// Dónde cae el nombre, en fracciones del lienzo para que no dependa de la resolución
-// del archivo que suban. Estos son los valores por omisión —los que estaban fijos en
-// el código, medidos sobre los primeros diseños—, pero cada variante puede traer los
-// suyos desde Ajustes: el flyer del backstage dejó el hueco a la izquierda de la
-// botella, no a media hoja, y con un valor único para todos el nombre se encimaba.
-const REDES = { nomy: 0.4785, nomx: 0.3935, nomw: 0.569, alto: 0.052 };
-
-function redesNombrePos(ev, variant) {
-  const n = (k, d) => {
-    const v = parseFloat(ev && ev['flyer_' + k + '_' + variant]);
-    return Number.isFinite(v) ? v : d;
-  };
-  return { nomy: n('nomy', REDES.nomy), nomx: n('nomx', REDES.nomx), nomw: n('nomw', REDES.nomw) };
-}
-
-/* La imagen de redes depende de DOS cosas: de qué zona es el boleto y de si se pagó
-   o fue cortesía. No es el mismo diseño: el de cortesía lleva la palabra impresa y el
-   de venta no, y eso no se puede arreglar escribiendo encima.
-
-   El UADY no tiene la suya: es boleto general igual que el Externo y comparten flyer. */
-function redesVariantFor(ticket) {
-  const t = (ticket.type_name || '').toLowerCase().replace(/\s+/g, '');
-  const zona = t === 'backstage' ? 'backstage'
-             : t === 'ultravip'  ? 'ultra'
-             : ticket.type_is_vip ? 'vip' : 'externo';
-  return (ticket.es_cortesia ? 'redes' : 'redespago') + zona;
-}
-
-/* ¿Se le puede ofrecer? Solo hace falta que la imagen de ese tipo esté subida. Sin
-   imagen no hay respaldo posible: el flyer del boleto tiene otra medida y otro diseño.
-
-   Antes esto pedía que fuera cortesía. Ya no: la imagen es LA MISMA para todos y no
-   dice ni el precio ni cómo entró, así que un invitado y alguien que pagó publican
-   exactamente lo mismo y nadie puede distinguirlos. Esa es justo la gracia. */
+/* ¿Se le puede ofrecer? Siempre: usa el mismo flyer que su boleto, que ya está ahí. */
 function hayPresumible(ticket, ev) {
-  return !!(ticket && ev && ev['flyer_' + redesVariantFor(ticket)]);
+  return !!ticket;
 }
 
 async function renderPresumible(ticket, ev, imgOverride) {
-  await document.fonts.ready;
-  const variant = redesVariantFor(ticket);
-  const flyer = imgOverride !== undefined ? imgOverride
-    : await loadFlyer(variant, ev['flyer_' + variant]);
-  const W = 1080, H = 1350;                 // 4:5 exacto, tamaño de publicación
-  const cv = document.createElement('canvas');
-  cv.width = W; cv.height = H;
-  const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#f6f1e7'; ctx.fillRect(0, 0, W, H);
-
-  if (flyer && flyer.width > 0 && flyer.height > 0) {
-    // "cover": llena los 4:5 sin deformar. Si suben algo que no es 4:5, se recorta
-    // por el lado que sobra en vez de estirarse —un nombre estirado se nota—.
-    const s = Math.max(W / flyer.width, H / flyer.height);
-    const dw = flyer.width * s, dh = flyer.height * s;
-    ctx.drawImage(flyer, (W - dw) / 2, (H - dh) / 2, dw, dh);
-  }
-
-  const nombre = (ticket.buyer_name || '').trim();
-  if (nombre) {
-    const pos = redesNombrePos(ev, variant);
-    const ancho = W * pos.nomw;
-    const cx = W * pos.nomx;
-    // Un renglón siempre. Si el nombre es largo, la letra se encoge hasta caber: es
-    // preferible una letra más chica a un nombre cortado o encimado en la línea.
-    let px = Math.round(H * REDES.alto);
-    // El piso tiene que ser BAJO. Con uno alto, un nombre de 35 letras —"María
-    // Fernanda Villanueva Escamilla", nada raro— llegaba al tope todavía sin caber y
-    // el navegador lo APLASTABA a lo ancho para meterlo: las letras salían flacas y
-    // deformes. Prefiero una letra chica y bien hecha. A este piso entra un nombre de
-    // ~50 caracteres a su proporción natural.
-    const minimo = Math.round(H * 0.015);
-    const mide = t => { ctx.font = `700 ${px}px Cinzel, Georgia, serif`; return ctx.measureText(t).width; };
-    while (px > minimo && mide(nombre) > ancho) px -= 1;
-    ctx.font = `700 ${px}px Cinzel, Georgia, serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#151210';
-    // El aire sobre la raya es FIJO, no proporcional a la letra. Atado al tamaño de
-    // letra, un nombre corto quedaba con 38px de hueco y uno largo con 8: cada
-    // invitación se veía distinta. Fijo, todas las de la tanda quedan a la misma
-    // altura sobre la línea, que es lo que las hace ver de la misma serie.
-    ctx.fillText(nombre, cx, H * pos.nomy, ancho);
-
-    // Aquí se escribía también el tipo y la fase. Se quitó: los diseños ya los traen
-    // impresos —"TIPO DE BOLETO · ULTRA VIP", "ACCESO"— así que salía repetido y, peor,
-    // encimado sobre el rótulo de NOMBRE COMPLETO del propio diseño.
-    //
-    // Lo que distingue a una cortesía de un boleto pagado es la IMAGEN, no el texto:
-    // cada una tiene la suya. Aquí solo va el nombre, que es el único hueco que el
-    // diseño deja en blanco a propósito.
-  }
-  return cv;
+  return renderTicket(ticket, ev, imgOverride, true);
 }
 
 async function downloadPresumible(ticket, ev) {
