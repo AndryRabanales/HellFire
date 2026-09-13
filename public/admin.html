@@ -166,8 +166,11 @@
 
   <!-- ===== Boletos (RF-78/79) ===== -->
   <section id="tab-boletos" class="mt16 hidden">
-    <div class="filters">
-      <input class="input" id="fl-q" placeholder="⌕ Nombre o folio" style="padding:11px">
+    <div class="row" style="gap:7px">
+      <input class="input grow" id="fl-q" placeholder="⌕ Nombre o folio" style="padding:11px">
+      <button class="btn sm ghost" id="btn-fl-mas" style="flex:none;width:auto;padding:11px 14px">Filtros</button>
+    </div>
+    <div class="filters plegada mt8" id="fl-box">
       <select class="input" id="fl-admin" style="padding:11px"><option value="">Admin: todos</option></select>
       <select class="input" id="fl-seller" style="padding:11px"><option value="">Vendedor: todos</option></select>
       <select class="input" id="fl-type" style="padding:11px"><option value="">Tipo: todos</option></select>
@@ -323,15 +326,23 @@
          Antes ocupaba media pantalla con sus etiquetas encima de cada campo y empujaba
          la tabla fuera de la vista. Ahora es un renglón: lo que pedía cada etiqueta ya
          lo dice el placeholder. -->
-    <div class="row mt12" style="gap:6px;flex-wrap:wrap;align-items:center">
-      <input class="input grow" id="gx-name" placeholder="Nuevo gasto (Local, DJ, Alcohol…)"
-             style="padding:10px;font-size:14px;min-width:150px">
-      <input class="input" id="gx-amount" type="number" min="0" placeholder="$"
-             style="padding:10px;font-size:14px;width:100px;flex:none">
-      <input class="input" id="gx-account" placeholder="¿Quién?" title="¿Quién lo paga? (opcional)"
-             style="padding:10px;font-size:14px;width:130px;flex:none">
-      <label class="gx-check" style="padding:9px 12px;flex:none"><input type="checkbox" id="gx-paid"><span>Ya se pagó</span></label>
-      <button class="btn sm" id="btn-gx-create" style="padding:10px 15px;flex:none">+ Agregar</button>
+    <div class="row mt12" style="gap:7px">
+      <button class="btn sm ghost sl-nuevo" id="btn-gx-nuevo" style="flex:none;width:auto;padding:10px 14px">+ Nuevo gasto</button>
+    </div>
+    <div class="alta mt8 plegada" id="gx-alta">
+      <div class="alta-t">Agregar un gasto</div>
+      <label class="campo" for="gx-name"><span>¿En qué se gastó?</span>
+        <input class="input" id="gx-name" placeholder="Local, DJ, alcohol, hielo…" style="padding:10px;font-size:14px"></label>
+      <div class="row mt8" style="gap:7px">
+        <label class="campo" for="gx-amount" style="flex:1 1 0;min-width:0"><span>¿Cuánto cuesta?</span>
+          <input class="input" id="gx-amount" type="number" min="0" placeholder="0" style="padding:10px;font-size:14px;width:100%"></label>
+        <label class="campo" for="gx-account" style="flex:1 1 0;min-width:0"><span>¿Quién lo paga?</span>
+          <input class="input" id="gx-account" placeholder="Opcional" style="padding:10px;font-size:14px;width:100%"></label>
+      </div>
+      <label class="gx-check mt8" style="padding:9px 12px"><input type="checkbox" id="gx-paid"><span>Ya está pagado</span></label>
+      <div class="muted" style="font-size:10.5px;margin-top:5px;line-height:1.4">
+        Déjalo sin marcar si todavía lo debes: queda pendiente y después le abonas lo que vayas dando.</div>
+      <button class="btn sm mt8" id="btn-gx-create" style="width:100%;padding:11px">+ Agregar gasto</button>
     </div>
     <div class="err mt8" id="gx-err" style="min-height:0"></div>
     <!-- plegado: interesa al cortar cuentas, no cada vez que se abre la pestaña -->

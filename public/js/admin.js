@@ -1076,6 +1076,7 @@ async function loadTicketsTable(silent) {
     if (lim) lim.onclick = () => {
       ['#fl-q', '#fl-admin', '#fl-seller', '#fl-type', '#fl-faculty']
         .forEach(sel => { const e = $(sel); if (e) e.value = ''; });
+      pintaFiltros();          // el botón tenía que apagarse con ellos
       _sigTickets = ''; loadTicketsTable();
     };
     return;
@@ -1199,7 +1200,22 @@ let _flTimer = null;
   clearTimeout(_flTimer); _flTimer = setTimeout(loadTicketsTable, 300);
 }));
 ['#fl-admin', '#fl-seller', '#fl-type', '#fl-faculty']
-  .forEach(s => $(s).addEventListener('change', loadTicketsTable));
+  .forEach(s => $(s).addEventListener('change', () => { pintaFiltros(); loadTicketsTable(); }));
+
+/* El botón dice cuántos filtros hay puestos y se enciende si hay alguno: un filtro
+   olvidado dentro de un bloque plegado es media lista de boletos que no aparece y
+   nadie sabe por qué. */
+function pintaFiltros() {
+  const n = ['#fl-admin', '#fl-seller', '#fl-type', '#fl-faculty']
+    .filter(s => $(s) && $(s).value).length;
+  const b = $('#btn-fl-mas');
+  if (!b) return;
+  b.textContent = n ? `Filtros · ${n}` : 'Filtros';
+  b.classList.toggle('ghost', !n);
+}
+$('#btn-fl-mas') && $('#btn-fl-mas').addEventListener('click', () => {
+  $('#fl-box').classList.toggle('plegada');
+});
 
 /* El alta llega plegada: se abre con el "+" y se cierra sola al crear a alguien.
    Ocupaba media pantalla del teléfono delante de la lista, todos los días, para algo
@@ -1210,6 +1226,16 @@ $('#btn-sl-nuevo') && $('#btn-sl-nuevo').addEventListener('click', () => {
   caja.classList.toggle('plegada', !abre);
   $('#btn-sl-nuevo').textContent = abre ? 'Cancelar' : '+ Nuevo';
   if (abre) { const c = $('#sl-name'); if (c) c.focus(); }
+});
+
+/* El alta de gastos, igual que la de vendedores: plegada, porque lo que se consulta
+   a diario es la tabla de abajo. */
+$('#btn-gx-nuevo') && $('#btn-gx-nuevo').addEventListener('click', () => {
+  const caja = $('#gx-alta');
+  const abre = caja.classList.contains('plegada');
+  caja.classList.toggle('plegada', !abre);
+  $('#btn-gx-nuevo').textContent = abre ? 'Cancelar' : '+ Nuevo gasto';
+  if (abre) { const c = $('#gx-name'); if (c) c.focus(); }
 });
 
 $('#btn-st-abrir') && $('#btn-st-abrir').addEventListener('click',
@@ -3743,7 +3769,7 @@ const FLYER_SECCIONES = [
     if (!hay.length) return;
     const caja = document.createElement('details');
     caja.className = 'fly-sec';
-    if (i === 0) caja.open = true;          // la primera abierta: enseña de qué va esto
+    caja.open = false;                     // todas cerradas: subir un flyer es de una vez
     caja.innerHTML = `<summary><b>${esc(sec.t)}</b><span>${hay.length}</span>
       <i>${esc(sec.d)}</i></summary>`;
     const dentro = document.createElement('div');
