@@ -1678,22 +1678,22 @@ def catalog():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     types = []
-    # Si a este vendedor le prendieron su descuento, la boletera tiene que enseñárselo
-    # YA rebajado: es el número que va a decir en voz alta y el que va a ir impreso en
-    # el boleto. Enseñarle el de lista y cobrarle otro al generar es dejarlo pidiendo
-    # $200 por un boleto que dice $180.
+    # El descuento del QR no se aplica solo: el vendedor lo prende cuando el comprador
+    # viene del código del paradero. Aquí van LOS DOS números —el de lista y el
+    # rebajado— para que la boletera enseñe el que corresponda sin inventar centavos:
+    # el redondeo lo hace el servidor, que es quien va a cobrar.
     _mid = descuento_de(db, s.get("seller") if isinstance(s, dict) else None)
     for r in db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY price_cents").fetchall():
         price, phase, normal = effective_price(db, r)
         libres = lugares_libres(db, r)
-        # el precio SIN su descuento: los grupos no lo usan y lo necesitan entero
-        base = price
+        # cuánto costaría con su descuento del QR (None = no tiene descuento)
+        desc = None
         if _mid > 0 and price > 0:
-            price, normal = con_descuento(price, normal, _mid)
+            desc = con_descuento(price, normal, _mid)[0]
         types.append({"id": r["id"], "name": r["name"], "is_vip": r["is_vip"],
                       "needs_faculty": r["needs_faculty"],
                       "price_cents": price, "phase": phase,
-                      "normal_cents": normal, "base_cents": base,
+                      "normal_cents": normal, "desc_cents": desc,
                       # cupo: None mientras nadie le ponga tope numérico
                       "cupo": (r["cupo"] if "cupo" in r.keys() else None),
                       "cerrado": esta_cerrado(db, r),
@@ -1712,18 +1712,16 @@ def catalog():
     group_info = None
     if opciones:
         base = externo or opciones[0]
-        # Los grupos van con el precio ENTERO: el de 10 se paga completo (su beneficio
-        # es la botella) y el de 5 lleva su propio porcentaje, que la boletera aplica
-        # aparte. Por eso aquí se usa base_cents y no el precio ya rebajado del vendedor.
+        # Los grupos van con el precio de lista: el de 10 se paga completo (su beneficio
+        # es la botella) y el de 5 lleva su propio porcentaje. El descuento del QR es
+        # del boleto suelto y aquí no entra.
         group_info = {"type_id": base["id"], "pct": 0,
-                      "normal_price_cents": base["base_cents"],
-                      "group_price_cents": base["base_cents"],
+                      "normal_price_cents": base["price_cents"],
+                      "group_price_cents": base["price_cents"],
                       "savings_cents": 0,
                       "tipos": [{"id": t["id"], "name": t["name"], "is_vip": t["is_vip"],
-                                 "price_cents": t["base_cents"],
-                                 "normal_cents": (t.get("normal_cents")
-                                                  if t["base_cents"] == t["price_cents"] else None)}
-                                for t in opciones]}
+                                 "price_cents": t["price_cents"],
+                                 "normal_cents": t.get("normal_cents")} for t in opciones]}
     # ¿le falta el tutorial? Va aquí y no solo en la respuesta del login: si el
     # vendedor recarga la página a media guía, con la sesión ya guardada no vuelve a
     # pasar por el login y se quedaría sin verla nunca.
@@ -1899,10 +1897,15 @@ def create_ticket():
     else:
         fac_id, fac_name = None, ""
     price_now, phase_name, normal_now = effective_price(db, tt)   # congelado en el boleto
-    # El descuento del vendedor se aplica ENCIMA de lo que esté vigente, sea el precio
-    # de la fase o el de flash. Se congela en el boleto como todo lo demás: apagarlo
-    # después no le cambia el precio a nadie que ya compró.
-    _d = descuento_de(db, s["seller"])
+    # El descuento del QR lo decide el VENDEDOR en cada venta: el organizador pegó el
+    # código en los paraderos y quien lo escanea llega pidiendo su 10%, pero el que
+    # compra de frente paga lo de siempre. Que el sistema lo aplicara solo obligaba a
+    # regalar el descuento a todo el mundo o a no dárselo a nadie.
+    #
+    # Lo que el cliente manda es un sí o un no, nunca un porcentaje: el cuánto sale de
+    # la ficha del vendedor. Se aplica ENCIMA de lo que esté vigente, sea el precio de
+    # la fase o el de flash, y se congela en el boleto como todo lo demás.
+    _d = descuento_de(db, s["seller"]) if body.get("con_descuento") else 0
     if _d:
         price_now, normal_now = con_descuento(price_now, normal_now, _d)
         phase_name = etiqueta_descuento(phase_name, _d)

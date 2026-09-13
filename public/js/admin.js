@@ -1747,26 +1747,6 @@ function pintaCuenta(s, c) {
         <div style="font:700 13px Manrope;color:var(--cream)">Te entrega hoy \u00b7 completo</div>
         <div style="font:800 26px 'Space Grotesk';color:var(--ember)">${fmtMoney(teEntrega)}</div>
       </div>`}
-      <!-- El descuento del paradero. Va abajo de todo y separado: no es un dato del
-           vendedor como la comisión, es una promoción que sale del bolsillo del
-           organizador, y solo él la prende. -->
-      ${SOY_COLIDER ? '' : `
-      <div style="border-top:1px solid rgba(255,120,40,.25);margin:11px 0 9px"></div>
-      <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <div>
-          <div style="font:700 12.5px Manrope;color:var(--cream)">Vende con descuento</div>
-          <div class="muted" style="font-size:10.5px;margin-top:1px">
-            Todo lo que venda sale con ese % menos, encima del precio vigente.</div>
-        </div>
-        <div class="row" style="gap:6px;align-items:center;flex:none">
-          <input class="input" id="cta-desc" type="number" min="0" max="90" step="1"
-                 value="${c.descuento_pct || ''}" placeholder="0"
-                 style="width:68px;padding:7px;font-size:13px;text-align:center">
-          <span class="muted" style="font-size:12px">%</span>
-          <button class="btn sm ghost" id="cta-desc-ok" style="width:auto;flex:none;padding:7px 12px;font-size:12px">Guardar</button>
-        </div>
-      </div>`}
-
       <!-- Los porcentajes de un toque, plegados: se abren solo cuando se van a usar. -->
       <div id="cta-com-box" class="row" style="display:none;gap:5px;flex-wrap:wrap;margin-top:9px">
         ${[0, 10, 15, 20, 25, 30].filter(n => n >= (c.commission_min || 0)).map(n =>
@@ -1783,6 +1763,31 @@ function pintaCuenta(s, c) {
         <button class="btn sm" id="cta-otro-ok" style="width:auto;flex:none;padding:8px 13px;font-size:12px">Aplicar</button>
       </div>
     </div>
+
+    <!-- EL DESCUENTO DEL CÓDIGO. Tarjeta aparte a propósito: pegado al corte, sus
+         chips de comisión quedaban debajo y se leían como si fueran de esto. No es un
+         dato del vendedor —como la comisión—, es una promoción del organizador. -->
+    ${SOY_COLIDER ? '' : `
+    <div class="card mt8" style="border-color:rgba(86,199,140,.3);background:rgba(86,199,140,.05)">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="min-width:180px;flex:1">
+          <div style="font:800 13px Manrope;color:#b6f0d1">Descuento del código</div>
+          <div class="muted" style="font-size:11px;margin-top:3px;line-height:1.45">
+            Le habilita el interruptor en su boletera. Él lo prende solo cuando el
+            comprador llega del código del paradero; el resto de sus ventas van al
+            precio normal.</div>
+        </div>
+        <div class="row" style="gap:6px;align-items:center;flex:none">
+          <input class="input" id="cta-desc" type="number" min="0" max="90" step="1"
+                 value="${c.descuento_pct || ''}" placeholder="0"
+                 style="width:66px;padding:8px;font-size:14px;text-align:center">
+          <span class="muted" style="font-size:13px">%</span>
+          <button class="btn sm" id="cta-desc-ok" style="width:auto;flex:none;padding:8px 14px;font-size:12.5px">Guardar</button>
+        </div>
+      </div>
+      <div class="muted" style="font-size:10.5px;margin-top:8px">
+        Vacío o 0 = no tiene el descuento y el interruptor desaparece de su pantalla.</div>
+    </div>`}
 
     <!-- LO DE ANTES: la temporada completa, ya como historia y no como deuda -->
     ${hayCortes ? `

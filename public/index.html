@@ -48,9 +48,16 @@
   <div class="h1" style="margin:16px 0 14px">Nuevo boleto</div>
   <div class="hint" id="f-hint"></div>
 
-  <!-- Descuento propio: el vendedor ve precios distintos a los de sus compañeros y
-       tiene que saber POR QUÉ antes de decir un número en voz alta. -->
-  <div class="midesc hidden" id="mi-desc"></div>
+  <!-- El descuento del QR del paradero. Es un interruptor y no un aviso: quien llega
+       con el código escaneado se lleva la rebaja, quien compra de frente no. Toda la
+       tarjeta es tocable para que no haya que atinarle a un cuadrito. -->
+  <button type="button" class="qrdesc hidden" id="mi-desc" aria-pressed="false">
+    <div class="qd-txt">
+      <div class="qd-t" id="qd-t">Descuento del código</div>
+      <div class="qd-s" id="qd-s">Prendido solo si escaneó el código del paradero</div>
+    </div>
+    <span class="qd-sw"><i></i></span>
+  </button>
 
   <!-- Ventas cerradas: sustituye al formulario. Sin esto el vendedor seguiría
        escribiendo nombres y solo se enteraría al fallar el botón. -->

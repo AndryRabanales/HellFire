@@ -142,17 +142,30 @@ function aplicarPromos() {
   if (sw && !GROUP_SIZE && !(CATALOG && CATALOG.ventas_cerradas)) {
     sw.classList.toggle('hidden', !(g10 || g5));
   }
-  // Y su propio descuento, si el admin se lo prendi\u00f3.
+  // Y su descuento del QR, si el organizador se lo autoriz\u00f3. Se lo quitaron con
+  // el interruptor prendido: se apaga aqu\u00ed o seguir\u00eda cobrando de menos.
   const mi = Number(CATALOG.mi_descuento || 0);
+  if (!(mi > 0)) DESCUENTO_ON = false;
+  pintaDescuento();
+}
+
+/* El interruptor del QR. Apagado dice de cu\u00e1nto es, para que no tenga que
+   acordarse; prendido dice lo \u00fanico que importa en ese momento: que est\u00e1
+   cobrando m\u00e1s barato. */
+function pintaDescuento() {
   const caja = $('#mi-desc');
-  if (caja) {
-    caja.classList.toggle('hidden', !(mi > 0));
-    if (mi > 0) {
-      caja.innerHTML = 'Est\u00e1s vendiendo con <b>' + mi + '% de descuento</b>. ' +
-        'Los precios de abajo ya salen rebajados: cobra lo que diga el bot\u00f3n, ' +
-        'no el precio de lista.';
-    }
-  }
+  if (!caja) return;
+  const mi = Number((CATALOG && CATALOG.mi_descuento) || 0);
+  caja.classList.toggle('hidden', !(mi > 0));
+  if (!(mi > 0)) return;
+  caja.classList.toggle('on', DESCUENTO_ON);
+  caja.setAttribute('aria-pressed', DESCUENTO_ON ? 'true' : 'false');
+  $('#qd-t').textContent = DESCUENTO_ON
+    ? ('Vendiendo con ' + mi + '% de descuento')
+    : ('Descuento del c\u00f3digo \u00b7 ' + mi + '%');
+  $('#qd-s').textContent = DESCUENTO_ON
+    ? 'Los precios de abajo ya salen rebajados \u00b7 ap\u00e1galo para el siguiente'
+    : 'Pr\u00e9ndelo solo si el comprador escane\u00f3 el c\u00f3digo del paradero';
 }
 
 function sel_agotado() {
@@ -166,13 +179,17 @@ function renderTypes() {
   CATALOG.types.forEach(t => {
     const el = document.createElement('div');
     el.className = 'typeopt' + (SELECTED_TYPE === t.id ? ' sel' : '');
-    // En venta flash el botón enseña los DOS números: el vendedor no tiene que
-    // acordarse de cuánto costaba antes para poder decir cuánto se está ahorrando.
-    const enFlash = t.normal_cents && t.normal_cents > t.price_cents;
+    // Con el descuento del QR prendido, el tachado es el precio de HOY y el grande el
+    // rebajado: el vendedor tiene que poder decir los dos números en voz alta ("son
+    // $200, con el código $180"). Apagado, la tarjeta es la de siempre.
+    const conQR = DESCUENTO_ON && t.desc_cents > 0 && t.desc_cents < t.price_cents;
+    const enFlash = !conQR && t.normal_cents && t.normal_cents > t.price_cents;
     const priceLabel = t.price_cents > 0
-      ? (enFlash
-          ? `<span class="tantes">${fmtMoney(t.normal_cents / 100)}</span> ${fmtMoney(t.price_cents / 100)}`
-          : fmtMoney(t.price_cents / 100))
+      ? (conQR
+          ? `<span class="tantes">${fmtMoney(t.price_cents / 100)}</span> ${fmtMoney(t.desc_cents / 100)}`
+          : enFlash
+            ? `<span class="tantes">${fmtMoney(t.normal_cents / 100)}</span> ${fmtMoney(t.price_cents / 100)}`
+            : fmtMoney(t.price_cents / 100))
       : '<span style="color:var(--cream-45);font-size:12px">Por definir</span>';
     // Un tipo con cupo —hoy solo el backstage— deja de venderse cuando se llena.
     // Se pinta AGOTADO en vez de desaparecer: si se esfuma, el vendedor no sabe si
@@ -209,6 +226,16 @@ function renderTypes() {
 /* ---------------- cronómetro de la próxima fase de precio ---------------- */
 let PHASE_INT = null, _reloadingCatalog = false;
 let PROMOS_VISTAS = null;   // última firma de promociones que mandó el servidor
+/* El descuento del QR: el organizador pegó el código en los paraderos y quien lo
+   escanea llega pidiendo su rebaja, pero el que compra de frente paga lo de siempre.
+   Por eso NO se aplica solo — lo prende el vendedor, venta por venta.
+
+   Arranca apagado y se queda como lo dejó entre una venta y otra: en un paradero
+   vienen varios seguidos del código, y volver a prenderlo cada vez termina en un
+   boleto cobrado de más con el comprador enfrente. Para que nunca esté prendido sin
+   que se note, mientras lo está la tarjeta se pone verde y los precios salen
+   tachados. */
+let DESCUENTO_ON = false;
 
 // "AAAA-MM-DD" → medianoche local de ese día (cuando entra la nueva fase)
 function phaseStart(ymd) {
@@ -232,16 +259,10 @@ function nextGlobalPhase() {
 
 // ¿Estamos en venta flash? Lo dice el catálogo: si un tipo trae normal_cents es
 // porque su precio de hoy está por debajo del que regiría sin el flash.
-function precioSinMiDescuento(t) {
-  // El precio del tipo ANTES del descuento propio del vendedor. Sirve para no
-  // confundir su descuento con una venta flash: los dos dejan un precio tachado.
-  return (t.base_cents === undefined || t.base_cents === null) ? t.price_cents : t.base_cents;
-}
 function flashActivo() {
-  const t = (CATALOG.types || []).filter(x => x.normal_cents
-                                           && x.normal_cents > precioSinMiDescuento(x));
+  const t = (CATALOG.types || []).filter(x => x.normal_cents && x.normal_cents > x.price_cents);
   if (!t.length) return null;
-  const ahorro = Math.max(...t.map(x => (x.normal_cents - precioSinMiDescuento(x)) / 100));
+  const ahorro = Math.max(...t.map(x => (x.normal_cents - x.price_cents) / 100));
   // el nombre de la fase EN CURSO (no la que viene): si el admin la llamó "Fase 2
   // Flash", el vendedor tiene que poder decir en cuál está cuando le pregunten
   return { nombre: t[0].phase || 'Venta flash', ahorroMax: ahorro };
@@ -255,7 +276,7 @@ function renderPhaseTimer() {
   // existe —y peor, uno más largo del real—. Se dice lo que sí es cierto: está
   // activa ahora, y puede terminar en cualquier momento.
   if (fmanual) {
-    const vuelve = (CATALOG.types || []).filter(t => t.normal_cents > precioSinMiDescuento(t))
+    const vuelve = (CATALOG.types || []).filter(t => t.normal_cents > t.price_cents)
       .map(t => `<span>${esc(t.name)}<b>${fmtMoney(t.normal_cents / 100)}</b></span>`).join('');
     box.classList.remove('hidden'); box.classList.add('flash'); box.classList.remove('urge');
     box.innerHTML = `<div class="pt-flash">⚡ ${esc(fmanual.nombre)} · hasta $${fmanual.ahorroMax.toFixed(0)} de descuento</div>
@@ -385,8 +406,8 @@ async function pulso() {
       // propio descuento. Que abran o cierren los grupos se ve en los botones.
       const mi = Number(c.mi_descuento || 0);
       if (mi !== miAntes) {
-        toast(mi > 0 ? ('Tu descuento de ' + mi + '% ya est\u00e1 activo')
-                     : 'Se apag\u00f3 tu descuento: precios normales');
+        toast(mi > 0 ? ('Ya puedes dar el ' + mi + '% del c\u00f3digo')
+                     : 'Te quitaron el descuento del c\u00f3digo');
       }
     }
   } catch (e) {
@@ -706,6 +727,8 @@ async function generate() {
     const r = await API.post('/api/tickets', {
       buyer_name: buyer, type_id: SELECTED_TYPE,
       faculty_id: (selType && selType.needs_faculty) ? Number(faculty) : null,
+      // solo el sí o el no: de cuánto es el descuento lo decide el servidor
+      con_descuento: DESCUENTO_ON,
       client_ref: VENTA_REF,
     });
     LAST_TICKET = r.ticket;
@@ -951,6 +974,11 @@ $('#btn-generate').addEventListener('click', generate);
 $('#btn-generate-group').addEventListener('click', generateGroup);
 $('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
 $('#btn-group-5').addEventListener('click', () => enterGroupMode(5));
+$('#mi-desc').addEventListener('click', () => {
+  DESCUENTO_ON = !DESCUENTO_ON;
+  pintaDescuento();
+  renderTypes();                    // los precios de las tarjetas cambian con \u00e9l
+});
 $('#btn-group-back').addEventListener('click', exitGroupMode);
 $('#btn-group-done').addEventListener('click', exitGroupMode);
 $('#btn-history').addEventListener('click', () => { show('history'); loadHistory(); });
@@ -1088,13 +1116,16 @@ function panelDudas() {
          '<b>Grupo de 5:</b> los cinco pagan con <b>descuento</b> y <b>no</b> hay botella.<br><br>' +
          'El botón te dice de cuánto es el descuento ese día. Si no ves alguno de los ' +
          'dos botones, es que el organizador lo tiene <b>cerrado</b> en ese momento.') +
-    duda('Mis precios salen más bajos que los de otro vendedor',
-         'Es tu <b>descuento</b>: el organizador te lo prendió a ti. Arriba del ' +
-         'formulario te lo dice, y los precios de los botones <b>ya salen rebajados</b>.<br><br>' +
-         '<b>Cobra lo que dice el botón</b>, no el precio de lista: ese mismo número es ' +
-         'el que va impreso en el boleto, y es el que el sistema te va a pedir en el corte.<br><br>' +
-         'Se prende y se apaga cuando el organizador quiera. Los boletos que ya ' +
-         'generaste <b>no cambian</b>: cada uno se quedó con el precio del día que se vendió.') +
+    duda('¿Qué es el interruptor del descuento del código?',
+         'Es para quien llega por el <b>código del paradero</b>: lo escaneó, le prometieron ' +
+         'una rebaja y viene a cobrarla.<br><br>' +
+         '<b>Préndelo</b> y los precios de abajo salen rebajados; <b>apágalo</b> y son los ' +
+         'de siempre. Tú decides en cada venta: el que compra de frente paga lo normal.<br><br>' +
+         'Mientras está prendido la tarjeta se pone <b>verde</b> y los precios salen ' +
+         'tachados, para que no se te quede puesto sin darte cuenta.<br><br>' +
+         '<b>Cobra lo que dice el botón</b>: ese número es el que va impreso en el boleto ' +
+         'y el que el sistema te va a pedir en el corte. Los boletos que ya generaste ' +
+         '<b>no cambian</b>: cada uno se quedó con el precio del día que se vendió.') +
     duda('¿Qué es la ★ que sale junto a la descarga?',
          'Son <b>dos imágenes distintas</b> y no hay que confundirlas:<br><br>' +
          '<b>La flecha</b> baja el <b>boleto con QR</b>. Ese es el que se muestra en la ' +
@@ -1165,6 +1196,8 @@ const TOUR = [
 
   // El tour es de un vistazo, no un manual: dice QUÉ hace el botón y qué hace la
   // estrella, en un renglón. Lo demás vive en el "?", que se lee cuando hace falta.
+  // Solo sale en el vendedor que tiene autorizado el descuento del código.
+  { sel: '#mi-desc',      txt: 'Si el comprador viene del <b>código del paradero</b>, préndelo: los precios salen con su rebaja.' },
   { sel: '#btn-group-10', txt: '¿Van <b>10 juntos</b>? Aquí. Marca <b>★</b> a uno: ese recoge la botella.' },
   // Solo aparece si el organizador tiene abiertos los grupos de 5; el recorrido se
   // salta solo las paradas que no están en pantalla.
