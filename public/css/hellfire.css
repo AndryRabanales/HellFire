@@ -345,9 +345,16 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
 /* Tres en fila: son los tres tipos que se venden siempre. Si algún día se habilita
    un cuarto (Ultra VIP), baja solo a un cuadro largo debajo — se lee como lo que es,
    algo aparte, y no rompe la fila de los tres. */
-.typegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.typegrid > :nth-child(4){grid-column:1 / -1}
-.typegrid > :nth-child(n+5){grid-column:1 / -1}
+.typegrid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.typegrid > *{grid-column:span 2}                      /* por defecto: tres por fila */
+/* cuatro tipos: dos y dos, no tres y uno estirado */
+.typegrid > :first-child:nth-last-child(4),
+.typegrid > :first-child:nth-last-child(4) ~ *{grid-column:span 3}
+/* cinco: tres arriba y los otros dos repartiéndose la fila de abajo */
+.typegrid > :first-child:nth-last-child(5) ~ :nth-child(4),
+.typegrid > :first-child:nth-last-child(5) ~ :nth-child(5){grid-column:span 3}
+/* de siete en adelante, el que se queda solo ocupa su fila entera */
+.typegrid > :nth-child(7):last-child{grid-column:1 / -1}
 .typeopt{padding:10px;border-radius:12px;cursor:pointer;
   /* un poco levantado del fondo, para que se lea como algo que se toca y no como
      un simple recuadro pintado */
@@ -754,9 +761,16 @@ body.privado input.codechip{filter:none;user-select:auto}
    78px por columna, "ULTRA VIP $900" mide 92 y se salia de la caja. Ahora la
    rejilla acomoda las que quepan con holgura —dos y dos en el telefono, los
    cuatro en fila en pantalla ancha— y ninguna queda apretada. */
+/* Mismo reparto que las tarjetas de tipo: con cinco precios, auto-fit dejaba dos
+   solos y descuadrados a la izquierda. */
 .phase-timer .pt-items{margin-top:6px;padding-top:6px;display:grid;gap:4px 10px;
-  grid-template-columns:repeat(auto-fit,minmax(104px,1fr));
+  grid-template-columns:repeat(6,1fr);
   border-top:1px solid rgba(255,122,46,.16)}
+.phase-timer .pt-items span{grid-column:span 2}
+.phase-timer .pt-items span:first-child:nth-last-child(4),
+.phase-timer .pt-items span:first-child:nth-last-child(4) ~ span{grid-column:span 3}
+.phase-timer .pt-items span:first-child:nth-last-child(5) ~ span:nth-child(4),
+.phase-timer .pt-items span:first-child:nth-last-child(5) ~ span:nth-child(5){grid-column:span 3}
 /* nombre y precio en la MISMA línea, centrados dentro de su columna: así los tres
    bloques miden lo mismo sin que el cronómetro crezca un renglón */
 .phase-timer .pt-items span{display:flex;align-items:baseline;justify-content:center;gap:5px;
