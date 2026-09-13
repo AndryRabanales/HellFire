@@ -438,32 +438,45 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
    Y el botón iba en "contorno", que en esta pantalla se confunde con las tarjetas de
    tipo de boleto: mismo borde, mismo fondo. Ahora lleva relleno, relieve y flecha —
    relleno para decir "soy un botón", flecha para decir "te llevo a otro lado". */
-/* Los planes de grupo: dos renglones de UNA línea. Antes eran dos bloques del alto
-   de GENERAR BOLETO, puestos justo encima de él: pesaban más que la acción de verdad
-   y en un celular la empujaban fuera de la pantalla. Esto es un atajo —"venimos
-   varios"—, así que ocupa lo que ocupa un atajo. */
-.grupos .gr-lbl{font:700 9.5px "Space Grotesk",monospace;letter-spacing:.16em;
-  text-transform:uppercase;color:var(--cream-45);margin-bottom:6px}
-.gcard{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;margin-bottom:7px;
-  border-radius:11px;text-align:left;cursor:pointer;
-  border:1px solid rgba(246,241,231,.12);background:rgba(246,241,231,.035);
-  -webkit-tap-highlight-color:transparent;transition:background .14s}
-.gcard:last-child{margin-bottom:0}
-/* El número va en pastilla: es lo que se busca de un vistazo ("son diez"), pero no
-   tiene por qué ser enorme para encontrarse. */
-.gcard .gc-n{flex:none;min-width:29px;height:24px;padding:0 6px;border-radius:7px;
+/* Opciones de la venta: UN bloque con renglones idénticos. Antes eran tres objetos
+   con tres formas y tres colores —uno verde, que no es de esta casa—, cada uno del
+   alto de GENERAR BOLETO y todos encima de él. Aquí lo único que distingue a un
+   renglón de otro es el control de la derecha y el color de su pastilla. */
+.opes{border:1px solid rgba(246,241,231,.11);border-radius:13px;overflow:hidden;
+  background:rgba(246,241,231,.03)}
+.op{display:flex;align-items:center;gap:9px;width:100%;padding:0 11px;height:44px;
+  text-align:left;cursor:pointer;background:none;border:0;
+  border-top:1px solid rgba(246,241,231,.08);-webkit-tap-highlight-color:transparent;
+  transition:background .14s}
+.op:first-child,.op.hidden+.op,.op.hidden+.op.hidden+.op{border-top:0}
+.op:active{background:rgba(246,241,231,.06)}
+/* La pastilla: el dato que se busca de un vistazo —un 10, un 5, un %— sin que tenga
+   que ser enorme para encontrarse. */
+.op-k{flex:none;min-width:27px;height:22px;padding:0 6px;border-radius:6px;
   display:flex;align-items:center;justify-content:center;
-  font:800 14px/1 "Space Grotesk",monospace;color:#f3d27a;background:rgba(243,210,122,.13)}
-.gcard .gc-t{flex:1;min-width:0;font:600 11px Manrope;color:var(--cream-45);line-height:1.3}
-.gcard .gc-t b{font-weight:800;font-size:12px;color:#f3d27a}
-/* La flecha: sin ella el renglón se parece a las tarjetas de TIPO DE BOLETO, que se
-   marcan. Este no se marca — lleva a otra pantalla, y hay que decirlo. */
-.gcard .gc-ar{flex:none;font:700 17px/1 Manrope;color:var(--cream-45);transform:translateY(-1px)}
-.gcard:active{background:rgba(246,241,231,.07)}
-/* Oro el de la botella, naranja de la casa el del descuento: se distinguen entre sí
-   sin que ninguno se pelee con la pantalla, como hacía el verde. */
-.gcard.g5 .gc-n{color:var(--ember-soft);background:rgba(255,122,46,.14)}
-.gcard.g5 .gc-t b{color:var(--ember-soft)}
+  font:800 13px/1 "Space Grotesk",monospace;color:#f3d27a;background:rgba(243,210,122,.13)}
+/* Una sola línea SIEMPRE: si no cabe, se recorta. Un renglón que crece a dos rompe
+   la altura pareja, que es lo que hace que esto se lea como un bloque y no como tres
+   cosas apiladas. */
+.op-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.op-t b{font:800 12px Manrope;color:#f3d27a}
+.op-t i{font:600 10.5px Manrope;font-style:normal;color:var(--cream-45);margin-left:5px}
+.op-ar{flex:none;font:700 17px/1 Manrope;color:var(--cream-45);transform:translateY(-1px)}
+/* El del grupo de 5 y el del descuento van en el naranja de la casa; el de la botella
+   en oro, que aquí ya es su color. Dos tonos de la misma paleta: se distinguen entre
+   sí y ninguno se pelea con la pantalla. */
+.op.g5 .op-k,#btn-group-5 .op-k,#mi-desc .op-k{color:var(--ember-soft);background:rgba(255,122,46,.14)}
+#btn-group-5 .op-t b,#mi-desc .op-t b{color:var(--ember-soft)}
+/* El interruptor. Prendido se rellena el renglón entero: el vendedor tiene que verlo
+   sin buscarlo, porque dejarlo puesto es regalar el descuento en la venta siguiente. */
+.op-sw{flex:none;width:38px;height:22px;border-radius:999px;position:relative;
+  background:rgba(246,241,231,.16);transition:background .16s}
+.op-sw i{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;
+  background:var(--cream);transition:transform .16s}
+#mi-desc.on{background:rgba(255,122,46,.14)}
+#mi-desc.on .op-sw{background:var(--ember)}
+#mi-desc.on .op-sw i{transform:translateX(16px);background:#2a1206}
+#mi-desc.on .op-t i{color:var(--ember-soft);opacity:.75}
 
 /* La flecha: señal de "esto te lleva a otra pantalla", no de "esto se marca". */
 .g-arrow{font:700 17px/1 Manrope;margin-left:7px;opacity:.65;transform:translateY(-1px)}
@@ -1490,30 +1503,4 @@ button.rd-p:active{transform:scale(.97)}
 .sw i{font:700 11.5px Manrope,sans-serif;font-style:normal;color:var(--cream-45)}
 .sw input:checked~i{color:var(--ember-soft)}
 
-/* Aviso de descuento propio: el precio que ve este vendedor no es el de los demás. */
-.midesc{margin:-4px 0 12px;padding:9px 12px;border-radius:12px;
-  border:1px solid rgba(86,199,140,.42);
-  background:linear-gradient(160deg,rgba(86,199,140,.14),rgba(86,199,140,.03));
-  font:600 12px Manrope;color:#8fe3b4;line-height:1.45}
-.midesc b{font-weight:800;color:#b6f0d1}
 
-/* Interruptor del descuento del QR. Apagado es un renglón discreto; prendido se pone
-   verde entero, porque estar prendido sin darse cuenta es regalar dinero en cada
-   venta. La tarjeta completa es el botón: en la calle, con una mano, atinarle a un
-   cuadrito de 20px no pasa. */
-.qrdesc{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
-  margin:-4px 0 12px;padding:11px 13px;border-radius:13px;text-align:left;cursor:pointer;
-  border:1px solid rgba(246,241,231,.14);background:rgba(246,241,231,.04);
-  -webkit-tap-highlight-color:transparent}
-.qrdesc .qd-t{font:800 12.5px Manrope;color:var(--cream);letter-spacing:.01em}
-.qrdesc .qd-s{font:600 10.5px Manrope;color:var(--cream-45);margin-top:2px;line-height:1.35}
-.qrdesc .qd-sw{flex:none;width:42px;height:24px;border-radius:999px;position:relative;
-  background:rgba(246,241,231,.16);transition:background .16s}
-.qrdesc .qd-sw i{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
-  background:var(--cream);transition:transform .16s}
-.qrdesc.on{border-color:rgba(86,199,140,.5);
-  background:linear-gradient(160deg,rgba(86,199,140,.15),rgba(86,199,140,.04))}
-.qrdesc.on .qd-t{color:#b6f0d1}
-.qrdesc.on .qd-s{color:#8fe3b4}
-.qrdesc.on .qd-sw{background:#3ea56f}
-.qrdesc.on .qd-sw i{transform:translateX(18px)}

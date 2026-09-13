@@ -48,16 +48,6 @@
   <div class="h1" style="margin:16px 0 14px">Nuevo boleto</div>
   <div class="hint" id="f-hint"></div>
 
-  <!-- El descuento del QR del paradero. Es un interruptor y no un aviso: quien llega
-       con el código escaneado se lleva la rebaja, quien compra de frente no. Toda la
-       tarjeta es tocable para que no haya que atinarle a un cuadrito. -->
-  <button type="button" class="qrdesc hidden" id="mi-desc" aria-pressed="false">
-    <div class="qd-txt">
-      <div class="qd-t" id="qd-t">Descuento del código</div>
-      <div class="qd-s" id="qd-s">Prendido solo si escaneó el código del paradero</div>
-    </div>
-    <span class="qd-sw"><i></i></span>
-  </button>
 
   <!-- Ventas cerradas: sustituye al formulario. Sin esto el vendedor seguiría
        escribiendo nombres y solo se enteraría al fallar el botón. -->
@@ -96,22 +86,28 @@
     <div id="solo-row"></div>
   </div>
 
-  <!-- ---- planes de grupo ---- -->
-  <!-- Dos renglones de una línea, no dos bloques. Esto no es la acción principal —la
-       acción es GENERAR BOLETO—: es un atajo para cuando el comprador dice "venimos
-       varios". Cuanto más chico, antes se encuentra el botón que sí se usa siempre. -->
-  <div class="grupos mt16" id="group-switch">
-    <div class="gr-lbl">¿Vienen en grupo?</div>
-    <button type="button" class="gcard" id="btn-group-10">
-      <span class="gc-n">10</span>
-      <span class="gc-t"><b>Botella gratis</b> para el representante</span>
-      <span class="gc-ar">›</span>
+  <!-- ---- opciones de esta venta ----
+       Un solo bloque con renglones iguales: el descuento del código y los grupos.
+       Antes eran tres cosas sueltas con tres formas y tres colores distintos —una
+       verde— y entre las tres empujaban GENERAR BOLETO fuera de la pantalla. Lo que
+       cambia de un renglón a otro es el control de la derecha: interruptor el que se
+       prende, flecha el que lleva a otra pantalla. -->
+  <div class="opes mt14" id="group-switch">
+    <button type="button" class="op hidden" id="mi-desc" aria-pressed="false">
+      <span class="op-k">%</span>
+      <span class="op-t"><b id="qd-t">Descuento del código</b><i id="qd-s">si escaneó el QR</i></span>
+      <span class="op-sw"><i></i></span>
+    </button>
+    <button type="button" class="op" id="btn-group-10">
+      <span class="op-k">10</span>
+      <span class="op-t"><b>Botella gratis</b><i>para el representante</i></span>
+      <span class="op-ar">›</span>
     </button>
     <!-- El de 5 lo abre y lo cierra el organizador; cerrado, no existe aquí. -->
-    <button type="button" class="gcard g5 hidden" id="btn-group-5">
-      <span class="gc-n">5</span>
-      <span class="gc-t"><b id="g5-sub">Con descuento</b> sin botella</span>
-      <span class="gc-ar">›</span>
+    <button type="button" class="op hidden" id="btn-group-5">
+      <span class="op-k">5</span>
+      <span class="op-t"><b id="g5-sub">Con descuento</b><i>sin botella</i></span>
+      <span class="op-ar">›</span>
     </button>
   </div>
 

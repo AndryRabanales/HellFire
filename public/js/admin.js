@@ -1768,10 +1768,10 @@ function pintaCuenta(s, c) {
          chips de comisión quedaban debajo y se leían como si fueran de esto. No es un
          dato del vendedor —como la comisión—, es una promoción del organizador. -->
     ${SOY_COLIDER ? '' : `
-    <div class="card mt8" style="border-color:rgba(86,199,140,.3);background:rgba(86,199,140,.05)">
+    <div class="card mt8" style="border-color:rgba(243,210,122,.3);background:rgba(243,210,122,.05)">
       <div class="row" style="justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="min-width:180px;flex:1">
-          <div style="font:800 13px Manrope;color:#b6f0d1">Descuento del código</div>
+          <div style="font:800 13px Manrope;color:#f3d27a">Descuento del código</div>
           <div class="muted" style="font-size:11px;margin-top:3px;line-height:1.45">
             Le habilita el interruptor en su boletera. Él lo prende solo cuando el
             comprador llega del código del paradero; el resto de sus ventas van al
