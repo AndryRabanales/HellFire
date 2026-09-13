@@ -72,9 +72,7 @@
     </div>
   </div>
 
-  <!-- La tira se desliza, pero cortada a media palabra parecía rota: el degradado
-       del borde dice "sigue" sin robar sitio. -->
-  <div class="tabsbox mt16"><div class="tabs" id="tabs">
+  <div class="tabs mt16" id="tabs">
     <button class="tab sel" data-tab="resumen">Resumen</button>
     <button class="tab" data-tab="boletos">Boletos</button>
     <button class="tab" data-tab="vendedores">Vendedores</button>
@@ -87,7 +85,7 @@
     <button class="tab" data-tab="catalogos">Catálogos</button>
     <button class="tab" data-tab="ajustes">Ajustes</button>
     <button class="tab" data-tab="movimientos">Movimientos</button>
-  </div></div>
+  </div>
 
   <!-- ===== Resumen ===== -->
   <section id="tab-resumen" class="mt16">
@@ -268,7 +266,13 @@
   </section>
 
   <section id="tab-vendedores" class="mt16 hidden">
-    <input class="input" id="sl-q" placeholder="⌕ Buscar vendedor por nombre o código…" style="padding:11px;font-size:15px;width:100%">
+    <!-- Buscar es lo que se hace cada vez; dar de alta, una vez al mes. Por eso el
+         buscador manda y el alta se abre con el "+", que en el teléfono ahorra la
+         media pantalla de formulario que había antes de llegar a la lista. -->
+    <div class="row sl-busca" style="gap:7px">
+      <input class="input grow" id="sl-q" placeholder="⌕ Buscar vendedor por nombre o código…" style="padding:11px;font-size:15px">
+      <button class="btn sm ghost sl-nuevo" id="btn-sl-nuevo" style="flex:none;width:auto;padding:11px 14px">+ Nuevo</button>
+    </div>
     <div class="row mt8 sl-filtros" style="gap:7px">
       <select class="input" id="sl-filter-admin" style="padding:11px;font-size:14px"><option value="">Admin: todos</option></select>
       <select class="input" id="sl-orden" style="padding:11px;font-size:14px">
@@ -279,7 +283,7 @@
         <option value="az">Nombre A-Z</option>
       </select>
     </div>
-    <div class="alta mt12">
+    <div class="alta mt12 plegada" id="sl-alta">
       <div class="alta-t">Dar de alta a alguien nuevo</div>
       <div class="row" style="gap:7px;flex-wrap:nowrap">
         <input class="input grow" id="sl-name" placeholder="Nombre completo del nuevo vendedor" style="padding:10px;font-size:14px">
@@ -293,10 +297,8 @@
          primero si siquiera abrió la app. -->
     <div class="row mt12" id="sl-activity" style="gap:7px;flex-wrap:wrap"></div>
     <div class="muted mt8" id="sl-count" style="font-size:11px"></div>
-    <!-- En el teléfono esta tabla se vuelve tarjetas (ver .data.cards): siete
-         columnas obligaban a deslizar de lado para leer un solo renglón. -->
-    <div class="tablewrap cardwrap mt8">
-      <table class="data cards"><thead><tr>
+    <div class="tablewrap mt8">
+      <table class="data"><thead><tr>
         <th>Vendedor</th><th>Código</th><th>Vendido</th><th>Pagado a su admin</th>
         <th>Faltante</th><th>Estado</th><th style="min-width:230px">Acciones</th>
       </tr></thead><tbody id="sl-body"></tbody></table>
@@ -415,7 +417,14 @@
 
   <!-- ===== Ajustes ===== -->
   <section id="tab-ajustes" class="mt16 hidden" style="max-width:760px">
-    <div class="card">
+    <button class="card st-abrir" id="btn-st-abrir" type="button">
+      <span>
+        <span class="label" style="margin:0">Evento</span>
+        <span class="muted" style="display:block;font-size:11px;margin-top:3px">Nombre, subtítulo, comisión general y folio inicial</span>
+      </span>
+      <span class="st-ar">›</span>
+    </button>
+    <div id="st-evento" hidden>
       <div class="label">Evento</div>
       <input class="input" id="st-name" placeholder="Nombre del evento">
       <input class="input mt8" id="st-subtitle" placeholder="Subtítulo (ej. Noche de brujas)">

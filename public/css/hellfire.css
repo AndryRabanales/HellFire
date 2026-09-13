@@ -554,13 +554,12 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
 .qrbox canvas,.qrbox img{width:100%;height:100%;display:block;image-rendering:pixelated}
 
 /* tabs (admin) */
-/* La tira de pestañas se desliza, pero cortada a media palabra parecía rota. El
-   degradado del borde derecho dice "hay más" sin ocupar sitio. */
-.tabsbox{position:relative}
-.tabsbox::after{content:"";position:absolute;top:0;right:0;bottom:4px;width:30px;
-  pointer-events:none;background:linear-gradient(90deg,rgba(10,5,3,0),rgba(10,5,3,.92))}
-.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;
-  scroll-padding-right:34px}
+/* "+ Nuevo" es del teléfono: en la laptop el formulario de alta cabe abierto y ahí
+   estorbaría un paso de más. */
+.sl-nuevo{display:none}
+@media (max-width:700px){ .sl-nuevo{display:inline-flex} }
+
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:none;padding:10px 14px;border-radius:12px;border:1px solid var(--line);
   background:var(--card);color:var(--cream-60);font:700 12px Manrope;cursor:pointer;white-space:nowrap}
@@ -581,39 +580,20 @@ table.data tr.void td.strike{text-decoration:line-through}
 /* MÓVIL: la tabla se mantiene (más clara) pero MÁS COMPACTA: celdas apretadas,
    cada fila en una sola línea (la tabla se desliza en vez de partir los nombres). */
 @media (max-width:700px){
-  /* Los dos filtros, mitad y mitad: uno debajo del otro era media pantalla de
+  /* Los dos filtros, mitad y mitad: uno debajo del otro eran media pantalla de
      desplegables antes de llegar a la lista. */
   .sl-filtros{flex-wrap:nowrap}
   .sl-filtros .input{flex:1 1 0;min-width:0;width:auto}
-  /* Dar de alta: el nombre completo no cabe con los dos botones al lado. */
+  /* El alta va plegada: se abre con el "+". Ocupaba media pantalla todos los días
+     para algo que se hace una vez al mes. */
+  .alta.plegada{display:none}
   .alta .row{flex-wrap:wrap!important}
   .alta .row .input{flex:1 1 100%}
-
-  /* La tabla de vendedores pasa a TARJETAS. Siete columnas obligaban a deslizar de
-     lado para leer un solo renglón —y el nombre se iba de la pantalla al hacerlo—.
-     Cada etiqueta viene del data-label que ya traía cada celda. */
-  .cardwrap{border:0;border-radius:0;overflow:visible}
-  .data.cards{min-width:0;width:100%}
-  .data.cards thead{display:none}
-  .data.cards tbody,.data.cards tr,.data.cards td{display:block;width:auto}
-  .data.cards tr{border:1px solid var(--line);border-radius:13px;margin-bottom:9px;
-    padding:11px 13px;background:var(--card)}
-  .data.cards td{border:0;padding:4px 0;white-space:normal;
-    display:flex;align-items:center;justify-content:flex-start;gap:8px}
-  .data.cards td::before{content:attr(data-label);flex:none;margin-right:auto;
-    font:600 9px "Space Grotesk",monospace;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--ember-dim)}
-  /* El nombre manda: renglón propio arriba, sin etiqueta y sin recorte. */
-  .data.cards td.cell-name{display:block;padding:0 0 8px;margin-bottom:6px;
-    border-bottom:1px solid rgba(255,120,40,.14)}
-  .data.cards td.cell-name::before{display:none}
-  .data.cards td.cell-name .clip{max-width:100%;font-size:14px;white-space:normal}
-  /* Los botones abajo, separados: son la acción, no un dato más. */
-  .data.cards td[data-label=""]{justify-content:flex-start;gap:7px;flex-wrap:wrap;
-    padding-top:9px;margin-top:5px;border-top:1px solid rgba(255,120,40,.14)}
-  .data.cards td[data-label=""]:empty{display:none}
-  .data.cards td[data-label=""]::before{display:none}
-  .data.cards td .muted{font-size:10px}
+  /* Las tres pastillas de actividad, más apretadas, y su explicación en su renglón
+     para que no quede colgando al lado de la última. */
+  #sl-activity .chip{padding:7px 10px;font-size:11px}
+  #sl-activity .chip b{font-size:15px}
+  #sl-activity .muted{flex:1 1 100%;font-size:10px;margin-top:-2px}
 
   table.data{font-size:11.5px;min-width:560px}
   table.data th{padding:8px 9px;font-size:8.5px}
@@ -662,11 +642,17 @@ table.data tr.void td.strike{text-decoration:line-through}
      quién paga, el check y el botón repartidos. Antes eran cinco filas apiladas y
      la tabla —lo que de verdad se consulta— quedaba fuera de la pantalla. */
   #gx-name{flex:1 1 100%!important;min-width:0!important}
-  #gx-amount{flex:1 1 22%!important;width:auto!important;min-width:0!important}
-  #gx-account{flex:1 1 28%!important;width:auto!important;min-width:0!important}
-  .gx-check{flex:1 1 24%!important;width:auto!important;justify-content:center;padding:9px 8px!important}
-  .gx-check span{font-size:11px}
-  #btn-gx-create{flex:1 1 18%!important;width:auto!important;padding:10px 8px!important}
+  #gx-amount{flex:1 1 46%!important;width:auto!important;min-width:0!important}
+  #gx-account{flex:1 1 46%!important;width:auto!important;min-width:0!important}
+  .gx-check{flex:0 0 auto!important;width:auto!important;padding:10px 12px!important}
+  .gx-check span{font-size:12px;white-space:nowrap}
+  #btn-gx-create{flex:1 1 auto!important;width:auto!important;padding:11px 10px!important}
+
+  /* Los cuatro botones de un gasto se apilaban de tres en tres y estiraban el
+     renglón a 200px de alto. La tabla ya se desliza de lado: que se deslicen con
+     ella en una sola línea, como los de las demás tablas. */
+  .td-acc.envuelve{flex-wrap:nowrap}
+  .td-acc .btn.sm{padding:8px 10px;font-size:11.5px;white-space:nowrap}
 
   /* Los campos y botones traen padding en el atributo style del HTML, que le gana
      a la clase; por eso en el teléfono se veían enormes. Aquí se aprietan todos de
@@ -1569,3 +1555,18 @@ button.rd-p:active{transform:scale(.97)}
 .stat .stbar i{display:block;height:100%;border-radius:999px;
   background:linear-gradient(90deg,var(--ember),#ffb27a)}
 .stat .stpie{font:700 9.5px Manrope;color:var(--cream-45);margin-top:5px}
+
+/* Cortesías: el conteo en una tira, no en cuatro tarjetas. Se miran de pie la noche
+   del evento; cuatro cajas de dos renglones se comían media pantalla antes de llegar
+   a la lista de quién falta, que es lo único que se viene a ver. */
+.ctchip{display:inline-flex;align-items:baseline;gap:5px;padding:6px 10px;border-radius:9px;
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.14);
+  font:600 10.5px Manrope;color:var(--cream-45)}
+.ctchip b{font:800 14px/1 "Space Grotesk",monospace}
+
+/* Atajo a los ajustes del evento: se tocan una vez por temporada, así que en la
+   pantalla son un renglón y su contenido vive en una ventanilla. */
+.card.st-abrir{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.card.st-abrir .st-ar{flex:none;font:700 19px/1 Manrope;color:var(--cream-45)}
+.card.st-abrir:active{background:rgba(255,110,30,.08)}

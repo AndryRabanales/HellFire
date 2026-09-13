@@ -140,7 +140,33 @@ function modal(html) {
   $('#modal').innerHTML = html;
   $('#modal-bg').classList.remove('hidden');
 }
-function closeModal() { $('#modal-bg').classList.add('hidden'); }
+function closeModal() {
+  // Lo que se prestó a la ventanilla se devuelve a su sitio: si se quedara dentro,
+  // al volver a abrirla ya no estaría y los ajustes desaparecerían del panel.
+  devolverPrestado();
+  $('#modal-bg').classList.add('hidden');
+}
+
+/* Abrir un bloque que ya vive en la página dentro de la ventanilla, sin duplicarlo:
+   conserva sus ids, sus escuchas y lo que el usuario haya escrito. */
+let _prestado = null;
+function modalConBloque(sel, titulo) {
+  const el = $(sel);
+  if (!el) return;
+  modal(`<div class="h1" style="font-size:18px">${titulo}</div>
+         <div id="modal-hueco" class="mt12"></div>
+         <button class="btn ghost mt16" onclick="closeModal()">Cerrar</button>`);
+  _prestado = { el, padre: el.parentNode, siguiente: el.nextSibling, oculto: el.hidden };
+  el.hidden = false;
+  $('#modal-hueco').appendChild(el);
+}
+function devolverPrestado() {
+  if (!_prestado) return;
+  const { el, padre, siguiente, oculto } = _prestado;
+  el.hidden = oculto;
+  padre.insertBefore(el, siguiente);
+  _prestado = null;
+}
 $('#modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') closeModal(); });
 
 function confirmModal({ title, body, okLabel, danger, withReason }) {
@@ -856,11 +882,7 @@ async function loadCortesias(silent) {
     ['Entraron', r.entraron, 'var(--ok,#7ee2a8)'],
     ['Faltan', r.faltan, 'var(--ember)'],
     ...(r.anuladas ? [['Anuladas', r.anuladas, 'var(--danger)']] : []),
-  ].map(([t, n, c]) => `<div style="flex:1;min-width:88px;padding:8px 11px;border-radius:11px;
-      background:rgba(255,255,255,.03);border:1px solid rgba(255,120,40,.14)">
-      <div class="muted" style="font-size:9.5px;letter-spacing:.08em;text-transform:uppercase">${t}</div>
-      <div style="font:800 19px 'Space Grotesk';color:${c};margin-top:1px">${n}</div>
-    </div>`).join('');
+  ].map(([t, n, c]) => `<span class="ctchip"><b style="color:${c}">${n}</b>${t.toLowerCase()}</span>`).join('');
   const vistos = r.cortesias
     .filter(c => !_ctFiltro || (_ctFiltro === 'si' ? c.entro : !c.entro))
     .filter(c => !q || c.buyer_name.toLowerCase().includes(q));
@@ -1175,6 +1197,20 @@ let _flTimer = null;
 }));
 ['#fl-admin', '#fl-seller', '#fl-type', '#fl-faculty']
   .forEach(s => $(s).addEventListener('change', loadTicketsTable));
+
+/* El alta llega plegada: se abre con el "+" y se cierra sola al crear a alguien.
+   Ocupaba media pantalla del teléfono delante de la lista, todos los días, para algo
+   que se hace una vez al mes. */
+$('#btn-sl-nuevo') && $('#btn-sl-nuevo').addEventListener('click', () => {
+  const caja = $('#sl-alta');
+  const abre = caja.classList.contains('plegada');
+  caja.classList.toggle('plegada', !abre);
+  $('#btn-sl-nuevo').textContent = abre ? 'Cancelar' : '+ Nuevo';
+  if (abre) { const c = $('#sl-name'); if (c) c.focus(); }
+});
+
+$('#btn-st-abrir') && $('#btn-st-abrir').addEventListener('click',
+  () => modalConBloque('#st-evento', 'Ajustes del evento'));
 
 $('#btn-export').addEventListener('click', async () => {
   // RF-93: la exportación respeta los filtros; se descarga con la sesión en el header
