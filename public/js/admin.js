@@ -183,6 +183,9 @@ async function loadSummary(silent) {
   // Por eso van en su propia tarjeta y el total de la puerta las suma, mientras que
   // el monto y la cobranza las siguen dejando fuera.
   const cort = s.cortesias || 0;
+  // Lo que de verdad se pregunta mirando esta pantalla no es cuánto se cobró, es
+  // cuánto FALTA por cobrar. Estaba, pero había que restarlo de cabeza.
+  const porCobrar = Math.max(0, (s.total || 0) - (s.collected || 0));
   const puerta = s.total_tickets + cort;
   const entraron = s.entered + (s.cortesias_entered || 0);
   $('#sum-stats').innerHTML = `
@@ -190,8 +193,10 @@ async function loadSummary(silent) {
     ${cort ? `<div class="stat st-cort"><div class="sk">Cortesías</div><div class="sv">${cort}</div></div>` : ''}
     ${cort ? `<div class="stat st-puerta"><div class="sk">Total de boletos</div><div class="sv">${puerta}</div></div>` : ''}
     <div class="stat"><div class="sk">Monto total</div><div class="sv">${fmtMoney(s.total)}</div></div>
-    <div class="stat"><div class="sk">Cobrado a vendedores</div><div class="sv">${fmtMoney(s.collected)} <small>de ${fmtMoney(s.total)}</small></div></div>
-    <div class="stat"><div class="sk">Ya ingresaron</div><div class="sv">${entraron} <small>de ${puerta}</small></div></div>`;
+    <div class="stat"><div class="sk">Cobrado a vendedores</div><div class="sv">${fmtMoney(s.collected)} <small>de ${fmtMoney(s.total)}</small></div>
+      ${barraStat(s.collected, s.total, porCobrar > 0 ? `faltan ${fmtMoney(porCobrar)}` : 'todo cobrado')}</div>
+    <div class="stat"><div class="sk">Ya ingresaron</div><div class="sv">${entraron} <small>de ${puerta}</small></div>
+      ${barraStat(entraron, puerta, puerta ? `faltan ${puerta - entraron}` : '')}</div>`;
   // desglose de cobranza por admin
   $('#sum-by-admin').innerHTML = (s.by_admin || []).map(a => {
     const falta = a.sold - a.collected;
@@ -240,7 +245,7 @@ function leerPrivado() {
    completa taparía también su rótulo, y entonces no se sabría ni qué está oculto. */
 function marcarCifras(raiz) {
   const zona = raiz || document.body;
-  zona.querySelectorAll('.stat .sv, .badge').forEach(el => el.classList.add('cifra'));
+  zona.querySelectorAll('.stat .sv, .stat .stpie, .badge').forEach(el => el.classList.add('cifra'));
   zona.querySelectorAll('b, strong, span, div, td, em, i').forEach(el => {
     if (el.classList.contains('cifra')) return;
     // solo hojas o casi: un div con media pantalla adentro no se difumina entero
@@ -362,6 +367,15 @@ function renderFlash(e) {
    responde 401 a todo lo que no le corresponde— pero un panel lleno de puertas
    cerradas invita a empujarlas. */
 let _coliderAplicado = null;
+/* La barra de una tarjeta: dos números y una resta ("$46,600 de $69,320") no dicen
+   de un vistazo si vamos bien o mal. La barra sí, y debajo va la resta ya hecha, que
+   es el número que se usa para decidir a quién hay que ir a cobrar hoy. */
+function barraStat(hecho, total, pie) {
+  const pct = total > 0 ? Math.max(0, Math.min(100, (hecho / total) * 100)) : 0;
+  return `<div class="stbar"><i style="width:${pct.toFixed(1)}%"></i></div>` +
+         (pie ? `<div class="stpie">${esc(pie)}</div>` : '');
+}
+
 function aplicarColider(esCo) {
   if (_coliderAplicado === !!esCo) return;
   _coliderAplicado = !!esCo;
@@ -3122,8 +3136,11 @@ async function loadCatalogs() {
   try {
     const cat = await API.get('/api/catalog');
     const g10 = $('#pr-g10'), g5 = $('#pr-g5'), pct = $('#pr-g5-pct');
+    const g10d = $('#pr-g10d'), pct10 = $('#pr-g10-pct');
     if (g10) {
       g10.checked = !!cat.grupo10_activo;
+      g10d.checked = !!cat.grupo10_desc;
+      pct10.value = cat.grupo10_pct != null ? cat.grupo10_pct : 10;
       g5.checked = !!cat.grupo5_activo;
       pct.value = cat.grupo5_pct != null ? cat.grupo5_pct : 10;
       const guarda = async cuerpo => {
@@ -3132,6 +3149,8 @@ async function loadCatalogs() {
         catch (e) { if (!guard(e)) $('#pr-err').textContent = e.message; }
       };
       g10.onchange = () => guarda({ grupo10_activo: g10.checked ? '1' : '0' });
+      g10d.onchange = () => guarda({ grupo10_desc: g10d.checked ? '1' : '0' });
+      pct10.onchange = () => guarda({ grupo10_pct: pct10.value });
       g5.onchange  = () => guarda({ grupo5_activo:  g5.checked  ? '1' : '0' });
       pct.onchange = () => guarda({ grupo5_pct: pct.value });
     }

@@ -72,7 +72,9 @@
     </div>
   </div>
 
-  <div class="tabs mt16" id="tabs">
+  <!-- La tira se desliza, pero cortada a media palabra parecía rota: el degradado
+       del borde dice "sigue" sin robar sitio. -->
+  <div class="tabsbox mt16"><div class="tabs" id="tabs">
     <button class="tab sel" data-tab="resumen">Resumen</button>
     <button class="tab" data-tab="boletos">Boletos</button>
     <button class="tab" data-tab="vendedores">Vendedores</button>
@@ -85,7 +87,7 @@
     <button class="tab" data-tab="catalogos">Catálogos</button>
     <button class="tab" data-tab="ajustes">Ajustes</button>
     <button class="tab" data-tab="movimientos">Movimientos</button>
-  </div>
+  </div></div>
 
   <!-- ===== Resumen ===== -->
   <section id="tab-resumen" class="mt16">
@@ -266,12 +268,10 @@
   </section>
 
   <section id="tab-vendedores" class="mt16 hidden">
-    <div class="row" style="gap:7px">
-      <input class="input grow" id="sl-q" placeholder="⌕ Buscar vendedor por nombre o código…" style="padding:11px;font-size:15px">
-      <select class="input" id="sl-filter-admin" style="padding:11px;font-size:14px;width:auto"><option value="">Admin: todos</option></select>
-    </div>
-    <div class="row mt8" style="gap:7px;flex-wrap:wrap">
-      <select class="input" id="sl-orden" style="padding:11px;font-size:14px;width:auto">
+    <input class="input" id="sl-q" placeholder="⌕ Buscar vendedor por nombre o código…" style="padding:11px;font-size:15px;width:100%">
+    <div class="row mt8 sl-filtros" style="gap:7px">
+      <select class="input" id="sl-filter-admin" style="padding:11px;font-size:14px"><option value="">Admin: todos</option></select>
+      <select class="input" id="sl-orden" style="padding:11px;font-size:14px">
         <option value="">Orden: por defecto</option>
         <option value="debe-mas">Falta por cobrar: más ↓</option>
         <option value="debe-menos">Falta por cobrar: menos ↑</option>
@@ -293,8 +293,10 @@
          primero si siquiera abrió la app. -->
     <div class="row mt12" id="sl-activity" style="gap:7px;flex-wrap:wrap"></div>
     <div class="muted mt8" id="sl-count" style="font-size:11px"></div>
-    <div class="tablewrap mt8">
-      <table class="data"><thead><tr>
+    <!-- En el teléfono esta tabla se vuelve tarjetas (ver .data.cards): siete
+         columnas obligaban a deslizar de lado para leer un solo renglón. -->
+    <div class="tablewrap cardwrap mt8">
+      <table class="data cards"><thead><tr>
         <th>Vendedor</th><th>Código</th><th>Vendido</th><th>Pagado a su admin</th>
         <th>Faltante</th><th>Estado</th><th style="min-width:230px">Acciones</th>
       </tr></thead><tbody id="sl-body"></tbody></table>
@@ -360,8 +362,13 @@
       <div class="muted" style="margin-bottom:10px">Cada una es aparte y con su propio porcentaje. Se apagan y se prenden cuando quieras; los boletos ya vendidos no cambian de precio.</div>
       <div class="promo">
         <div class="promo-t"><b>Grupo de 10</b><span>botella al representante</span></div>
-        <div class="muted promo-d">Sin descuento: el beneficio es la botella.</div>
-        <label class="sw"><input type="checkbox" id="pr-g10"><span></span><i>Abierto</i></label>
+        <div class="muted promo-d">La botella no se quita nunca. Si además le prendes el descuento, los diez se llevan las dos cosas.</div>
+        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="sw"><input type="checkbox" id="pr-g10"><span></span><i>Abierto</i></label>
+          <label class="sw"><input type="checkbox" id="pr-g10d"><span></span><i>Con descuento</i></label>
+          <input class="input" id="pr-g10-pct" type="number" min="0" max="90" step="1"
+                 style="width:78px;padding:8px;font-size:14px"><span class="muted">%</span>
+        </div>
       </div>
       <div class="promo">
         <div class="promo-t"><b>Grupo de 5</b><span>descuento a los cinco</span></div>

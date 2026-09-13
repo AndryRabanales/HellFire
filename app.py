@@ -452,6 +452,9 @@ DEFAULT_SETTINGS = {
     # grupo de 10 da botella y no descuento, el de 5 da descuento y no botella, y
     # el del vendedor va aparte de los dos.
     "grupo10_activo": "1",
+    # el de 10 puede llevar TAMBIÉN descuento, sin perder la botella
+    "grupo10_desc": "0",
+    "grupo10_pct": "10",
     "grupo5_activo": "0",
     "grupo5_pct": "10",
     "lockout_minutes": "10",
@@ -567,9 +570,16 @@ def descuento_de(db, sel, group_size=None):
             return max(0.0, min(90.0, float(setting(db, "grupo5_pct") or 0)))
         except (TypeError, ValueError):
             return 0.0
-    # El de 10 paga precio entero: lo suyo es la botella del representante. Si aquí
-    # se colara el descuento del vendedor, los diez se llevarían el 10% Y la botella.
+    # El de 10 normalmente paga entero —lo suyo es la botella—, pero el organizador
+    # puede prenderle SU PROPIO descuento sin quitarle la botella: entonces los diez
+    # se llevan las dos cosas, y es a propósito. Lo que nunca entra aquí es el
+    # descuento del vendedor: entre los dos manda el del grupo.
     if group_size == 10:
+        if setting(db, "grupo10_desc") == "1":
+            try:
+                return max(0.0, min(90.0, float(setting(db, "grupo10_pct") or 0)))
+            except (TypeError, ValueError):
+                return 0.0
         return 0.0
     if sel is not None:
         try:
@@ -1663,10 +1673,12 @@ def estado_venta():
     # Las promociones se prenden y se apagan a mitad del día ("hoy sí hay grupos de
     # 5"), así que viajan aquí y no solo en el catálogo: van en una sola cadena para
     # que el vendedor la compare de un vistazo y recargue únicamente si cambió.
-    promos = "%s|%s|%s|%s" % (setting(db, "grupo10_activo") or "0",
-                              setting(db, "grupo5_activo") or "0",
-                              setting(db, "grupo5_pct") or "0",
-                              _mi_descuento(s))
+    promos = "%s|%s|%s|%s|%s|%s" % (setting(db, "grupo10_activo") or "0",
+                                    setting(db, "grupo10_desc") or "0",
+                                    setting(db, "grupo10_pct") or "0",
+                                    setting(db, "grupo5_activo") or "0",
+                                    setting(db, "grupo5_pct") or "0",
+                                    _mi_descuento(s))
     return jsonify(flash_manual=flash_manual(db), ventas_cerradas=ventas_cerradas(db),
                    promos=promos)
 
@@ -1754,6 +1766,8 @@ def catalog():
                    # qué grupos están abiertos y con cuánto descuento: el panel del
                    # vendedor no debe ofrecer un botón que el servidor va a rechazar
                    grupo10_activo=setting(db, "grupo10_activo") == "1",
+                   grupo10_desc=setting(db, "grupo10_desc") == "1",
+                   grupo10_pct=float(setting(db, "grupo10_pct") or 0),
                    grupo5_activo=setting(db, "grupo5_activo") == "1",
                    grupo5_pct=float(setting(db, "grupo5_pct") or 0),
                    mi_descuento=_mi_descuento(s),
@@ -5010,21 +5024,23 @@ def save_settings():
         changed.append(f"comisión general {pc:g}%")
     # Promociones: dos interruptores y un porcentaje. Cada cambio deja su línea porque
     # mueve el precio de todos los boletos que se vendan a partir de ese momento.
-    for clave, etq in (("grupo10_activo", "grupos de 10"), ("grupo5_activo", "grupos de 5")):
+    for clave, etq in (("grupo10_activo", "grupos de 10"), ("grupo5_activo", "grupos de 5"),
+                       ("grupo10_desc", "el descuento del grupo de 10")):
         if clave in b:
             on = "1" if str(b[clave]) in ("1", "True", "true") else "0"
             if setting(db, clave) != on:
                 set_setting(db, clave, on)
                 changed.append(("abrió " if on == "1" else "cerró ") + etq)
-    if "grupo5_pct" in b:
-        try:
-            pc = float(b["grupo5_pct"])
-        except (TypeError, ValueError):
-            return jsonify(error="El descuento del grupo de 5 debe ser un número entre 0 y 90"), 400
-        if pc < 0 or pc > 90:   # un dedazo no puede volverse un 90% callado
-            return jsonify(error="El descuento del grupo de 5 debe ser un número entre 0 y 90"), 400
-        set_setting(db, "grupo5_pct", str(pc))
-        changed.append(f"descuento del grupo de 5 en {pc:g}%")
+    for clave, etq in (("grupo5_pct", "grupo de 5"), ("grupo10_pct", "grupo de 10")):
+        if clave in b:
+            try:
+                pc = float(b[clave])
+            except (TypeError, ValueError):
+                return jsonify(error=f"El descuento del {etq} debe ser un número entre 0 y 90"), 400
+            if pc < 0 or pc > 90:   # un dedazo no puede volverse un 90% callado
+                return jsonify(error=f"El descuento del {etq} debe ser un número entre 0 y 90"), 400
+            set_setting(db, clave, str(pc))
+            changed.append(f"descuento del {etq} en {pc:g}%")
 
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
     for v in FLYER_VARIANTS:

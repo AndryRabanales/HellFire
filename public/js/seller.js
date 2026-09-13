@@ -132,6 +132,15 @@ function aplicarPromos() {
   const b10 = $('#btn-group-10'), b5 = $('#btn-group-5');
   if (b10) b10.classList.toggle('hidden', !g10);
   if (b5)  b5.classList.toggle('hidden', !g5);
+  // El de 10: la botella siempre, y el descuento solo los días que el organizador
+  // lo prende. Si no se dijera en el botón, el vendedor ofrecería el precio de
+  // ayer.
+  const pct10 = CATALOG.grupo10_desc ? Number(CATALOG.grupo10_pct || 0) : 0;
+  const l10 = $('#g10-largo'), c10 = $('#g10-corto');
+  if (l10) l10.textContent = pct10 > 0
+    ? ('Botella gratis + ' + pct10 + '% menos para los diez')
+    : 'El representante se lleva botella gratis';
+  if (c10) c10.textContent = pct10 > 0 ? ('Botella + ' + pct10 + '%') : 'Botella gratis';
   const pct5 = Number(CATALOG.grupo5_pct || 0);
   const texto5 = pct5 > 0 ? (pct5 + '% menos') : 'precio de grupo';
   const sub = $('#g5-sub'), corto = $('#g5-corto');
@@ -512,8 +521,12 @@ function exitGroupMode() {
    servidor (hacia abajo, al peso) o la barra prometería un total que el boleto no
    dice, y el vendedor cobraría de más parado frente a cinco personas. */
 function pctGrupo() {
-  return (GROUP_SIZE === 5 && CATALOG && CATALOG.grupo5_activo)
-    ? Number(CATALOG.grupo5_pct || 0) : 0;
+  if (!CATALOG) return 0;
+  // El de 10 solo lleva descuento si el organizador se lo prendió; la botella no se
+  // le quita por eso, se lleva las dos cosas.
+  if (GROUP_SIZE === 10) return CATALOG.grupo10_desc ? Number(CATALOG.grupo10_pct || 0) : 0;
+  if (GROUP_SIZE === 5)  return CATALOG.grupo5_activo ? Number(CATALOG.grupo5_pct || 0) : 0;
+  return 0;
 }
 function precioGrupo(cents) {
   const p = pctGrupo();
