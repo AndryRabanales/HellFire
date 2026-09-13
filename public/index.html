@@ -96,27 +96,33 @@
     <div id="solo-row"></div>
   </div>
 
-  <!-- ---- switch a plan de grupo ---- -->
-  <!-- La pastilla de la botella parecía un botón y la gente la tocaba esperando algo.
-       Ahora hay UNA sola cosa tocable: el botón lo dice todo en dos renglones. -->
-  <div class="mt16" id="group-switch">
-    <button class="btn grupo10" id="btn-group-10">
-      <span class="g-t">Armar grupo de 10<span class="g-arrow">›</span></span>
-      <span class="g-s"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"
-        stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10.2 2.6h3.6v2.9c0 .85.3 1.66.87 2.29l.65.73c.82.92 1.28 2.1 1.28 3.33v7.55c0 1-.8 1.8-1.8 1.8H9.2c-1 0-1.8-.8-1.8-1.8v-7.55c0-1.23.46-2.41 1.28-3.33l.65-.73c.57-.63.87-1.44.87-2.29V2.6Z"/>
-        <path d="M10.2 5.5h3.6"/><path d="M7.6 13.2h8.8"/></svg>
-        El representante se lleva botella gratis</span>
-    </button>
-    <!-- El de 5 se prende y se apaga desde el panel; cuando está apagado no existe
-         aquí. No lleva botella: lo suyo es el descuento, y así lo dice. -->
-    <button class="btn grupo10 g5 hidden" id="btn-group-5">
-      <span class="g-t">Armar grupo de 5<span class="g-arrow">›</span></span>
-      <span class="g-s"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"
-        stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M20 4 4 20"/><circle cx="7.5" cy="7.5" r="2.6"/><circle cx="16.5" cy="16.5" r="2.6"/></svg>
-        <span id="g5-sub">Los cinco pagan con descuento</span></span>
-    </button>
+  <!-- ---- planes de grupo ---- -->
+  <!-- Dos bloques naranjas apilados competían entre sí y con GENERAR BOLETO, y en el
+       celular empujaban el botón fuera de la pantalla. Ahora son dos fichas lado a
+       lado bajo un rótulo: ocupan un tercio del alto, se leen de un vistazo por el
+       número grande, y si solo hay un grupo abierto esa ficha se estira sola. -->
+  <div class="grupos mt16" id="group-switch">
+    <div class="gr-lbl">¿Vienen en grupo?</div>
+    <div class="gr-ops">
+      <button type="button" class="gcard" id="btn-group-10">
+        <span class="gc-top"><span class="gc-n">10</span><span class="gc-ar">›</span></span>
+        <span class="gc-t">
+          <svg class="gc-ic" viewBox="0 0 24 24" width="14" height="14" fill="none"
+            stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.2 2.6h3.6v2.9c0 .85.3 1.66.87 2.29l.65.73c.82.92 1.28 2.1 1.28 3.33v7.55c0 1-.8 1.8-1.8 1.8H9.2c-1 0-1.8-.8-1.8-1.8v-7.55c0-1.23.46-2.41 1.28-3.33l.65-.73c.57-.63.87-1.44.87-2.29V2.6Z"/>
+            <path d="M10.2 5.5h3.6"/><path d="M7.6 13.2h8.8"/></svg>Botella gratis</span>
+        <span class="gc-s">para el representante</span>
+      </button>
+      <!-- El de 5 lo abre y lo cierra el organizador; cerrado, no existe aquí. -->
+      <button type="button" class="gcard g5 hidden" id="btn-group-5">
+        <span class="gc-top"><span class="gc-n">5</span><span class="gc-ar">›</span></span>
+        <span class="gc-t">
+          <svg class="gc-ic" viewBox="0 0 24 24" width="14" height="14" fill="none"
+            stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 4 4 20"/><circle cx="7.5" cy="7.5" r="2.6"/><circle cx="16.5" cy="16.5" r="2.6"/></svg><span id="g5-sub">Con descuento</span></span>
+        <span class="gc-s">sin botella</span>
+      </button>
+    </div>
   </div>
 
   <!-- ---- modo grupo: nombres de los integrantes ---- -->

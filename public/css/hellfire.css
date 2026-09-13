@@ -438,15 +438,35 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
    Y el botón iba en "contorno", que en esta pantalla se confunde con las tarjetas de
    tipo de boleto: mismo borde, mismo fondo. Ahora lleva relleno, relieve y flecha —
    relleno para decir "soy un botón", flecha para decir "te llevo a otro lado". */
-.btn.grupo10{display:flex;flex-direction:column;align-items:center;gap:3px;
-  padding:12px;width:100%;border:1px solid rgba(255,122,46,.55);
-  background:linear-gradient(180deg,rgba(255,122,46,.2),rgba(255,122,46,.08));
-  box-shadow:0 1px 0 rgba(255,255,255,.09) inset,0 3px 10px rgba(0,0,0,.3)}
-.btn.grupo10 .g-t{font:800 14px Manrope;color:var(--ember-soft);
-  display:inline-flex;align-items:center}
-.btn.grupo10 .g-s{display:inline-flex;align-items:center;gap:5px;
-  font:600 10.5px Manrope;color:#e8c979}
-.btn.grupo10:active{background:linear-gradient(180deg,rgba(255,122,46,.3),rgba(255,122,46,.14))}
+/* Los planes de grupo: dos fichas lado a lado, no dos botonazos apilados. Apilados
+   pesaban más que GENERAR BOLETO —que es la acción de verdad— y en un celular lo
+   empujaban fuera de la pantalla. Se leen por el número grande; el texto chico está
+   para confirmar, no para descifrar. */
+.grupos .gr-lbl{font:700 10px "Space Grotesk",monospace;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--cream-45);margin-bottom:8px}
+.grupos .gr-ops{display:flex;gap:9px;align-items:stretch}
+/* flex:1 con base 0 = si queda una sola ficha, ocupa el ancho entero sin tocar nada */
+.gcard{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:2px;
+  padding:11px 12px 12px;border-radius:14px;text-align:left;cursor:pointer;
+  border:1px solid rgba(246,241,231,.13);background:rgba(246,241,231,.035);
+  -webkit-tap-highlight-color:transparent;transition:border-color .14s,background .14s}
+.gcard .gc-top{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.gcard .gc-n{font:800 27px/1 "Space Grotesk",monospace;color:var(--cream);letter-spacing:-.02em}
+/* La flecha: sin ella la ficha se parece a las de TIPO DE BOLETO, que se marcan.
+   Esta no se marca — lleva a otra pantalla, y hay que decirlo. */
+.gcard .gc-ar{font:700 18px/1 Manrope;color:var(--cream-45);transform:translateY(-1px)}
+.gcard .gc-ic{flex:none;opacity:.9}
+.gcard .gc-t{display:flex;align-items:center;gap:5px;font:800 12.5px Manrope;margin-top:6px}
+.gcard .gc-s{font:600 10.5px Manrope;color:var(--cream-45);line-height:1.3}
+/* El de 10 va en oro, que en este sistema ya es el color de la botella; el de 5 en el
+   naranja de la casa. Dos colores de la misma paleta: distintos entre sí, pero ninguno
+   se pelea con la pantalla como lo hacía el verde. */
+.gcard .gc-ic{color:#e8c979}
+.gcard .gc-t{color:#f3d27a}
+.gcard:active{background:rgba(246,241,231,.07)}
+.gcard.g5 .gc-ic,.gcard.g5 .gc-t{color:var(--ember-soft)}
+.gcard.g5{border-color:rgba(255,122,46,.3);background:rgba(255,122,46,.06)}
+.gcard.g5:active{background:rgba(255,122,46,.11)}
 
 /* La flecha: señal de "esto te lleva a otra pantalla", no de "esto se marca". */
 .g-arrow{font:700 17px/1 Manrope;margin-left:7px;opacity:.65;transform:translateY(-1px)}
@@ -1472,14 +1492,6 @@ button.rd-p:active{transform:scale(.97)}
 .sw input:checked+span::after{left:21px;background:var(--ember)}
 .sw i{font:700 11.5px Manrope,sans-serif;font-style:normal;color:var(--cream-45)}
 .sw input:checked~i{color:var(--ember-soft)}
-
-/* El grupo de 5 va al lado del de 10 y NO lleva botella: si llevara el mismo naranja
-   el vendedor ofrecería la botella en el que no la tiene. Verde = descuento. */
-.btn.grupo10.g5{margin-top:10px;border-color:rgba(86,199,140,.5);
-  background:linear-gradient(180deg,rgba(86,199,140,.18),rgba(86,199,140,.06))}
-.btn.grupo10.g5 .g-t{color:#8fe3b4}
-.btn.grupo10.g5 .g-s{color:#7fd3a6}
-.btn.grupo10.g5:active{background:linear-gradient(180deg,rgba(86,199,140,.28),rgba(86,199,140,.12))}
 
 /* Aviso de descuento propio: el precio que ve este vendedor no es el de los demás. */
 .midesc{margin:-4px 0 12px;padding:9px 12px;border-radius:12px;
