@@ -589,12 +589,6 @@ table.data tr.void td.strike{text-decoration:line-through}
   .alta.plegada{display:none}
   .alta .row{flex-wrap:wrap!important}
   .alta .row .input{flex:1 1 100%}
-  /* Las tres pastillas de actividad, más apretadas, y su explicación en su renglón
-     para que no quede colgando al lado de la última. */
-  #sl-activity .chip{padding:7px 10px;font-size:11px}
-  #sl-activity .chip b{font-size:15px}
-  #sl-activity .muted{flex:1 1 100%;font-size:10px;margin-top:-2px}
-
   table.data{font-size:11.5px;min-width:560px}
   table.data th{padding:8px 9px;font-size:8.5px}
   table.data td{padding:7px 9px;white-space:nowrap}
@@ -648,11 +642,6 @@ table.data tr.void td.strike{text-decoration:line-through}
   .gx-check span{font-size:12px;white-space:nowrap}
   #btn-gx-create{flex:1 1 auto!important;width:auto!important;padding:11px 10px!important}
 
-  /* Los cuatro botones de un gasto se apilaban de tres en tres y estiraban el
-     renglón a 200px de alto. La tabla ya se desliza de lado: que se deslicen con
-     ella en una sola línea, como los de las demás tablas. */
-  .td-acc.envuelve{flex-wrap:nowrap}
-  .td-acc .btn.sm{padding:8px 10px;font-size:11.5px;white-space:nowrap}
 
   /* Los campos y botones traen padding en el atributo style del HTML, que le gana
      a la clase; por eso en el teléfono se veían enormes. Aquí se aprietan todos de
@@ -1488,6 +1477,16 @@ button.rd-p:active{transform:scale(.97)}
 /* Gastos lleva cuatro botones con texto: esos sí pueden bajar de renglón. Los de
    icono, no — son tres cuadros y caben siempre. */
 .td-acc.envuelve{flex-wrap:wrap;justify-content:flex-start}
+/* En el teléfono no: apilados de tres en tres estiraban cada gasto a 130px de alto
+   y la tabla quedaba en tres renglones de pantalla. La tabla ya se desliza de lado,
+   así que los botones se deslizan con ella, en una línea.
+   OJO: esto va DESPUÉS de la regla de arriba a propósito. Estaba en el bloque de
+   móvil de más arriba y no aplicaba: entre dos reglas que pesan igual, gana la
+   última del archivo, y la última era la de envolver. */
+@media (max-width:700px){
+  .td-acc.envuelve{flex-wrap:nowrap}
+  .td-acc .btn.sm{padding:8px 10px;font-size:11.5px;white-space:nowrap}
+}
 
 /* barra de "hay versión nueva": arriba de todo y por encima de cualquier ventanilla,
    porque si queda debajo de un modal no sirve de nada */
