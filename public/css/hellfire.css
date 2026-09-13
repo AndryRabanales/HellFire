@@ -316,6 +316,10 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
    y "Salir" parecían parte de él. Una línea tenue la cierra. */
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;
   padding-bottom:13px;margin-bottom:15px;border-bottom:1px solid rgba(255,120,40,.13)}
+.topbar > .row:first-child{min-width:0}
+.topbar > .row:first-child > div{min-width:0}
+.topbar .who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:700px){ .topbar{gap:8px} }
 .avatar{width:36px;height:36px;border-radius:11px;background:rgba(255,110,30,.12);
   border:1px solid rgba(255,110,30,.4);display:flex;align-items:center;justify-content:center;
   font:800 16px Cinzel;color:var(--ember)}
