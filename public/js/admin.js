@@ -139,12 +139,15 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) star
 function modal(html) {
   $('#modal').innerHTML = html;
   $('#modal-bg').classList.remove('hidden');
+  $('#modal').scrollTop = 0;
+  document.body.style.overflow = 'hidden';
 }
 function closeModal() {
   // Lo que se prestó a la ventanilla se devuelve a su sitio: si se quedara dentro,
   // al volver a abrirla ya no estaría y los ajustes desaparecerían del panel.
   devolverPrestado();
   $('#modal-bg').classList.add('hidden');
+  if (!$('#tour')) document.body.style.overflow = '';   // la guía tiene su propio candado
 }
 
 /* Abrir un bloque que ya vive en la página dentro de la ventanilla, sin duplicarlo:
