@@ -524,27 +524,34 @@ function precioGrupo(cents) {
 function renderGroupPriceBar() {
   const tipos = tiposDeGrupo();
   const barra = $('#group-price-bar');
-  // Todavía no eligió el tipo: en vez del precio, los tres botones.
+  // Todavía no eligió el tipo. Antes eran cuatro tarjetitas en fila: con cuatro
+  // tipos —y "Ultra vip" y "$1,200" dentro— en un celular se partían los nombres y
+  // los precios se encimaban. Ahora es una lista: un tipo por renglón, con lo que
+  // de verdad se pregunta enfrente —cuánto sale el grupo completo— y el precio por
+  // persona debajo, chico, para el que quiera la cuenta.
   if (!GROUP_TYPE) {
+    barra.classList.add('eligiendo');
     barra.innerHTML =
-      `<div class="gp-line">¿De qué tipo es el grupo?</div>
-       <div class="gt-ops">${tipos.map(t => {
+      `<div class="gt-h">¿De qué tipo es el grupo de ${GROUP_SIZE}?</div>
+       <div class="gt-list">${tipos.map(t => {
          const final = precioGrupo(t.price_cents);
          // con descuento de grupo el tachado es el precio de hoy de ese boleto; sin
          // él, el de antes de la flash
          const antes = final < t.price_cents ? t.price_cents
                      : (t.normal_cents && t.normal_cents > t.price_cents ? t.normal_cents : 0);
-         return `<button type="button" class="gt-op" data-gt="${t.id}">
+         return `<button type="button" class="gt-row" data-gt="${t.id}">
            <span class="gt-n">${esc(t.name)}</span>
-           <span class="gt-p">${antes
-             ? `<span class="f-antes">${fmtMoney(antes / 100)}</span> ${fmtMoney(final / 100)}`
-             : fmtMoney(final / 100)}</span></button>`;
+           <span class="gt-p">
+             <span class="gt-tot">${fmtMoney(final * GROUP_SIZE / 100)}</span>
+             <span class="gt-cu">${antes ? `<s>${fmtMoney(antes / 100)}</s> ` : ''}${fmtMoney(final / 100)} c/u</span>
+           </span>
+           <span class="gt-ar">›</span></button>`;
        }).join('')}${tipos.length > 1 ? `
-         <button type="button" class="gt-op gt-mix" data-gt="mixto">
+         <button type="button" class="gt-row gt-mix" data-gt="mixto">
            <span class="gt-n">Mixto</span>
-           <span class="gt-p">cada quien el suyo</span></button>` : ''}</div>
-       <div class="gp-save">Si el grupo va todo igual, elige el tipo. Si van revueltos, toca Mixto.</div>`;
-    $$('.gt-op').forEach(b => b.onclick = () => {
+           <span class="gt-p"><span class="gt-cu">cada quien elige el suyo</span></span>
+           <span class="gt-ar">›</span></button>` : ''}</div>`;
+    $$('.gt-row').forEach(b => b.onclick = () => {
       // Mixto no es un tipo: es decir "cada quien el suyo". Los diez arrancan en el
       // primero de la lista y cada renglon trae su selector a la vista, porque asi
       // es como llega la gente: "Danniree general, Andry ultra VIP".
@@ -558,6 +565,7 @@ function renderGroupPriceBar() {
   // Con la mezcla ya no hay un "precio c/u": lo que importa es el total y de que se
   // compone. El reparto se dice en palabras —"7 General, 3 VIP"— porque es asi como
   // el vendedor le cobra al grupo.
+  barra.classList.remove('eligiendo');
   const usados = GROUP_TYPES.filter(Boolean);
   const total = usados.reduce((a, t) => a + precioGrupo(t.price_cents), 0);
   const sinDesc = usados.reduce((a, t) => a + t.price_cents, 0);
