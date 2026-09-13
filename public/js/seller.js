@@ -115,7 +115,44 @@ function aplicarCierre() {
   });
   if (cerradas) $('#f-hint').textContent = 'El corte ya se hizo';
   else if (!enGrupo) $('#f-hint').textContent = '';
+  // VA AL FINAL, porque la l\u00ednea de arriba acaba de MOSTRAR #group-switch: si las
+  // promociones est\u00e1n apagadas hay que volver a esconderlo.
+  aplicarPromos();
   return cerradas;
+}
+
+/* Los grupos se prenden y se apagan desde el panel, y el 10% es de vendedores
+   contados. Lo que est\u00e1 apagado no se ense\u00f1a: un bot\u00f3n que existe y luego rebota
+   con "los grupos de 5 est\u00e1n cerrados" es el vendedor qued\u00e1ndose callado frente
+   al comprador despu\u00e9s de haberle prometido el precio. */
+function aplicarPromos() {
+  if (!CATALOG) return;
+  const g10 = !!CATALOG.grupo10_activo;
+  const g5  = !!CATALOG.grupo5_activo;
+  const b10 = $('#btn-group-10'), b5 = $('#btn-group-5');
+  if (b10) b10.classList.toggle('hidden', !g10);
+  if (b5)  b5.classList.toggle('hidden', !g5);
+  const pct5 = Number(CATALOG.grupo5_pct || 0);
+  const sub = $('#g5-sub');
+  if (sub) sub.textContent = pct5 > 0
+    ? ('Los cinco pagan ' + pct5 + '% menos \u00b7 sin botella')
+    : 'Los cinco entran juntos \u00b7 sin botella';
+  // Sin ning\u00fan grupo abierto no queda nada que tocar: fuera el bloque entero.
+  const sw = $('#group-switch');
+  if (sw && !GROUP_SIZE && !(CATALOG && CATALOG.ventas_cerradas)) {
+    sw.classList.toggle('hidden', !(g10 || g5));
+  }
+  // Y su propio descuento, si el admin se lo prendi\u00f3.
+  const mi = Number(CATALOG.mi_descuento || 0);
+  const caja = $('#mi-desc');
+  if (caja) {
+    caja.classList.toggle('hidden', !(mi > 0));
+    if (mi > 0) {
+      caja.innerHTML = 'Est\u00e1s vendiendo con <b>' + mi + '% de descuento</b>. ' +
+        'Los precios de abajo ya salen rebajados: cobra lo que diga el bot\u00f3n, ' +
+        'no el precio de lista.';
+    }
+  }
 }
 
 function sel_agotado() {
@@ -171,6 +208,7 @@ function renderTypes() {
 
 /* ---------------- cronómetro de la próxima fase de precio ---------------- */
 let PHASE_INT = null, _reloadingCatalog = false;
+let PROMOS_VISTAS = null;   // última firma de promociones que mandó el servidor
 
 // "AAAA-MM-DD" → medianoche local de ese día (cuando entra la nueva fase)
 function phaseStart(ymd) {
@@ -194,10 +232,16 @@ function nextGlobalPhase() {
 
 // ¿Estamos en venta flash? Lo dice el catálogo: si un tipo trae normal_cents es
 // porque su precio de hoy está por debajo del que regiría sin el flash.
+function precioSinMiDescuento(t) {
+  // El precio del tipo ANTES del descuento propio del vendedor. Sirve para no
+  // confundir su descuento con una venta flash: los dos dejan un precio tachado.
+  return (t.base_cents === undefined || t.base_cents === null) ? t.price_cents : t.base_cents;
+}
 function flashActivo() {
-  const t = (CATALOG.types || []).filter(x => x.normal_cents && x.normal_cents > x.price_cents);
+  const t = (CATALOG.types || []).filter(x => x.normal_cents
+                                           && x.normal_cents > precioSinMiDescuento(x));
   if (!t.length) return null;
-  const ahorro = Math.max(...t.map(x => (x.normal_cents - x.price_cents) / 100));
+  const ahorro = Math.max(...t.map(x => (x.normal_cents - precioSinMiDescuento(x)) / 100));
   // el nombre de la fase EN CURSO (no la que viene): si el admin la llamó "Fase 2
   // Flash", el vendedor tiene que poder decir en cuál está cuando le pregunten
   return { nombre: t[0].phase || 'Venta flash', ahorroMax: ahorro };
@@ -211,7 +255,7 @@ function renderPhaseTimer() {
   // existe —y peor, uno más largo del real—. Se dice lo que sí es cierto: está
   // activa ahora, y puede terminar en cualquier momento.
   if (fmanual) {
-    const vuelve = (CATALOG.types || []).filter(t => t.normal_cents > t.price_cents)
+    const vuelve = (CATALOG.types || []).filter(t => t.normal_cents > precioSinMiDescuento(t))
       .map(t => `<span>${esc(t.name)}<b>${fmtMoney(t.normal_cents / 100)}</b></span>`).join('');
     box.classList.remove('hidden'); box.classList.add('flash'); box.classList.remove('urge');
     box.innerHTML = `<div class="pt-flash">⚡ ${esc(fmanual.nombre)} · hasta $${fmanual.ahorroMax.toFixed(0)} de descuento</div>
@@ -272,6 +316,7 @@ async function reloadCatalog() {
   try {
     CATALOG = await API.get('/api/catalog');
     renderTypes();
+    aplicarPromos();
   } catch (e) { /* reintenta en el siguiente tick */ }
   finally { _reloadingCatalog = false; }
 }
@@ -300,22 +345,50 @@ async function pulso() {
     const e = await API.get('/api/estado');
     const cambioCierre = !!e.ventas_cerradas !== !!CATALOG.ventas_cerradas;
     const cambioFlash = !!e.flash_manual !== !!CATALOG.flash_manual;
-    if (!cambioCierre && !cambioFlash) return;
+    // Las promociones se comparan contra la última cadena que mandó el servidor, no
+    // contra CATALOG: el mismo dato llega con otro formato en cada respuesta y
+    // compararlos daría "cambió" cada cinco segundos.
+    const cambioPromos = PROMOS_VISTAS !== null && e.promos !== undefined
+                      && e.promos !== PROMOS_VISTAS;
+    if (e.promos !== undefined) PROMOS_VISTAS = e.promos;
+    if (!cambioCierre && !cambioFlash && !cambioPromos) return;
+    const miAntes = Number(CATALOG.mi_descuento || 0);
     const c = await API.get('/api/catalog');
     CATALOG = c;
     if (cambioCierre) {
       if (aplicarCierre()) toast('El organizador cerr\u00f3 las ventas');
       return;
     }
-    renderTypes(); renderPhaseTimer();
+    renderTypes(); renderPhaseTimer();   // renderTypes repinta también las promociones
+    // Le cerraron el grupo mientras lo estaba armando: se le dice AHORA, con dos
+    // nombres escritos, y no al final con los cinco y el dinero en la mano. Si ya
+    // generó no se le toca nada: le faltan por descargar los boletos.
+    if (GROUP_SIZE && !GROUP_RESULT
+        && !(GROUP_SIZE === 5 ? c.grupo5_activo : c.grupo10_activo)) {
+      const cual = GROUP_SIZE;          // exitGroupMode lo borra
+      exitGroupMode();
+      aplicarCierre();
+      toast('El organizador cerr\u00f3 los grupos de ' + cual);
+      return;
+    }
     if (GROUP_SIZE) {
       // el tipo elegido guarda su precio: hay que releerlo del catálogo nuevo o la
       // barra seguiría enseñando el de antes
       if (GROUP_TYPE) GROUP_TYPE = tiposDeGrupo().find(t => t.id === GROUP_TYPE.id) || null;
       renderGroupPriceBar();
     }
-    toast(c.flash_manual ? '\u26a1 Empez\u00f3 la venta flash: precios nuevos'
-                         : 'Termin\u00f3 la venta flash: precios normales');
+    if (cambioFlash) {
+      toast(c.flash_manual ? '\u26a1 Empez\u00f3 la venta flash: precios nuevos'
+                           : 'Termin\u00f3 la venta flash: precios normales');
+    } else if (cambioPromos) {
+      // Solo se avisa lo que le cambia el número que va a decir en voz alta: su
+      // propio descuento. Que abran o cierren los grupos se ve en los botones.
+      const mi = Number(c.mi_descuento || 0);
+      if (mi !== miAntes) {
+        toast(mi > 0 ? ('Tu descuento de ' + mi + '% ya est\u00e1 activo')
+                     : 'Se apag\u00f3 tu descuento: precios normales');
+      }
+    }
   } catch (e) {
     // Si le cerraron el código o pusieron su grupo en pausa, el latido es lo primero
     // que se entera. Antes se lo tragaba y el vendedor seguía viendo su panel como si
@@ -402,6 +475,20 @@ function exitGroupMode() {
   $('#group-names').innerHTML = '';
 }
 
+/* Lo que de verdad va a costar cada boleto de ESTE grupo. El de 10 va entero —su
+   beneficio es la botella—; el de 5 lleva su porcentaje. Se redondea igual que el
+   servidor (hacia abajo, al peso) o la barra prometería un total que el boleto no
+   dice, y el vendedor cobraría de más parado frente a cinco personas. */
+function pctGrupo() {
+  return (GROUP_SIZE === 5 && CATALOG && CATALOG.grupo5_activo)
+    ? Number(CATALOG.grupo5_pct || 0) : 0;
+}
+function precioGrupo(cents) {
+  const p = pctGrupo();
+  if (!(p > 0) || !(cents > 0)) return cents;
+  return Math.max(0, Math.floor(Math.floor(cents * (100 - p) / 100) / 100) * 100);
+}
+
 function renderGroupPriceBar() {
   const tipos = tiposDeGrupo();
   const barra = $('#group-price-bar');
@@ -410,12 +497,16 @@ function renderGroupPriceBar() {
     barra.innerHTML =
       `<div class="gp-line">¿De qué tipo es el grupo?</div>
        <div class="gt-ops">${tipos.map(t => {
-         const enFlash = t.normal_cents && t.normal_cents > t.price_cents;
+         const final = precioGrupo(t.price_cents);
+         // con descuento de grupo el tachado es el precio de hoy de ese boleto; sin
+         // él, el de antes de la flash
+         const antes = final < t.price_cents ? t.price_cents
+                     : (t.normal_cents && t.normal_cents > t.price_cents ? t.normal_cents : 0);
          return `<button type="button" class="gt-op" data-gt="${t.id}">
            <span class="gt-n">${esc(t.name)}</span>
-           <span class="gt-p">${enFlash
-             ? `<span class="f-antes">${fmtMoney(t.normal_cents / 100)}</span> ${fmtMoney(t.price_cents / 100)}`
-             : fmtMoney(t.price_cents / 100)}</span></button>`;
+           <span class="gt-p">${antes
+             ? `<span class="f-antes">${fmtMoney(antes / 100)}</span> ${fmtMoney(final / 100)}`
+             : fmtMoney(final / 100)}</span></button>`;
        }).join('')}${tipos.length > 1 ? `
          <button type="button" class="gt-op gt-mix" data-gt="mixto">
            <span class="gt-n">Mixto</span>
@@ -436,15 +527,21 @@ function renderGroupPriceBar() {
   // compone. El reparto se dice en palabras —"7 General, 3 VIP"— porque es asi como
   // el vendedor le cobra al grupo.
   const usados = GROUP_TYPES.filter(Boolean);
-  const total = usados.reduce((a, t) => a + t.price_cents, 0);
+  const total = usados.reduce((a, t) => a + precioGrupo(t.price_cents), 0);
+  const sinDesc = usados.reduce((a, t) => a + t.price_cents, 0);
   const cuenta = new Map();
   usados.forEach(t => cuenta.set(t.name, (cuenta.get(t.name) || 0) + 1));
   const reparto = [...cuenta.entries()].map(([n, c]) => `${c} ${esc(n)}`).join(' \u00b7 ');
   barra.innerHTML = `
     <div class="gp-line">Grupo de ${GROUP_SIZE} \u00b7 ${GROUP_MIXTO ? 'mixto' : esc(GROUP_TYPE.name)}
       <button type="button" class="gt-cambiar" id="gt-cambiar">cambiar</button></div>
-    <div class="gp-price">${fmtMoney(total / 100)} <span class="gp-cu">total</span></div>
-    <div class="gp-save">${GROUP_MIXTO ? esc(reparto) + ' \u00b7 ' : ''}marca con ★ quién recoge la botella</div>`;
+    <div class="gp-price">${total < sinDesc
+        ? `<span class="f-antes">${fmtMoney(sinDesc / 100)}</span> ` : ''}${fmtMoney(total / 100)} <span class="gp-cu">total</span></div>
+    <div class="gp-save">${GROUP_MIXTO ? esc(reparto) + ' \u00b7 ' : ''}${GROUP_SIZE === 5
+        ? (total < sinDesc
+            ? pctGrupo() + '% menos para los cinco \u00b7 este grupo no lleva botella'
+            : 'los cinco juntos \u00b7 este grupo no lleva botella')
+        : 'marca con ★ quién recoge la botella'}</div>`;
   const c = $('#gt-cambiar');
   if (c) c.onclick = () => { GROUP_TYPE = null; GROUP_TYPES = []; GROUP_MIXTO = false;
     renderGroupPriceBar(); renderGroupNames(); aplicarCierre(); };
@@ -483,7 +580,7 @@ function renderGroupNames() {
       const sel = document.createElement('select');
       sel.className = 'input gr-sel'; sel.dataset.idx = i;
       sel.innerHTML = tipos.map(t =>
-        `<option value="${t.id}">${esc(t.name)} \u00b7 ${fmtMoney(t.price_cents / 100)}</option>`).join('');
+        `<option value="${t.id}">${esc(t.name)} \u00b7 ${fmtMoney(precioGrupo(t.price_cents) / 100)}</option>`).join('');
       sel.value = String((GROUP_TYPES[i] || GROUP_TYPE).id);
       sel.addEventListener('change', () => {
         GROUP_TYPES[i] = tipos.find(t => String(t.id) === sel.value);
@@ -548,7 +645,9 @@ function showGroupResult(r) {
   $('#group-result-bar').innerHTML = `
     <div class="gp-line">¡Listo! Grupo de ${r.size} generado ✓</div>
     <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
-    <div class="gp-save">El boleto de ${esc(r.representative || 'el representante')} lleva la ★: con ese recoge la botella en la barra</div>`;
+    <div class="gp-save">${r.size === 5
+      ? 'Los cinco ya salieron con su descuento \u00b7 este grupo no lleva botella'
+      : `El boleto de ${esc(r.representative || 'el representante')} lleva la ★: con ese recoge la botella en la barra`}</div>`;
   $('#f-hint').textContent = 'Descarga cada boleto abajo';
   $('#btn-generate-group').classList.add('hidden');
   $('#btn-group-back').classList.add('hidden');
@@ -851,6 +950,7 @@ $('#btn-logout-2').addEventListener('click', logout);
 $('#btn-generate').addEventListener('click', generate);
 $('#btn-generate-group').addEventListener('click', generateGroup);
 $('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
+$('#btn-group-5').addEventListener('click', () => enterGroupMode(5));
 $('#btn-group-back').addEventListener('click', exitGroupMode);
 $('#btn-group-done').addEventListener('click', exitGroupMode);
 $('#btn-history').addEventListener('click', () => { show('history'); loadHistory(); });
@@ -978,7 +1078,23 @@ function panelDudas() {
          'Los otros nueve boletos no la traen, así que <b>nadie más puede reclamarla</b>. ' +
          'Por eso el sistema no te deja generar el grupo hasta que marques a uno — y ' +
          'conviene que sea alguien que <b>sí vaya a ir</b>.<br><br>' +
-         'El grupo <b>no</b> tiene descuento: los diez pagan precio normal y el beneficio es la botella.') +
+         'El grupo de 10 <b>no</b> tiene descuento: los diez pagan precio normal y el beneficio es la botella.') +
+    // La pregunta que va a llegar en cuanto vea los dos botones. Se contesta aunque
+    // el grupo de 5 esté cerrado ese día: la promoción se prende y se apaga, y quien
+    // lee la guía por la mañana vende por la tarde.
+    duda('¿En qué se diferencia el grupo de 5 del de 10?',
+         'Son <b>dos promociones distintas</b> y no se mezclan:<br><br>' +
+         '<b>Grupo de 10:</b> los diez pagan precio normal y uno se lleva la <b>botella</b>.<br>' +
+         '<b>Grupo de 5:</b> los cinco pagan con <b>descuento</b> y <b>no</b> hay botella.<br><br>' +
+         'El botón te dice de cuánto es el descuento ese día. Si no ves alguno de los ' +
+         'dos botones, es que el organizador lo tiene <b>cerrado</b> en ese momento.') +
+    duda('Mis precios salen más bajos que los de otro vendedor',
+         'Es tu <b>descuento</b>: el organizador te lo prendió a ti. Arriba del ' +
+         'formulario te lo dice, y los precios de los botones <b>ya salen rebajados</b>.<br><br>' +
+         '<b>Cobra lo que dice el botón</b>, no el precio de lista: ese mismo número es ' +
+         'el que va impreso en el boleto, y es el que el sistema te va a pedir en el corte.<br><br>' +
+         'Se prende y se apaga cuando el organizador quiera. Los boletos que ya ' +
+         'generaste <b>no cambian</b>: cada uno se quedó con el precio del día que se vendió.') +
     duda('¿Qué es la ★ que sale junto a la descarga?',
          'Son <b>dos imágenes distintas</b> y no hay que confundirlas:<br><br>' +
          '<b>La flecha</b> baja el <b>boleto con QR</b>. Ese es el que se muestra en la ' +
@@ -1050,6 +1166,9 @@ const TOUR = [
   // El tour es de un vistazo, no un manual: dice QUÉ hace el botón y qué hace la
   // estrella, en un renglón. Lo demás vive en el "?", que se lee cuando hace falta.
   { sel: '#btn-group-10', txt: '¿Van <b>10 juntos</b>? Aquí. Marca <b>★</b> a uno: ese recoge la botella.' },
+  // Solo aparece si el organizador tiene abiertos los grupos de 5; el recorrido se
+  // salta solo las paradas que no están en pantalla.
+  { sel: '#btn-group-5',  txt: '¿Van <b>5 juntos</b>? Aquí salen los cinco con <b>descuento</b>, sin botella.' },
   { sel: '#f-phase-timer',txt: 'Este reloj dice cuándo <b>suben los precios</b>. Enséñaselo para cerrar la venta.' },
 ];
 
@@ -1147,7 +1266,8 @@ function mostrarTutorial() {
 const TOUR_GRUPO = [
   { sel: '#group-names',          txt: 'Escribe el <b>nombre completo</b> de cada integrante. Cada uno recibe su propio boleto.' },
   { sel: '#group-names .repbtn',  txt: 'Marca con <b>\u2605</b> a uno: es quien recoge la <b>botella</b> en la barra.' },
-  { sel: '#btn-generate-group',   txt: 'Aqu\u00ed se generan <b>los diez boletos</b> de una vez. Despu\u00e9s descargas cada uno.' },
+  // "los diez" no vale para el grupo de 5, y el mismo recorrido sirve para los dos
+  { sel: '#btn-generate-group',   txt: 'Aqu\u00ed se generan <b>todos los boletos</b> de una vez. Despu\u00e9s descargas cada uno.' },
 ];
 
 /* Los dos archivos son lo que más se confunde, y equivocarse cuesta caro: si el

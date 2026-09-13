@@ -448,6 +448,12 @@ DEFAULT_SETTINGS = {
     "flash_manual": "0",
     "seller_commission_pct": "10",   # % de comisión del vendedor sobre lo que entrega
     "max_login_attempts": "8",
+    # Promociones. Cada una es su propio interruptor con su propio porcentaje: el
+    # grupo de 10 da botella y no descuento, el de 5 da descuento y no botella, y
+    # el del vendedor va aparte de los dos.
+    "grupo10_activo": "1",
+    "grupo5_activo": "0",
+    "grupo5_pct": "10",
     "lockout_minutes": "10",
 }
 
@@ -528,6 +534,84 @@ def flyer_info(db):
         out[f"flyer_nomx_{v}"] = float(setting(db, f"flyer_nomx_{v}") or 0.3935)
         out[f"flyer_nomw_{v}"] = float(setting(db, f"flyer_nomw_{v}") or 0.569)
     return out
+
+def _mi_descuento(sesion):
+    """El descuento de quien está en sesión, si es vendedor y lo tiene.
+
+    sqlite3.Row no tiene .get(), así que se pregunta por sus llaves: en una fila vieja
+    —de antes de que existiera la columna— la llave sencillamente no está."""
+    sel = sesion.get("seller") if isinstance(sesion, dict) else None
+    if sel is None:
+        return 0
+    try:
+        v = sel["descuento_pct"] if "descuento_pct" in sel.keys() else None
+    except Exception:
+        v = None
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def descuento_de(db, sel, group_size=None):
+    """Qué porcentaje de descuento le toca a este boleto.
+
+    NUNCA se suman dos. Si el boleto viene de un grupo con descuento, ese manda sobre
+    el del vendedor: el vendedor ya gana su comisión sobre esa venta, y encimarle otro
+    10% deja un UADY a la mitad de precio sin que nadie lo haya decidido.
+
+    Con la venta flash SÍ se suma, y es a propósito: el descuento se calcula sobre el
+    precio que esté vigente, sea el de la fase o el de flash."""
+    if group_size == 5 and setting(db, "grupo5_activo") == "1":
+        try:
+            return max(0.0, min(90.0, float(setting(db, "grupo5_pct") or 0)))
+        except (TypeError, ValueError):
+            return 0.0
+    # El de 10 paga precio entero: lo suyo es la botella del representante. Si aquí
+    # se colara el descuento del vendedor, los diez se llevarían el 10% Y la botella.
+    if group_size == 10:
+        return 0.0
+    if sel is not None:
+        try:
+            v = sel["descuento_pct"] if "descuento_pct" in sel.keys() else None
+        except Exception:
+            v = None
+        if v:
+            try:
+                return max(0.0, min(90.0, float(v)))
+            except (TypeError, ValueError):
+                return 0.0
+    return 0.0
+
+
+def con_descuento(precio, normal, pct):
+    """Baja el precio y deja tachado el de antes.
+
+    Redondea HACIA ABAJO al peso: el vendedor cobra en efectivo parado en un paradero
+    y $157.50 lo obliga a cargar monedas. Los centavos los absorbe la casa.
+
+    El tachado pasa a ser el precio previo al descuento —no el de lista— para que el
+    comprador vea de dónde salió el número que está pagando."""
+    if pct <= 0:
+        return precio, normal
+    nuevo = int(precio * (100.0 - pct) / 100.0)
+    nuevo = (nuevo // 100) * 100                 # al peso, hacia abajo
+    return max(0, nuevo), (normal or precio)
+
+
+def etiqueta_descuento(fase, pct):
+    """Cómo se llama, dentro del boleto, el motivo por el que sale un precio tachado.
+
+    Si hay fase de venta flash manda ella: es el nombre que el vendedor está diciendo
+    en voz alta. Si no la hay, el tachado lo produjo el descuento y hay que decirlo —
+    sin esto el boleto salía anunciando una "Venta flash" que no existía ese día."""
+    if fase:
+        return fase
+    if pct and pct > 0:
+        entero = int(pct)
+        return "Descuento %s%%" % (entero if float(pct) == entero else round(float(pct), 2))
+    return fase
+
 
 def flash_manual(db):
     """¿Está prendido el botón de venta flash? Manda sobre el calendario: con él
@@ -692,7 +776,9 @@ def init_db():
                     "commission_pct REAL",
                     "tutorial_seen INTEGER NOT NULL DEFAULT 0",
                     "es_lider INTEGER NOT NULL DEFAULT 0",
-                    "ultimo_ingreso TEXT"):
+                    "ultimo_ingreso TEXT",
+                    # el 10% del paradero: NULL = este vendedor no lo tiene
+                    "descuento_pct REAL"):
             db.execute(f"ALTER TABLE sellers ADD COLUMN IF NOT EXISTS {col}")
         db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
                    "role TEXT NOT NULL DEFAULT 'admin'")
@@ -747,6 +833,8 @@ def init_db():
             db.execute("ALTER TABLE sellers ADD COLUMN tutorial_seen INTEGER NOT NULL DEFAULT 0")
         if "es_lider" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN es_lider INTEGER NOT NULL DEFAULT 0")
+        if "descuento_pct" not in scols:
+            db.execute("ALTER TABLE sellers ADD COLUMN descuento_pct REAL")
         if "ultimo_ingreso" not in scols:
             db.execute("ALTER TABLE sellers ADD COLUMN ultimo_ingreso TEXT")
         gcols = [r["name"] for r in db.execute("PRAGMA table_info(expenses)").fetchall()]
@@ -1572,7 +1660,15 @@ def estado_venta():
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
-    return jsonify(flash_manual=flash_manual(db), ventas_cerradas=ventas_cerradas(db))
+    # Las promociones se prenden y se apagan a mitad del día ("hoy sí hay grupos de
+    # 5"), así que viajan aquí y no solo en el catálogo: van en una sola cadena para
+    # que el vendedor la compare de un vistazo y recargue únicamente si cambió.
+    promos = "%s|%s|%s|%s" % (setting(db, "grupo10_activo") or "0",
+                              setting(db, "grupo5_activo") or "0",
+                              setting(db, "grupo5_pct") or "0",
+                              _mi_descuento(s))
+    return jsonify(flash_manual=flash_manual(db), ventas_cerradas=ventas_cerradas(db),
+                   promos=promos)
 
 
 @app.get("/api/catalog")
@@ -1582,13 +1678,22 @@ def catalog():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     types = []
+    # Si a este vendedor le prendieron su descuento, la boletera tiene que enseñárselo
+    # YA rebajado: es el número que va a decir en voz alta y el que va a ir impreso en
+    # el boleto. Enseñarle el de lista y cobrarle otro al generar es dejarlo pidiendo
+    # $200 por un boleto que dice $180.
+    _mid = descuento_de(db, s.get("seller") if isinstance(s, dict) else None)
     for r in db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY price_cents").fetchall():
         price, phase, normal = effective_price(db, r)
         libres = lugares_libres(db, r)
+        # el precio SIN su descuento: los grupos no lo usan y lo necesitan entero
+        base = price
+        if _mid > 0 and price > 0:
+            price, normal = con_descuento(price, normal, _mid)
         types.append({"id": r["id"], "name": r["name"], "is_vip": r["is_vip"],
                       "needs_faculty": r["needs_faculty"],
                       "price_cents": price, "phase": phase,
-                      "normal_cents": normal,
+                      "normal_cents": normal, "base_cents": base,
                       # cupo: None mientras nadie le ponga tope numérico
                       "cupo": (r["cupo"] if "cupo" in r.keys() else None),
                       "cerrado": esta_cerrado(db, r),
@@ -1607,13 +1712,18 @@ def catalog():
     group_info = None
     if opciones:
         base = externo or opciones[0]
+        # Los grupos van con el precio ENTERO: el de 10 se paga completo (su beneficio
+        # es la botella) y el de 5 lleva su propio porcentaje, que la boletera aplica
+        # aparte. Por eso aquí se usa base_cents y no el precio ya rebajado del vendedor.
         group_info = {"type_id": base["id"], "pct": 0,
-                      "normal_price_cents": base["price_cents"],
-                      "group_price_cents": base["price_cents"],
+                      "normal_price_cents": base["base_cents"],
+                      "group_price_cents": base["base_cents"],
                       "savings_cents": 0,
                       "tipos": [{"id": t["id"], "name": t["name"], "is_vip": t["is_vip"],
-                                 "price_cents": t["price_cents"],
-                                 "normal_cents": t.get("normal_cents")} for t in opciones]}
+                                 "price_cents": t["base_cents"],
+                                 "normal_cents": (t.get("normal_cents")
+                                                  if t["base_cents"] == t["price_cents"] else None)}
+                                for t in opciones]}
     # ¿le falta el tutorial? Va aquí y no solo en la respuesta del login: si el
     # vendedor recarga la página a media guía, con la sesión ya guardada no vuelve a
     # pasar por el login y se quedaría sin verla nunca.
@@ -1643,6 +1753,12 @@ def catalog():
                    # vendedor no puede prometer un cronómetro que no existe
                    flash_manual=flash_manual(db),
                    tutorial_pendiente=pendiente,
+                   # qué grupos están abiertos y con cuánto descuento: el panel del
+                   # vendedor no debe ofrecer un botón que el servidor va a rechazar
+                   grupo10_activo=setting(db, "grupo10_activo") == "1",
+                   grupo5_activo=setting(db, "grupo5_activo") == "1",
+                   grupo5_pct=float(setting(db, "grupo5_pct") or 0),
+                   mi_descuento=_mi_descuento(s),
                    mi_boletos=mi_boletos,
                    mi_vendido=money(mi_vendido), mi_en_grupo=mi_en_grupo,
                    event_name=setting(db, "event_name"),
@@ -1783,6 +1899,13 @@ def create_ticket():
     else:
         fac_id, fac_name = None, ""
     price_now, phase_name, normal_now = effective_price(db, tt)   # congelado en el boleto
+    # El descuento del vendedor se aplica ENCIMA de lo que esté vigente, sea el precio
+    # de la fase o el de flash. Se congela en el boleto como todo lo demás: apagarlo
+    # después no le cambia el precio a nadie que ya compró.
+    _d = descuento_de(db, s["seller"])
+    if _d:
+        price_now, normal_now = con_descuento(price_now, normal_now, _d)
+        phase_name = etiqueta_descuento(phase_name, _d)
     if price_now <= 0:   # el sistema no vende hasta que el admin defina el precio
         return jsonify(error="El precio de este boleto aún no está configurado. "
                              "Pídele al administrador que lo defina en Catálogos."), 400
@@ -1826,8 +1949,16 @@ def create_group():
         return jsonify(error="Las ventas ya cerraron. Habla con tu administrador."), 403
     b = request.json or {}
     size = b.get("size")
-    if size != 10:
-        return jsonify(error="El grupo debe ser de exactamente 10 integrantes"), 400
+    # Dos grupos con reglas distintas y cada uno con su interruptor. El de 10 da
+    # BOTELLA al representante y no baja el precio; el de 5 da DESCUENTO a los cinco
+    # y no da botella. Apagados desde Catálogos, el servidor los rechaza aquí aunque
+    # alguien fuerce la llamada.
+    if size not in (5, 10):
+        return jsonify(error="El grupo debe ser de 5 o de 10 integrantes"), 400
+    if size == 10 and setting(db, "grupo10_activo") != "1":
+        return jsonify(error="Los grupos de 10 están cerrados por ahora."), 403
+    if size == 5 and setting(db, "grupo5_activo") != "1":
+        return jsonify(error="Los grupos de 5 están cerrados por ahora."), 403
     names = b.get("names") or []
     if not isinstance(names, list) or len(names) != size:
         return jsonify(error=f"Escribe los {size} nombres del grupo"), 400
@@ -1865,6 +1996,10 @@ def create_group():
                 return jsonify(error=f"Los grupos no se pueden armar con {fila['name']}, "
                                      f"porque cada boleto necesita su facultad."), 400
             precio, fase, normal = effective_price(db, fila)
+            _d = descuento_de(db, s["seller"], size)
+            if _d:
+                precio, normal = con_descuento(precio, normal, _d)
+                fase = etiqueta_descuento(fase, _d)
             if precio <= 0:
                 return jsonify(error=f"El precio de {fila['name']} aún no está configurado"), 400
             cache[tid] = (fila, precio, fase, normal)
@@ -1902,7 +2037,9 @@ def create_group():
                                phase_name=fase, group_size=size,
                                # en venta flash el grupo también saca su tachado
                                normal_price_cents=normal,
-                               representante=(i == idx))
+                               # el de 5 no lleva botella: su beneficio es el
+                               # descuento, y ahí idx ni existe
+                               representante=(size == 10 and i == idx))
         if not t:
             return jsonify(error="No se pudo generar uno de los folios, intenta de nuevo"), 500
         tickets_out.append(ticket_public(t))
@@ -3531,6 +3668,12 @@ def list_seller_payments(sid):
     out["can_commission"] = ((not es_colider(s))
                              and puede_gestionar(db, s["admin"], sel))
     out["commission_min"] = COMISION_COLIDER_MIN if out["es_lider"] else 0
+    # el descuento que vende hoy este vendedor (None = ninguno)
+    try:
+        out["descuento_pct"] = (sel["descuento_pct"]
+                                if "descuento_pct" in sel.keys() else None)
+    except Exception:
+        out["descuento_pct"] = None
     return jsonify(**out)
 
 @app.post("/api/admin/sellers/<int:sid>/payments")
@@ -3947,6 +4090,44 @@ def create_seller():
           f"Creó al vendedor '{name}' (código {code})")
     db.commit()
     return jsonify(ok=True, code=code)
+
+@app.put("/api/admin/sellers/<int:sid>/descuento")
+def set_descuento(sid):
+    """Prende o apaga el descuento de ESTE vendedor.
+
+    Va aparte del formulario de editar porque no es un dato suyo: es una promoción que
+    sale del bolsillo del organizador. Por eso solo un admin de verdad —el colíder no
+    puede regalar precio— y por eso queda con su línea en Movimientos, con nombre y
+    porcentaje, para poder explicar después por qué un boleto salió más barato.
+
+    Los boletos YA generados no cambian: cada uno congeló su precio al venderse."""
+    s = require_admin()
+    if not s:
+        actual = current_session()
+        if actual and es_colider(actual):
+            return jsonify(error="Solo el organizador da descuentos."), 403
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    sel = db.execute("SELECT * FROM sellers WHERE id=? AND deleted=0 AND hidden=0",
+                     (sid,)).fetchone()
+    if not sel:
+        return jsonify(error="no existe"), 404
+    crudo = (request.json or {}).get("descuento_pct")
+    if crudo is None or str(crudo).strip() == "":
+        nuevo = None
+    else:
+        try:
+            nuevo = max(0.0, min(90.0, float(crudo)))
+        except (TypeError, ValueError):
+            return jsonify(error="El descuento debe ser un número entre 0 y 90"), 400
+        if nuevo == 0:
+            nuevo = None                      # 0% es no tener descuento, no tener 0
+    db.execute("UPDATE sellers SET descuento_pct=? WHERE id=?", (nuevo, sid))
+    audit(db, s["admin"]["username"], "precio",
+          (f"Le puso {nuevo:g}% de descuento a '{sel['name']}'" if nuevo
+           else f"Le quitó el descuento a '{sel['name']}'"))
+    db.commit()
+    return jsonify(ok=True, descuento_pct=nuevo)
 
 @app.put("/api/admin/sellers/<int:sid>")
 def edit_seller(sid):
@@ -4820,6 +5001,22 @@ def save_settings():
             return jsonify(error="La comisión debe ser un número entre 0 y 100"), 400
         set_setting(db, "seller_commission_pct", str(pc))
         changed.append(f"comisión general {pc:g}%")
+    # Promociones: dos interruptores y un porcentaje. Cada cambio deja su línea porque
+    # mueve el precio de todos los boletos que se vendan a partir de ese momento.
+    for clave, etq in (("grupo10_activo", "grupos de 10"), ("grupo5_activo", "grupos de 5")):
+        if clave in b:
+            on = "1" if str(b[clave]) in ("1", "True", "true") else "0"
+            if setting(db, clave) != on:
+                set_setting(db, clave, on)
+                changed.append(("abrió " if on == "1" else "cerró ") + etq)
+    if "grupo5_pct" in b:
+        try:
+            pc = max(0.0, min(90.0, float(b["grupo5_pct"])))
+        except (TypeError, ValueError):
+            return jsonify(error="El descuento del grupo de 5 debe ser un número entre 0 y 90"), 400
+        set_setting(db, "grupo5_pct", str(pc))
+        changed.append(f"descuento del grupo de 5 en {pc:g}%")
+
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
     for v in FLYER_VARIANTS:
         if f"flyer_focus_{v}" in b:

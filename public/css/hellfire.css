@@ -1453,3 +1453,37 @@ button.rd-p:active{transform:scale(.97)}
   background:rgba(255,110,30,.035)}
 .alta-t{font:700 9.5px "Space Grotesk";letter-spacing:.14em;text-transform:uppercase;
   color:var(--ember-dim);margin-bottom:7px}
+
+/* ---- promociones: cada una en su caja, para que se vea que son cosas distintas ---- */
+.promo{border:1px solid var(--line);border-radius:13px;padding:11px 13px;margin-bottom:9px;
+  background:rgba(255,110,30,.04)}
+.promo-t{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.promo-t b{font:800 13.5px Manrope,sans-serif;color:var(--cream)}
+.promo-t span{font:700 9.5px "Space Grotesk";letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ember-dim)}
+.promo-d{font-size:11px;margin:3px 0 9px}
+.sw{display:inline-flex;align-items:center;gap:9px;cursor:pointer;user-select:none}
+.sw input{position:absolute;opacity:0;width:0;height:0}
+.sw span{width:42px;height:23px;border-radius:999px;background:rgba(255,255,255,.10);
+  border:1px solid var(--line);position:relative;transition:.18s;flex:none}
+.sw span::after{content:'';position:absolute;top:2px;left:2px;width:17px;height:17px;
+  border-radius:50%;background:var(--cream-45);transition:.18s}
+.sw input:checked+span{background:rgba(255,122,46,.35);border-color:var(--ember)}
+.sw input:checked+span::after{left:21px;background:var(--ember)}
+.sw i{font:700 11.5px Manrope,sans-serif;font-style:normal;color:var(--cream-45)}
+.sw input:checked~i{color:var(--ember-soft)}
+
+/* El grupo de 5 va al lado del de 10 y NO lleva botella: si llevara el mismo naranja
+   el vendedor ofrecería la botella en el que no la tiene. Verde = descuento. */
+.btn.grupo10.g5{margin-top:10px;border-color:rgba(86,199,140,.5);
+  background:linear-gradient(180deg,rgba(86,199,140,.18),rgba(86,199,140,.06))}
+.btn.grupo10.g5 .g-t{color:#8fe3b4}
+.btn.grupo10.g5 .g-s{color:#7fd3a6}
+.btn.grupo10.g5:active{background:linear-gradient(180deg,rgba(86,199,140,.28),rgba(86,199,140,.12))}
+
+/* Aviso de descuento propio: el precio que ve este vendedor no es el de los demás. */
+.midesc{margin:-4px 0 12px;padding:9px 12px;border-radius:12px;
+  border:1px solid rgba(86,199,140,.42);
+  background:linear-gradient(160deg,rgba(86,199,140,.14),rgba(86,199,140,.03));
+  font:600 12px Manrope;color:#8fe3b4;line-height:1.45}
+.midesc b{font-weight:800;color:#b6f0d1}

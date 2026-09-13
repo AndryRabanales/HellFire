@@ -1747,6 +1747,26 @@ function pintaCuenta(s, c) {
         <div style="font:700 13px Manrope;color:var(--cream)">Te entrega hoy \u00b7 completo</div>
         <div style="font:800 26px 'Space Grotesk';color:var(--ember)">${fmtMoney(teEntrega)}</div>
       </div>`}
+      <!-- El descuento del paradero. Va abajo de todo y separado: no es un dato del
+           vendedor como la comisión, es una promoción que sale del bolsillo del
+           organizador, y solo él la prende. -->
+      ${SOY_COLIDER ? '' : `
+      <div style="border-top:1px solid rgba(255,120,40,.25);margin:11px 0 9px"></div>
+      <div class="row" style="justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font:700 12.5px Manrope;color:var(--cream)">Vende con descuento</div>
+          <div class="muted" style="font-size:10.5px;margin-top:1px">
+            Todo lo que venda sale con ese % menos, encima del precio vigente.</div>
+        </div>
+        <div class="row" style="gap:6px;align-items:center;flex:none">
+          <input class="input" id="cta-desc" type="number" min="0" max="90" step="1"
+                 value="${c.descuento_pct || ''}" placeholder="0"
+                 style="width:68px;padding:7px;font-size:13px;text-align:center">
+          <span class="muted" style="font-size:12px">%</span>
+          <button class="btn sm ghost" id="cta-desc-ok" style="width:auto;flex:none;padding:7px 12px;font-size:12px">Guardar</button>
+        </div>
+      </div>`}
+
       <!-- Los porcentajes de un toque, plegados: se abren solo cuando se van a usar. -->
       <div id="cta-com-box" class="row" style="display:none;gap:5px;flex-wrap:wrap;margin-top:9px">
         ${[0, 10, 15, 20, 25, 30].filter(n => n >= (c.commission_min || 0)).map(n =>
@@ -1903,6 +1923,17 @@ function pintaCuenta(s, c) {
     };
     $('#cta-otro-val').onkeydown = e => { if (e.key === 'Enter') $('#cta-otro-ok').click(); };
   }
+  // el descuento del paradero: su propio botón y su propia llamada
+  const bd = $('#cta-desc-ok');
+  if (bd) bd.onclick = async () => {
+    bd.disabled = true;
+    try {
+      const v = ($('#cta-desc').value || '').trim();
+      const r = await API.put(`/api/admin/sellers/${s.id}/descuento`, { descuento_pct: v });
+      toast(r.descuento_pct ? `${r.descuento_pct}% de descuento activo` : 'Descuento quitado');
+      paySeller(s);                       // se repinta con el dato nuevo
+    } catch (e) { if (!guard(e)) toast(e.message); bd.disabled = false; }
+  };
   const amt = $('#pg-amount');
   if (amt) {
     const recalcular = () => {
@@ -3080,6 +3111,27 @@ async function loadCatalogs() {
     box.appendChild(eb);
     $('#tt-list').appendChild(box);
   });
+  // ----- promociones: los dos grupos -----
+  // Se leen del catálogo, que ya se pide para otras cosas. Guardar es inmediato: un
+  // interruptor que hay que confirmar aparte se queda a medias y nadie sabe si aplicó.
+  try {
+    const cat = await API.get('/api/catalog');
+    const g10 = $('#pr-g10'), g5 = $('#pr-g5'), pct = $('#pr-g5-pct');
+    if (g10) {
+      g10.checked = !!cat.grupo10_activo;
+      g5.checked = !!cat.grupo5_activo;
+      pct.value = cat.grupo5_pct != null ? cat.grupo5_pct : 10;
+      const guarda = async cuerpo => {
+        $('#pr-err').textContent = '';
+        try { await API.post('/api/admin/settings', cuerpo); toast('Guardado'); }
+        catch (e) { if (!guard(e)) $('#pr-err').textContent = e.message; }
+      };
+      g10.onchange = () => guarda({ grupo10_activo: g10.checked ? '1' : '0' });
+      g5.onchange  = () => guarda({ grupo5_activo:  g5.checked  ? '1' : '0' });
+      pct.onchange = () => guarda({ grupo5_pct: pct.value });
+    }
+  } catch (e) { /* si falla, los interruptores se quedan como estaban */ }
+
   // ----- fases de venta globales -----
   renderPhases(tt.types);
   $('#fc-list').innerHTML = '';

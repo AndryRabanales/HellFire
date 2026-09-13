@@ -48,6 +48,10 @@
   <div class="h1" style="margin:16px 0 14px">Nuevo boleto</div>
   <div class="hint" id="f-hint"></div>
 
+  <!-- Descuento propio: el vendedor ve precios distintos a los de sus compañeros y
+       tiene que saber POR QUÉ antes de decir un número en voz alta. -->
+  <div class="midesc hidden" id="mi-desc"></div>
+
   <!-- Ventas cerradas: sustituye al formulario. Sin esto el vendedor seguiría
        escribiendo nombres y solo se enteraría al fallar el botón. -->
   <div id="ventas-cerradas" class="hidden">
@@ -96,6 +100,15 @@
         <path d="M10.2 2.6h3.6v2.9c0 .85.3 1.66.87 2.29l.65.73c.82.92 1.28 2.1 1.28 3.33v7.55c0 1-.8 1.8-1.8 1.8H9.2c-1 0-1.8-.8-1.8-1.8v-7.55c0-1.23.46-2.41 1.28-3.33l.65-.73c.57-.63.87-1.44.87-2.29V2.6Z"/>
         <path d="M10.2 5.5h3.6"/><path d="M7.6 13.2h8.8"/></svg>
         El representante se lleva botella gratis</span>
+    </button>
+    <!-- El de 5 se prende y se apaga desde el panel; cuando está apagado no existe
+         aquí. No lleva botella: lo suyo es el descuento, y así lo dice. -->
+    <button class="btn grupo10 g5 hidden" id="btn-group-5">
+      <span class="g-t">Armar grupo de 5<span class="g-arrow">›</span></span>
+      <span class="g-s"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"
+        stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 4 4 20"/><circle cx="7.5" cy="7.5" r="2.6"/><circle cx="16.5" cy="16.5" r="2.6"/></svg>
+        <span id="g5-sub">Los cinco pagan con descuento</span></span>
     </button>
   </div>
 
