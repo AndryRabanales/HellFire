@@ -4120,8 +4120,12 @@ def set_descuento(sid):
         nuevo = None
     else:
         try:
-            nuevo = max(0.0, min(90.0, float(crudo)))
+            nuevo = float(crudo)
         except (TypeError, ValueError):
+            return jsonify(error="El descuento debe ser un número entre 0 y 90"), 400
+        # Fuera de rango se RECHAZA, no se recorta: quien teclea 100 queriendo 10 se
+        # quedaba con un 90% de descuento y nadie se enteraba hasta el corte.
+        if nuevo < 0 or nuevo > 90:
             return jsonify(error="El descuento debe ser un número entre 0 y 90"), 400
         if nuevo == 0:
             nuevo = None                      # 0% es no tener descuento, no tener 0
@@ -5014,8 +5018,10 @@ def save_settings():
                 changed.append(("abrió " if on == "1" else "cerró ") + etq)
     if "grupo5_pct" in b:
         try:
-            pc = max(0.0, min(90.0, float(b["grupo5_pct"])))
+            pc = float(b["grupo5_pct"])
         except (TypeError, ValueError):
+            return jsonify(error="El descuento del grupo de 5 debe ser un número entre 0 y 90"), 400
+        if pc < 0 or pc > 90:   # un dedazo no puede volverse un 90% callado
             return jsonify(error="El descuento del grupo de 5 debe ser un número entre 0 y 90"), 400
         set_setting(db, "grupo5_pct", str(pc))
         changed.append(f"descuento del grupo de 5 en {pc:g}%")

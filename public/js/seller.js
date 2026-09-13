@@ -133,8 +133,14 @@ function aplicarPromos() {
   if (b10) b10.classList.toggle('hidden', !g10);
   if (b5)  b5.classList.toggle('hidden', !g5);
   const pct5 = Number(CATALOG.grupo5_pct || 0);
-  const sub = $('#g5-sub');
-  if (sub) sub.textContent = pct5 > 0 ? (pct5 + '% menos') : 'Precio de grupo';   // va dentro del <b>
+  const texto5 = pct5 > 0 ? (pct5 + '% menos') : 'precio de grupo';
+  const sub = $('#g5-sub'), corto = $('#g5-corto');
+  if (sub) sub.textContent = texto5;
+  if (corto) corto.textContent = pct5 > 0 ? texto5 : 'Precio de grupo';
+  // Con los dos abiertos se ponen lado a lado y se acortan los textos; con uno
+  // solo, ese botón se queda con el ancho entero y el renglón largo de siempre.
+  const caja = $('#group-switch');
+  if (caja) caja.classList.toggle('dos', g10 && g5);
   // Su descuento del QR, si el organizador se lo autoriz\u00f3. Se lo quitaron con el
   // interruptor prendido: se apaga aqu\u00ed o seguir\u00eda cobrando de menos.
   const mi = Number(CATALOG.mi_descuento || 0);
@@ -144,7 +150,7 @@ function aplicarPromos() {
   // debajo de los precios es una pregunta sin respuesta.
   const sw = $('#group-switch');
   if (sw && !GROUP_SIZE && !(CATALOG && CATALOG.ventas_cerradas)) {
-    sw.classList.toggle('hidden', !(g10 || g5 || mi > 0));
+    sw.classList.toggle('hidden', !(g10 || g5));
   }
 }
 
@@ -155,16 +161,20 @@ function pintaDescuento() {
   const caja = $('#mi-desc');
   if (!caja) return;
   const mi = Number((CATALOG && CATALOG.mi_descuento) || 0);
-  caja.classList.toggle('hidden', !(mi > 0));
-  if (!(mi > 0)) return;
+  // Solo donde sirve. Dentro de un grupo el precio lo manda el grupo, y con las
+  // ventas cerradas no hay nada que cobrar: en los dos casos el interruptor se
+  // quedaba en pantalla prometiendo un descuento que no iba a aplicar.
+  const aplica = mi > 0 && !GROUP_SIZE && !(CATALOG && CATALOG.ventas_cerradas);
+  caja.classList.toggle('hidden', !aplica);
+  if (!aplica) return;
   caja.classList.toggle('on', DESCUENTO_ON);
   caja.setAttribute('aria-pressed', DESCUENTO_ON ? 'true' : 'false');
-  // Un solo rengl\u00f3n: lo bastante corto para no partirse en un celular. El resto
-  // \u2014cu\u00e1ndo usarlo\u2014 lo cuenta el recorrido y la gu\u00eda del '?'.
   $('#qd-t').textContent = DESCUENTO_ON
-    ? ('Vendiendo con ' + mi + '% menos')
+    ? ('Vendiendo con ' + mi + '% de descuento')
     : ('Descuento del c\u00f3digo \u00b7 ' + mi + '%');
-  $('#qd-s').textContent = '';   // este rengl\u00f3n lleva interruptor: no cabe la cola
+  $('#qd-s').textContent = DESCUENTO_ON
+    ? 'Los precios ya salen rebajados \u00b7 ap\u00e1galo para el siguiente'
+    : 'Pr\u00e9ndelo solo si escane\u00f3 el c\u00f3digo del paradero';
 }
 
 function sel_agotado() {
@@ -477,6 +487,7 @@ function enterGroupMode(size) {
   $('#group-result-bar').classList.add('hidden'); $('#group-result-bar').classList.remove('done');
   $('#f-hint').textContent = 'Grupo de ' + size + ' · un boleto por integrante';
   $('#f-err').textContent = '';
+  pintaDescuento();          // aquí su descuento no pinta nada: fuera de la pantalla
   renderGroupPriceBar();
   renderGroupNames();
 }
@@ -493,6 +504,7 @@ function exitGroupMode() {
   $('#f-hint').textContent = '';
   $('#f-err').textContent = '';
   $('#group-names').innerHTML = '';
+  pintaDescuento();          // vuelve la venta suelta: vuelve su interruptor
 }
 
 /* Lo que de verdad va a costar cada boleto de ESTE grupo. El de 10 va entero —su

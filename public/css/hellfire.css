@@ -438,45 +438,57 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
    Y el botón iba en "contorno", que en esta pantalla se confunde con las tarjetas de
    tipo de boleto: mismo borde, mismo fondo. Ahora lleva relleno, relieve y flecha —
    relleno para decir "soy un botón", flecha para decir "te llevo a otro lado". */
-/* Opciones de la venta: UN bloque con renglones idénticos. Antes eran tres objetos
-   con tres formas y tres colores —uno verde, que no es de esta casa—, cada uno del
-   alto de GENERAR BOLETO y todos encima de él. Aquí lo único que distingue a un
-   renglón de otro es el control de la derecha y el color de su pastilla. */
-.opes{border:1px solid rgba(246,241,231,.11);border-radius:13px;overflow:hidden;
-  background:rgba(246,241,231,.03)}
-.op{display:flex;align-items:center;gap:9px;width:100%;padding:0 11px;height:44px;
-  text-align:left;cursor:pointer;background:none;border:0;
-  border-top:1px solid rgba(246,241,231,.08);-webkit-tap-highlight-color:transparent;
-  transition:background .14s}
-.op:first-child,.op.hidden+.op,.op.hidden+.op.hidden+.op{border-top:0}
-.op:active{background:rgba(246,241,231,.06)}
-/* La pastilla: el dato que se busca de un vistazo —un 10, un 5, un %— sin que tenga
-   que ser enorme para encontrarse. */
-.op-k{flex:none;min-width:27px;height:22px;padding:0 6px;border-radius:6px;
-  display:flex;align-items:center;justify-content:center;
-  font:800 13px/1 "Space Grotesk",monospace;color:#f3d27a;background:rgba(243,210,122,.13)}
-/* Una sola línea SIEMPRE: si no cabe, se recorta. Un renglón que crece a dos rompe
-   la altura pareja, que es lo que hace que esto se lea como un bloque y no como tres
-   cosas apiladas. */
-.op-t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.op-t b{font:800 12px Manrope;color:#f3d27a}
-.op-t i{font:600 10.5px Manrope;font-style:normal;color:var(--cream-45);margin-left:5px}
-.op-ar{flex:none;font:700 17px/1 Manrope;color:var(--cream-45);transform:translateY(-1px)}
-/* El del grupo de 5 y el del descuento van en el naranja de la casa; el de la botella
-   en oro, que aquí ya es su color. Dos tonos de la misma paleta: se distinguen entre
-   sí y ninguno se pelea con la pantalla. */
-.op.g5 .op-k,#btn-group-5 .op-k,#mi-desc .op-k{color:var(--ember-soft);background:rgba(255,122,46,.14)}
-#btn-group-5 .op-t b,#mi-desc .op-t b{color:var(--ember-soft)}
-/* El interruptor. Prendido se rellena el renglón entero: el vendedor tiene que verlo
-   sin buscarlo, porque dejarlo puesto es regalar el descuento en la venta siguiente. */
-.op-sw{flex:none;width:38px;height:22px;border-radius:999px;position:relative;
+/* El botón de grupo, el de siempre: relleno para decir "soy un botón" y flecha para
+   decir "te llevo a otro lado". */
+.btn.grupo10{display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:12px;width:100%;border:1px solid rgba(255,122,46,.55);
+  background:linear-gradient(180deg,rgba(255,122,46,.2),rgba(255,122,46,.08));
+  box-shadow:0 1px 0 rgba(255,255,255,.09) inset,0 3px 10px rgba(0,0,0,.3)}
+.btn.grupo10 .g-t{font:800 14px Manrope;color:var(--ember-soft);
+  display:inline-flex;align-items:center}
+.btn.grupo10 .g-s{display:inline-flex;align-items:center;gap:5px;
+  font:600 10.5px Manrope;color:#e8c979;text-align:center}
+.btn.grupo10:active{background:linear-gradient(180deg,rgba(255,122,46,.3),rgba(255,122,46,.14))}
+/* El de 5 en oro —el color que aquí ya trae la botella y los porcentajes—: se
+   distingue del de 10 de un golpe de vista sin traer un color de fuera. */
+.btn.grupo10.g5{border-color:rgba(243,210,122,.5);
+  background:linear-gradient(180deg,rgba(243,210,122,.16),rgba(243,210,122,.05))}
+.btn.grupo10.g5 .g-t{color:#f3d27a}
+.btn.grupo10.g5 .g-s{color:var(--cream-60)}
+.btn.grupo10.g5:active{background:linear-gradient(180deg,rgba(243,210,122,.26),rgba(243,210,122,.1))}
+
+/* Con los dos grupos abiertos se ponen lado a lado y el texto se acorta: a media
+   pantalla el renglón largo se partía en tres y el botón dejaba de leerse de un
+   vistazo. Con uno solo, ese botón ocupa el ancho entero, como siempre. */
+.grupos{display:flex;gap:9px}
+.grupos .btn.grupo10{flex:1 1 0;min-width:0}
+.g-corto{display:none}
+.grupos.dos .g-largo{display:none}
+.grupos.dos .g-corto{display:inline}
+.grupos.dos .btn.grupo10{padding:11px 8px}
+.grupos.dos .btn.grupo10 .g-t{font-size:13px}
+
+/* Interruptor del descuento del QR: va arriba del formulario porque cambia los
+   precios que el vendedor está por leer en voz alta. Prendido se rellena de ámbar,
+   que en esta pantalla ya significa "activo"; apagado es un renglón discreto. Toda
+   la tira es el botón: en la calle, con una mano, no se atina a un cuadrito. */
+.qrdesc{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
+  margin:0 0 12px;padding:10px 12px;border-radius:13px;text-align:left;cursor:pointer;
+  border:1px solid rgba(246,241,231,.14);background:rgba(246,241,231,.04);
+  -webkit-tap-highlight-color:transparent;transition:background .16s,border-color .16s}
+.qrdesc .qd-txt{min-width:0}
+.qrdesc .qd-t{display:block;font:800 12.5px Manrope;color:var(--cream)}
+.qrdesc .qd-s{display:block;font:600 10.5px Manrope;color:var(--cream-45);margin-top:2px;line-height:1.35}
+.qrdesc .qd-sw{flex:none;width:42px;height:24px;border-radius:999px;position:relative;
   background:rgba(246,241,231,.16);transition:background .16s}
-.op-sw i{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;
-  background:var(--cream);transition:transform .16s}
-#mi-desc.on{background:rgba(255,122,46,.14)}
-#mi-desc.on .op-sw{background:var(--ember)}
-#mi-desc.on .op-sw i{transform:translateX(16px);background:#2a1206}
-#mi-desc.on .op-t i{color:var(--ember-soft);opacity:.75}
+.qrdesc .qd-sw i{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
+  background:var(--cream);transition:transform .16s,background .16s}
+.qrdesc.on{border-color:rgba(255,122,46,.55);
+  background:linear-gradient(180deg,rgba(255,122,46,.2),rgba(255,122,46,.07))}
+.qrdesc.on .qd-t{color:var(--ember-soft)}
+.qrdesc.on .qd-s{color:#e8c979}
+.qrdesc.on .qd-sw{background:var(--ember)}
+.qrdesc.on .qd-sw i{transform:translateX(18px);background:#2a1206}
 
 /* La flecha: señal de "esto te lleva a otra pantalla", no de "esto se marca". */
 .g-arrow{font:700 17px/1 Manrope;margin-left:7px;opacity:.65;transform:translateY(-1px)}

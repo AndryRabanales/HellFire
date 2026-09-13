@@ -48,6 +48,18 @@
   <div class="h1" style="margin:16px 0 14px">Nuevo boleto</div>
   <div class="hint" id="f-hint"></div>
 
+  <!-- El descuento del QR del paradero. Va ARRIBA de todo: cambia los precios que el
+       vendedor está a punto de leer en voz alta, así que tiene que verlo antes de
+       decirlos. Es un interruptor y no un aviso: quien llega con el código escaneado
+       se lleva la rebaja, quien compra de frente no. -->
+  <button type="button" class="qrdesc hidden" id="mi-desc" aria-pressed="false">
+    <span class="qd-txt">
+      <span class="qd-t" id="qd-t">Descuento del código</span>
+      <span class="qd-s" id="qd-s">Préndelo solo si escaneó el código del paradero</span>
+    </span>
+    <span class="qd-sw"><i></i></span>
+  </button>
+
 
   <!-- Ventas cerradas: sustituye al formulario. Sin esto el vendedor seguiría
        escribiendo nombres y solo se enteraría al fallar el botón. -->
@@ -86,28 +98,27 @@
     <div id="solo-row"></div>
   </div>
 
-  <!-- ---- opciones de esta venta ----
-       Un solo bloque con renglones iguales: el descuento del código y los grupos.
-       Antes eran tres cosas sueltas con tres formas y tres colores distintos —una
-       verde— y entre las tres empujaban GENERAR BOLETO fuera de la pantalla. Lo que
-       cambia de un renglón a otro es el control de la derecha: interruptor el que se
-       prende, flecha el que lleva a otra pantalla. -->
-  <div class="opes mt14" id="group-switch">
-    <button type="button" class="op hidden" id="mi-desc" aria-pressed="false">
-      <span class="op-k">%</span>
-      <span class="op-t"><b id="qd-t">Descuento del código</b><i id="qd-s">si escaneó el QR</i></span>
-      <span class="op-sw"><i></i></span>
-    </button>
-    <button type="button" class="op" id="btn-group-10">
-      <span class="op-k">10</span>
-      <span class="op-t"><b>Botella gratis</b><i>para el representante</i></span>
-      <span class="op-ar">›</span>
+  <!-- ---- planes de grupo ----
+       El de 10 es el botón de siempre. Cuando el organizador abre también el de 5,
+       los dos se ponen lado a lado y los textos se acortan solos (ver .grupos.dos):
+       a media pantalla, "El representante se lleva botella gratis" se parte en tres
+       renglones y el botón deja de leerse de un vistazo. -->
+  <div class="grupos mt16" id="group-switch">
+    <button class="btn grupo10" id="btn-group-10">
+      <span class="g-t"><span class="g-largo">Armar grupo de 10</span><span class="g-corto">Grupo de 10</span><span class="g-arrow">›</span></span>
+      <span class="g-s"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"
+        stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.2 2.6h3.6v2.9c0 .85.3 1.66.87 2.29l.65.73c.82.92 1.28 2.1 1.28 3.33v7.55c0 1-.8 1.8-1.8 1.8H9.2c-1 0-1.8-.8-1.8-1.8v-7.55c0-1.23.46-2.41 1.28-3.33l.65-.73c.57-.63.87-1.44.87-2.29V2.6Z"/>
+        <path d="M10.2 5.5h3.6"/><path d="M7.6 13.2h8.8"/></svg>
+        <span class="g-largo">El representante se lleva botella gratis</span><span class="g-corto">Botella gratis</span></span>
     </button>
     <!-- El de 5 lo abre y lo cierra el organizador; cerrado, no existe aquí. -->
-    <button type="button" class="op hidden" id="btn-group-5">
-      <span class="op-k">5</span>
-      <span class="op-t"><b id="g5-sub">Con descuento</b><i>sin botella</i></span>
-      <span class="op-ar">›</span>
+    <button class="btn grupo10 g5 hidden" id="btn-group-5">
+      <span class="g-t"><span class="g-largo">Armar grupo de 5</span><span class="g-corto">Grupo de 5</span><span class="g-arrow">›</span></span>
+      <span class="g-s"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"
+        stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 4 4 20"/><circle cx="7.5" cy="7.5" r="2.6"/><circle cx="16.5" cy="16.5" r="2.6"/></svg>
+        <span class="g-largo">Los cinco pagan <span id="g5-sub">10% menos</span></span><span class="g-corto" id="g5-corto">10% menos</span></span>
     </button>
   </div>
 
