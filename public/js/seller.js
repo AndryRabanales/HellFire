@@ -134,7 +134,7 @@ function aplicarPromos() {
   if (b5)  b5.classList.toggle('hidden', !g5);
   const pct5 = Number(CATALOG.grupo5_pct || 0);
   const sub = $('#g5-sub');
-  if (sub) sub.textContent = pct5 > 0 ? (pct5 + '% menos') : 'Precio de grupo';
+  if (sub) sub.textContent = pct5 > 0 ? (pct5 + '% menos') : 'Precio de grupo';   // va dentro del <b>
   // Sin ning\u00fan grupo abierto no queda nada que tocar: fuera el bloque entero.
   const sw = $('#group-switch');
   if (sw && !GROUP_SIZE && !(CATALOG && CATALOG.ventas_cerradas)) {

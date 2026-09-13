@@ -97,32 +97,22 @@
   </div>
 
   <!-- ---- planes de grupo ---- -->
-  <!-- Dos bloques naranjas apilados competían entre sí y con GENERAR BOLETO, y en el
-       celular empujaban el botón fuera de la pantalla. Ahora son dos fichas lado a
-       lado bajo un rótulo: ocupan un tercio del alto, se leen de un vistazo por el
-       número grande, y si solo hay un grupo abierto esa ficha se estira sola. -->
+  <!-- Dos renglones de una línea, no dos bloques. Esto no es la acción principal —la
+       acción es GENERAR BOLETO—: es un atajo para cuando el comprador dice "venimos
+       varios". Cuanto más chico, antes se encuentra el botón que sí se usa siempre. -->
   <div class="grupos mt16" id="group-switch">
     <div class="gr-lbl">¿Vienen en grupo?</div>
-    <div class="gr-ops">
-      <button type="button" class="gcard" id="btn-group-10">
-        <span class="gc-top"><span class="gc-n">10</span><span class="gc-ar">›</span></span>
-        <span class="gc-t">
-          <svg class="gc-ic" viewBox="0 0 24 24" width="14" height="14" fill="none"
-            stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10.2 2.6h3.6v2.9c0 .85.3 1.66.87 2.29l.65.73c.82.92 1.28 2.1 1.28 3.33v7.55c0 1-.8 1.8-1.8 1.8H9.2c-1 0-1.8-.8-1.8-1.8v-7.55c0-1.23.46-2.41 1.28-3.33l.65-.73c.57-.63.87-1.44.87-2.29V2.6Z"/>
-            <path d="M10.2 5.5h3.6"/><path d="M7.6 13.2h8.8"/></svg>Botella gratis</span>
-        <span class="gc-s">para el representante</span>
-      </button>
-      <!-- El de 5 lo abre y lo cierra el organizador; cerrado, no existe aquí. -->
-      <button type="button" class="gcard g5 hidden" id="btn-group-5">
-        <span class="gc-top"><span class="gc-n">5</span><span class="gc-ar">›</span></span>
-        <span class="gc-t">
-          <svg class="gc-ic" viewBox="0 0 24 24" width="14" height="14" fill="none"
-            stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M20 4 4 20"/><circle cx="7.5" cy="7.5" r="2.6"/><circle cx="16.5" cy="16.5" r="2.6"/></svg><span id="g5-sub">Con descuento</span></span>
-        <span class="gc-s">sin botella</span>
-      </button>
-    </div>
+    <button type="button" class="gcard" id="btn-group-10">
+      <span class="gc-n">10</span>
+      <span class="gc-t"><b>Botella gratis</b> para el representante</span>
+      <span class="gc-ar">›</span>
+    </button>
+    <!-- El de 5 lo abre y lo cierra el organizador; cerrado, no existe aquí. -->
+    <button type="button" class="gcard g5 hidden" id="btn-group-5">
+      <span class="gc-n">5</span>
+      <span class="gc-t"><b id="g5-sub">Con descuento</b> sin botella</span>
+      <span class="gc-ar">›</span>
+    </button>
   </div>
 
   <!-- ---- modo grupo: nombres de los integrantes ---- -->
