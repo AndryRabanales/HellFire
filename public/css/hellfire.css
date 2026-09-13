@@ -1570,3 +1570,14 @@ button.rd-p:active{transform:scale(.97)}
   width:100%;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .card.st-abrir .st-ar{flex:none;font:700 19px/1 Manrope;color:var(--cream-45)}
 .card.st-abrir:active{background:rgba(255,110,30,.08)}
+
+/* Cabecera de la lista de vendedores. El total estaba en gris a 11px al pie de los
+   filtros: es el dato que contesta "¿cuántos tengo?" y ahora es el título. Los
+   filtros van a su lado, chicos, porque son un atajo y no un dato. */
+.sl-cab #sl-count{font:800 19px "Space Grotesk",monospace;color:var(--cream);flex:none}
+.sl-cab #sl-count span{font:700 12px Manrope;color:var(--cream-45);margin-left:5px}
+.actchip{display:inline-flex;align-items:baseline;gap:5px;padding:6px 10px;border-radius:9px;
+  cursor:pointer;border:1px solid var(--line);background:var(--card);
+  font:600 10.5px Manrope;color:var(--cream-45);-webkit-tap-highlight-color:transparent}
+.actchip b{font:800 14px/1 "Space Grotesk",monospace}
+.actchip.sel{border-color:var(--ember);background:rgba(255,110,30,.14);color:var(--ember-soft)}

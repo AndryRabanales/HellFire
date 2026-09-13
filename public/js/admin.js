@@ -1575,18 +1575,13 @@ function pintaActividad(sellers) {
   const vivos = sellers.filter(s => !s.deleted);
   const n = e => vivos.filter(s => estadoVendedor(s) === e).length;
   const cubetas = [
-    { k: 'vendiendo', t: 'Vendiendo', c: 'var(--ok, #34d399)', d: 'ya generaron boletos' },
-    { k: 'entro', t: 'Entraron, sin vender', c: '#f3d27a', d: 'abrieron la app pero no han vendido' },
-    { k: 'nuevo', t: 'Nunca han entrado', c: 'var(--danger)', d: 'jamás abrieron la boletera' },
+    { k: 'vendiendo', t: 'vendiendo', c: 'var(--ok, #34d399)', d: 'ya generaron boletos' },
+    { k: 'entro', t: 'sin vender', c: '#f3d27a', d: 'abrieron la app pero no han vendido' },
+    { k: 'nuevo', t: 'sin entrar', c: 'var(--danger)', d: 'jamás abrieron la boletera' },
   ];
   $('#sl-activity').innerHTML = cubetas.map(b => `
-    <button class="btn sm ghost sl-act${_filtroAct === b.k ? ' sel' : ''}" data-act="${b.k}" title="${b.d}"
-      style="width:auto;flex:none;padding:9px 13px;text-align:left">
-      <span style="font:800 17px 'Space Grotesk';color:${b.c}">${n(b.k)}</span>
-      <span style="font-size:11px;margin-left:6px">${b.t}</span>
-    </button>`).join('') +
-    `<div class="muted" style="font-size:10.5px;align-self:center;margin-left:2px">
-       de ${vivos.length} · toca para filtrar</div>`;
+    <button class="actchip sl-act${_filtroAct === b.k ? ' sel' : ''}" data-act="${b.k}" title="${b.d} · toca para ver solo a estos">
+      <b style="color:${b.c}">${n(b.k)}</b>${b.t}</button>`).join('');
   $$('.sl-act').forEach(b => b.onclick = () => {
     _filtroAct = _filtroAct === b.dataset.act ? '' : b.dataset.act;
     _sigSellers = ''; loadSellers();
@@ -1626,7 +1621,9 @@ async function loadSellers(silent) {
     : orden === 'vend-mas'   ? (a, b) => (b.total || 0) - (a.total || 0)
     :                          (a, b) => a.name.localeCompare(b.name, 'es'));
   }
-  $('#sl-count').textContent = `${shown.length} vendedor(es)`;
+  const hayFiltro = shown.length !== CACHE.sellers.length;
+  $('#sl-count').innerHTML = `${shown.length} <span>${shown.length === 1 ? 'vendedor' : 'vendedores'}`
+    + (hayFiltro ? ` de ${CACHE.sellers.length}` : '') + '</span>';
   if (!shown.length) { body.innerHTML = '<tr><td colspan="7" class="muted" style="padding:16px">Ningún vendedor coincide</td></tr>'; return; }
   shown.forEach(s => {
     const tr = document.createElement('tr');
@@ -1635,9 +1632,9 @@ async function loadSellers(silent) {
     const adminLine = `<div class="muted" style="font-size:10px;margin-top:3px">Admin: <b style="color:var(--ember-soft)">${esc(s.owner_admin_name || 'sin asignar')}</b></div>`;
     const est = estadoVendedor(s);
     const marca = s.deleted ? '' : (est === 'nuevo'
-      ? '<div style="font-size:9.5px;color:var(--danger);margin-top:2px">● nunca ha entrado</div>'
+      ? '<div style="font-size:9.5px;color:var(--danger);margin-top:2px" title="Nunca ha entrado a la boletera">● sin entrar</div>'
       : (est === 'entro'
-          ? `<div style="font-size:9.5px;color:#f3d27a;margin-top:2px" title="Entró ${esc(s.ultimo_ingreso || '')}">● entró, sin vender</div>`
+          ? `<div style="font-size:9.5px;color:#f3d27a;margin-top:2px" title="Entró ${esc(s.ultimo_ingreso || '')} pero no ha vendido">● sin vender</div>`
           : ''));
     // faltante = vendido - pagado. Cuando es 0 (y vendió), COMPLETADO.
     const falta = s.total - s.paid;
