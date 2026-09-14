@@ -2413,6 +2413,19 @@ def void_ticket(tid):
         return jsonify(error="no existe"), 404
     if t["status"] == "void":
         return jsonify(error="Ya estaba anulado"), 400
+    # UN BOLETO QUE YA PASÓ POR LA PUERTA NO SE ANULA. La persona está adentro: si el
+    # boleto se anula, el contador de la puerta baja —queda alguien dentro que
+    # oficialmente no entró— y el dinero desaparece del corte, con el efectivo ya en
+    # la bolsa del vendedor. Si de verdad fue un escaneo por error, primero se le
+    # quita la entrada (solo el organizador) y después se anula: dos pasos a
+    # propósito, los dos firmados.
+    if t["status"] == "used":
+        cuando = (t["used_at"] or "")[11:16]
+        puerta = t["scanned_by"] if "scanned_by" in t.keys() else None
+        detalle = (" (" + (cuando or "") + (" · " + puerta if puerta else "") + ")") if cuando or puerta else ""
+        return jsonify(error=f"Ese boleto ya entró a la fiesta{detalle}. Un boleto que "
+                             f"ya pasó no se anula: si fue un escaneo por error, "
+                             f"quítale la entrada primero."), 409
     duenio = mi_ambito(s)
     if duenio:
         # un colíder solo dentro de su grupo: ni los de otro grupo ni los del admin
@@ -2429,6 +2442,43 @@ def void_ticket(tid):
     audit(db, s["admin"]["username"], "anulacion",
           f"Anuló el boleto {t['folio']} de {t['buyer_name']} ({t['type_name']}, "
           f"vendió {t['seller_name']}). Motivo: {reason}")
+    db.commit()
+    sync_excel_async()
+    return jsonify(ok=True)
+
+@app.post("/api/admin/tickets/<int:tid>/quitar-entrada")
+def quitar_entrada(tid):
+    """Deshace un escaneo. SOLO el organizador.
+
+    Existe por una sola razón: un boleto que ya entró no se puede anular, y a veces
+    el escaneo fue un error —se escaneó el de al lado, se escaneó dos veces la misma
+    pantalla—. Sin esto, ese boleto se quedaría marcado como dentro para siempre.
+
+    No es del colíder: soltar una entrada es volver a abrir la puerta a un boleto, y
+    el que está en la puerta no puede decidir eso solo. Queda firmado con hora."""
+    s = require_admin()
+    if not s:
+        actual = current_session()
+        if actual and es_colider(actual):
+            return jsonify(error="Solo el organizador puede quitar una entrada."), 403
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    t = db.execute("SELECT * FROM tickets WHERE id=?", (tid,)).fetchone()
+    if not t:
+        return jsonify(error="no existe"), 404
+    if t["status"] != "used":
+        return jsonify(error="Ese boleto no ha entrado."), 400
+    ok, owner = can_void(s["admin"], db, t)
+    if not ok:
+        return jsonify(error=f"Solo {owner} (admin del vendedor) puede tocar este boleto"), 403
+    antes = t["used_at"] or ""
+    db.execute("UPDATE tickets SET status='active', used_at=NULL, scanned_by=NULL WHERE id=?",
+               (tid,))
+    audit(db, s["admin"]["username"], "entrada",
+          f"Le quitó la entrada al boleto {t['folio']} de {t['buyer_name']} "
+          f"(había entrado {antes[11:16] or antes}"
+          + (f" por {t['scanned_by']}" if ("scanned_by" in t.keys() and t["scanned_by"]) else "")
+          + "). Vuelve a servir en la puerta.")
     db.commit()
     sync_excel_async()
     return jsonify(ok=True)

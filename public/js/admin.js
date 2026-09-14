@@ -1163,8 +1163,18 @@ async function loadTicketsTable(silent) {
         };
         acc.appendChild(bt);
       }
-      // la tachita aparece SOLO si el servidor dice que este admin puede anularlo
-      if (t.can_void) {
+      // La tachita aparece SOLO si el servidor dice que este admin puede anularlo.
+      // Y si el boleto YA ENTRÓ no hay tachita para nadie: esa persona está adentro,
+      // anularlo descuadra la puerta y borra el dinero del corte. En su lugar, al
+      // organizador se le ofrece deshacer el escaneo —por si se escaneó el de al
+      // lado—, y desde ahí sí podrá anularlo.
+      if (t.can_void && t.status === 'used' && !SOY_COLIDER) {
+        const un = document.createElement('button');
+        un.className = 'iconbtn'; un.textContent = '↩';
+        un.title = 'Quitarle la entrada (se escaneó por error)';
+        un.onclick = () => quitarEntrada(t);
+        acc.appendChild(un);
+      } else if (t.can_void && t.status !== 'used') {
         const vd = document.createElement('button');
         vd.className = 'iconbtn'; vd.textContent = '✕';
         vd.title = 'Anular boleto';
@@ -1191,6 +1201,29 @@ async function voidTicket(t) {
   try {
     await API.post(`/api/admin/tickets/${t.id}/void`, { reason: r.reason });
     toast('Boleto ' + t.folio + ' anulado');
+    loadTicketsTable();
+  } catch (e) { if (!guard(e)) toast(e.message); }
+}
+
+/* Deshacer un escaneo. Es lo único que abre la puerta otra vez a un boleto, así que
+   se pregunta enseñando a qué hora entró: si esa hora tiene sentido, es que la
+   persona SÍ está adentro y esto no se toca. */
+async function quitarEntrada(t) {
+  const hora = (t.used_at || '').slice(11, 16);
+  const r = await confirmModal({
+    title: 'Quitarle la entrada a ' + t.folio,
+    body: `<b style="color:var(--cream)">${esc(t.buyer_name)}</b> · ${esc(t.type_name)}<br>
+           Entró ${hora ? '<b>' + hora + '</b>' : ''}${t.scanned_by ? ' por <b>' + esc(t.scanned_by) + '</b>' : ''}.<br><br>
+           Hazlo solo si ese escaneo fue un <b>error</b> (se escaneó el de al lado, o dos veces).
+           El boleto vuelve a servir en la puerta y podrás anularlo si hace falta.<br><br>
+           Si la persona de verdad está adentro, <b>no lo toques</b>: el conteo de la puerta
+           dejaría de cuadrar.`,
+    okLabel: 'Quitar la entrada', danger: true,
+  });
+  if (!r) return;
+  try {
+    await API.post(`/api/admin/tickets/${t.id}/quitar-entrada`, {});
+    toast('El boleto ' + t.folio + ' vuelve a servir en la puerta');
     loadTicketsTable();
   } catch (e) { if (!guard(e)) toast(e.message); }
 }
