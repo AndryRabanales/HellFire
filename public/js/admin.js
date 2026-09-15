@@ -344,8 +344,14 @@ function renderFlash(e) {
   if (!card) return;
   card.classList.toggle('flash-on', !!e.activa);
   const listos = (e.filas || []).filter(f => f.listo);
+  const fases = [...new Set((e.filas || []).map(f => f.phase_name).filter(Boolean))];
   $('#fl-estado').innerHTML = e.activa
-    ? `<b style="color:#f3d27a">ACTIVA ahora mismo</b> · ${listos.length} tipo(s) con descuento`
+    ? (listos.length
+        ? `<b style="color:#f3d27a">ACTIVA ahora mismo</b> · ${listos.length} tipo(s) con descuento`
+        : `<b style="color:var(--danger)">PRENDIDA, PERO NO ESTÁ BAJANDO NADA</b><br>
+           <span style="color:var(--cream)">Ningún tipo tiene precio de flash en la fase que corre hoy${
+             fases.length === 1 ? ' (' + esc(fases[0]) + ')' : ''}, así que se está cobrando precio normal.
+             Escribe abajo a cuánto quieren quedar y se aplica al instante.</span>`)
     : (listos.length
         ? 'Apagada · los precios de abajo se aplican en cuanto la prendas'
         : 'Apagada · primero escribe a cuánto queda cada boleto');

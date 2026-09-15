@@ -1617,3 +1617,11 @@ button.rd-p:active{transform:scale(.97)}
 /* Los filtros de boletos, plegados: lo que se usa siempre es el buscador. El botón
    se queda encendido mientras haya alguno puesto. */
 .filters.plegada{display:none}
+
+/* El aviso de la venta flash en el teléfono: el botón se va abajo y el texto ocupa
+   todo el ancho. Es el renglón que dice si la promo está corriendo o no; apretado
+   en media columna es justo el que nadie lee. */
+@media (max-width:700px){
+  .fl-cab{flex-wrap:wrap}
+  .fl-cab #fl-toggle{width:100%!important;flex:1 1 100%!important}
+}

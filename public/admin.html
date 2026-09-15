@@ -361,12 +361,12 @@
   <section id="tab-catalogos" class="mt16 hidden" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
     <!-- La venta flash va con los precios: es un precio, no un reporte. -->
     <div class="card" id="fl-card">
-      <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
-        <div>
+      <div class="row fl-cab" style="justify-content:space-between;align-items:center;gap:10px">
+        <div style="min-width:0;flex:1 1 220px">
           <div class="label" style="margin:0">⚡ Venta flash</div>
-          <div class="muted" id="fl-estado" style="font-size:11px;margin-top:2px">Cargando…</div>
+          <div class="muted" id="fl-estado" style="font-size:11px;margin-top:2px;line-height:1.45">Cargando…</div>
         </div>
-        <button class="btn" id="fl-toggle" style="width:auto;white-space:nowrap">…</button>
+        <button class="btn" id="fl-toggle" style="width:auto;white-space:nowrap;flex:none">…</button>
       </div>
       <div class="muted" style="margin:10px 0 0;font-size:11px">Escribe a cuánto queda cada boleto y préndela cuando quieras: se aplica al instante en el teléfono de todos los vendedores, y se apaga igual. El precio sale de la fase que esté corriendo, así que no hay que volver a escribirlo cada vez.</div>
       <div id="fl-tabla" class="mt12"></div>
