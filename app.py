@@ -1496,6 +1496,78 @@ def public_event():
     return jsonify(event_name=setting(db, "event_name"),
                    event_subtitle=setting(db, "event_subtitle"))
 
+@app.get("/api/publico/precios")
+def precios_publicos():
+    """LO QUE CUESTA HOY CADA BOLETO. Para el sitio de venta, que vive aparte.
+
+    Existe porque el precio de flash NO está donde cualquiera lo buscaría: el precio
+    de lista está en ticket_types, el de flash dentro de la FASE que corre hoy
+    (price_phases.flash_price_cents) y el interruptor en settings.flash_manual. Un
+    sistema de fuera que lea la tabla de tipos se lleva el precio de lista y cobra de
+    más justo el día de la promoción.
+
+    Aquí ya viene resuelto: `precio` es lo que se está cobrando en este momento —con
+    flash si está prendida— y `precio_lista` es el tachado. Quien consulte esto no
+    tiene que saber nada de fases ni de interruptores.
+
+    Es público a propósito: son los mismos precios que ve cualquiera que entre a
+    comprar. Lo que NO es público —cuántos van vendidos— solo sale con la llave
+    (encabezado X-Api-Key contra la variable API_PUBLICA_KEY)."""
+    db = get_db()
+    llave = (os.environ.get("API_PUBLICA_KEY") or "").strip()
+    con_llave = bool(llave) and request.headers.get("X-Api-Key", "") == llave
+    tipos = []
+    for t in db.execute("SELECT * FROM ticket_types WHERE active=1 ORDER BY price_cents").fetchall():
+        precio, fase, normal = effective_price(db, t)
+        libres = lugares_libres(db, t)
+        fila = {
+            "id": t["id"],
+            "nombre": t["name"],
+            "precio": money(precio),
+            "precio_cents": precio,
+            # con flash, el de lista es el tachado; sin flash, es el mismo
+            "precio_lista": money(normal or precio),
+            "en_flash": bool(normal and normal > precio),
+            "fase": fase,
+            "pide_facultad": bool(t["needs_faculty"]),
+            "cerrado": esta_cerrado(db, t),
+            "agotado": libres is not None and libres <= 0,
+        }
+        if con_llave:
+            fila["vendidos"] = ocupados_de(db, t["id"])
+            fila["libres"] = libres
+        tipos.append(fila)
+    out = {
+        "evento": setting(db, "event_name"),
+        "flash_activa": flash_manual(db),
+        "ventas_cerradas": ventas_cerradas(db),
+        "actualizado": now_iso(),
+        "tipos": tipos,
+    }
+    if con_llave:
+        out["vendidos_total"] = db.execute(
+            "SELECT COUNT(*) AS n FROM tickets WHERE status!='void'").fetchone()["n"]
+    resp = jsonify(**out)
+    # El sitio de venta corre en otro dominio y lo lee desde el navegador: sin esto,
+    # el navegador le bloquea la respuesta. Son precios públicos, no hay nada que
+    # proteger aquí; lo que va tras llave no se sirve sin ella.
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Headers"] = "X-Api-Key"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/api/publico/precios", methods=["OPTIONS"])
+def precios_publicos_preflight():
+    """El navegador pregunta antes de mandar la llave. Sin esta respuesta, la
+    consulta con X-Api-Key desde otro dominio ni siquiera sale."""
+    resp = app.make_default_options_response()
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Headers"] = "X-Api-Key"
+    resp.headers["Access-Control-Max-Age"] = "600"
+    return resp
+
+
 @app.post("/api/login-code")
 def login_code():
     db = get_db()
