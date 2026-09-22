@@ -84,9 +84,9 @@ function flyerVariantFor(ticket) {
 // Etiqueta visible: el NOMBRE REAL del tipo, tal cual lo escribió el admin. Antes
 // estaba fijo a UADY/Externo/VIP, así que un tipo nuevo salía mal etiquetado.
 function ticketTypeLabel(ticket) {
-  // El 2x1 no es "un grupo de dos": es la promoción, y así la pidió el comprador.
-  if (ticket.group_size === 2) return '2x1';
-  if (ticket.group_size) return 'Grupo';
+  // El 2x1 se nombra por su tipo, como cualquier boleto suelto: es el nombre de la
+  // zona lo que hay que leer. La promoción ya se dice junto al precio.
+  if (ticket.group_size && ticket.group_size !== 2) return 'Grupo';
   return ticket.type_name || 'General';
 }
 
@@ -145,7 +145,11 @@ function ticketBadgeSpec(ticket) {
     return { text: estrellaDe(ticket) + 'CORTESÍA · ' + (ticket.type_name || 'INVITADO').toUpperCase(),
              grad: t.grad, textColor: t.texto };
   }
-  if (ticket.group_size) {
+  // El 2x1 NO entra aquí: su insignia es la de su categoría, a secas. El "2x1" ya
+  // está escrito abajo, junto al precio, que es donde explica el número; repetirlo
+  // arriba le quita el renglón a lo único que la puerta necesita leer de un golpe,
+  // que es de qué zona es el boleto.
+  if (ticket.group_size && ticket.group_size !== 2) {
     // El grupo lleva el color de SU categoría, no un rojo de "grupo" para todos: en
     // la puerta y en la barra el color es lo primero que se mira, y un grupo VIP en
     // rojo se lee como general aunque el texto diga otra cosa.
@@ -160,8 +164,7 @@ function ticketBadgeSpec(ticket) {
       return { text: '★ BOTELLA · REPRESENTANTE' + (esCategoriaAlta(ticket)
                  ? ' · ' + (ticket.type_name || '').toUpperCase() : ''),
                grad: t.grad, textColor: t.texto };
-    return { text: (ticket.group_size === 2 ? '2X1' : 'GRUPO ' + ticket.group_size)
-               + (esCategoriaAlta(ticket)
+    return { text: 'GRUPO ' + ticket.group_size + (esCategoriaAlta(ticket)
                ? ' · ' + (ticket.type_name || '').toUpperCase() : ''),
              grad: t.grad, textColor: t.texto };
   }
