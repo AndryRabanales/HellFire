@@ -1382,7 +1382,7 @@ async function loadGroups(silent) {
     return `<div class="card">
       <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px">
         <div>
-          <div style="font:800 15px Manrope">Grupo ${seqOf[g.id]} de ${g.size}</div>
+          <div style="font:800 15px Manrope">${g.size === 2 ? `2x1 ${seqOf[g.id]}` : `Grupo ${seqOf[g.id]} de ${g.size}`}</div>
           <div class="muted" style="font-size:11px;margin-top:2px">Vendedor: <b style="color:var(--cream)">${esc(g.seller_name)}</b>${adminLine}</div>
         </div>
         <div class="muted" style="font-size:10px;text-align:right;white-space:nowrap">${esc(g.created_at)}</div>
