@@ -457,6 +457,12 @@ DEFAULT_SETTINGS = {
     "grupo10_pct": "10",
     "grupo5_activo": "0",
     "grupo5_pct": "10",
+    # 2x1: una promoción temporal, con su propio interruptor y su propio precio.
+    # Nace apagada a propósito: se prende el día que se anuncia y se apaga sola en
+    # cuanto el organizador la quita, sin tener que tocar ningún precio de fase.
+    "pareja_activo": "0",
+    "pareja_precio_cents": "70000",
+    "pareja_tipo": "",
     "lockout_minutes": "10",
 }
 
@@ -592,6 +598,38 @@ def descuento_de(db, sel, group_size=None):
             except (TypeError, ValueError):
                 return 0.0
     return 0.0
+
+
+def tipo_pareja(db):
+    """A qué boleto aplica el 2x1. El organizador lo elige en Promociones; si nunca
+    lo tocó se toma el Ultra VIP, que es donde nació la promoción."""
+    tid = (setting(db, "pareja_tipo") or "").strip()
+    if tid:
+        try:
+            r = db.execute("SELECT * FROM ticket_types WHERE id=? AND active=1",
+                           (int(tid),)).fetchone()
+        except (TypeError, ValueError):
+            r = None
+        if r:
+            return r
+    return db.execute("SELECT * FROM ticket_types WHERE active=1 AND needs_faculty=0 "
+                      "AND LOWER(name) LIKE '%ultra%' ORDER BY price_cents DESC "
+                      "LIMIT 1").fetchone()
+
+
+def precio_pareja(db):
+    """Lo que paga la pareja y lo que se le congela a CADA boleto.
+
+    Es un número cerrado que pone el organizador: no lo mueve la fase, no lo mueve la
+    flash y no se le encima ningún descuento. Se parte en dos mitades iguales y al
+    peso, porque son dos boletos y cada uno tiene que decir cuánto costó; si el total
+    fuera impar la casa absorbe el peso suelto antes que dejar dos boletos distintos."""
+    try:
+        total = int(float(setting(db, "pareja_precio_cents") or 0))
+    except (TypeError, ValueError):
+        total = 0
+    mitad = max(0, (total // 2 // 100) * 100)
+    return mitad * 2, mitad
 
 
 def con_descuento(precio, normal, pct):
@@ -1745,12 +1783,15 @@ def estado_venta():
     # Las promociones se prenden y se apagan a mitad del día ("hoy sí hay grupos de
     # 5"), así que viajan aquí y no solo en el catálogo: van en una sola cadena para
     # que el vendedor la compare de un vistazo y recargue únicamente si cambió.
-    promos = "%s|%s|%s|%s|%s|%s" % (setting(db, "grupo10_activo") or "0",
+    promos = "%s|%s|%s|%s|%s|%s|%s|%s|%s" % (setting(db, "grupo10_activo") or "0",
                                     setting(db, "grupo10_desc") or "0",
                                     setting(db, "grupo10_pct") or "0",
                                     setting(db, "grupo5_activo") or "0",
                                     setting(db, "grupo5_pct") or "0",
-                                    _mi_descuento(s))
+                                    _mi_descuento(s),
+                                    setting(db, "pareja_activo") or "0",
+                                    setting(db, "pareja_precio_cents") or "0",
+                                    setting(db, "pareja_tipo") or "")
     return jsonify(flash_manual=flash_manual(db), ventas_cerradas=ventas_cerradas(db),
                    promos=promos)
 
@@ -1806,6 +1847,16 @@ def catalog():
                       "tipos": [{"id": t["id"], "name": t["name"], "is_vip": t["is_vip"],
                                  "price_cents": t["price_cents"],
                                  "normal_cents": t.get("normal_cents")} for t in opciones]}
+    # El 2x1 necesita DOS lugares libres del mismo tipo: con uno solo la pareja se
+    # queda a medias y el segundo boleto reventaría después de cobrar.
+    _par_tipo = tipo_pareja(db)
+    _par_total, _par_mitad = precio_pareja(db)
+    _par_ok = bool(setting(db, "pareja_activo") == "1" and _par_tipo is not None
+                   and _par_mitad > 0
+                   and any(t["id"] == _par_tipo["id"] for t in opciones)
+                   and (lambda l: l is None or l >= 2)(
+                       lugares_libres(db, _par_tipo)))
+
     # ¿le falta el tutorial? Va aquí y no solo en la respuesta del login: si el
     # vendedor recarga la página a media guía, con la sesión ya guardada no vuelve a
     # pasar por el login y se quedaría sin verla nunca.
@@ -1842,6 +1893,17 @@ def catalog():
                    grupo10_pct=float(setting(db, "grupo10_pct") or 0),
                    grupo5_activo=setting(db, "grupo5_activo") == "1",
                    grupo5_pct=float(setting(db, "grupo5_pct") or 0),
+                   # 2x1: se enseña solo si además queda lugar en ese tipo. Un botón
+                   # que existe y luego rebota es el vendedor callándose después de
+                   # haberle prometido el precio a dos personas.
+                   pareja_activo=_par_ok,
+                   # el interruptor tal como está guardado: el panel del organizador
+                   # tiene que enseñar lo que ÉL prendió, no si hoy alcanza el cupo
+                   pareja_on=setting(db, "pareja_activo") == "1",
+                   pareja_total_cents=_par_total,
+                   pareja_mitad_cents=_par_mitad,
+                   pareja_tipo_id=(_par_tipo["id"] if _par_tipo else None),
+                   pareja_tipo_nombre=(_par_tipo["name"] if _par_tipo else None),
                    mi_descuento=_mi_descuento(s),
                    mi_boletos=mi_boletos,
                    mi_vendido=money(mi_vendido), mi_en_grupo=mi_en_grupo,
@@ -2042,12 +2104,30 @@ def create_group():
     # BOTELLA al representante y no baja el precio; el de 5 da DESCUENTO a los cinco
     # y no da botella. Apagados desde Catálogos, el servidor los rechaza aquí aunque
     # alguien fuerce la llamada.
-    if size not in (5, 10):
-        return jsonify(error="El grupo debe ser de 5 o de 10 integrantes"), 400
+    if size not in (2, 5, 10):
+        return jsonify(error="El grupo debe ser de 2, de 5 o de 10 integrantes"), 400
     if size == 10 and setting(db, "grupo10_activo") != "1":
         return jsonify(error="Los grupos de 10 están cerrados por ahora."), 403
     if size == 5 and setting(db, "grupo5_activo") != "1":
         return jsonify(error="Los grupos de 5 están cerrados por ahora."), 403
+    # El 2x1 es temporal: mientras esté apagado el servidor lo rechaza aquí aunque
+    # alguien se guarde la pantalla o fuerce la llamada.
+    pareja_total = pareja_mitad = 0
+    if size == 2:
+        if setting(db, "pareja_activo") != "1":
+            return jsonify(error="La promoción 2x1 no está disponible."), 403
+        tp = tipo_pareja(db)
+        if not tp:
+            return jsonify(error="El 2x1 no tiene tipo de boleto configurado."), 400
+        if tp["needs_faculty"]:
+            return jsonify(error=f"El 2x1 no se puede armar con {tp['name']}, porque "
+                                 f"cada boleto necesita su facultad."), 400
+        pareja_total, pareja_mitad = precio_pareja(db)
+        if pareja_mitad <= 0:
+            return jsonify(error="El precio del 2x1 aún no está configurado."), 400
+        # el tipo lo pone el organizador, no la pantalla: la pareja no elige
+        b["types"] = None
+        b["type_id"] = tp["id"]
     names = b.get("names") or []
     if not isinstance(names, list) or len(names) != size:
         return jsonify(error=f"Escribe los {size} nombres del grupo"), 400
@@ -2085,10 +2165,20 @@ def create_group():
                 return jsonify(error=f"Los grupos no se pueden armar con {fila['name']}, "
                                      f"porque cada boleto necesita su facultad."), 400
             precio, fase, normal = effective_price(db, fila)
-            _d = descuento_de(db, s["seller"], size)
-            if _d:
-                precio, normal = con_descuento(precio, normal, _d)
-                fase = etiqueta_descuento(fase, _d)
+            if size == 2:
+                # 2x1: el precio de la pareja es un número cerrado del organizador.
+                # No lo mueve la fase ni la flash y NO se le encima ningún descuento;
+                # cada boleto se congela con su mitad. El tachado es lo que esa
+                # persona habría pagado hoy sola: es de ahí de donde sale el ahorro.
+                individual = precio
+                precio = pareja_mitad
+                fase = "2x1"
+                normal = individual if individual > precio else None
+            else:
+                _d = descuento_de(db, s["seller"], size)
+                if _d:
+                    precio, normal = con_descuento(precio, normal, _d)
+                    fase = etiqueta_descuento(fase, _d)
             if precio <= 0:
                 return jsonify(error=f"El precio de {fila['name']} aún no está configurado"), 400
             cache[tid] = (fila, precio, fase, normal)
@@ -2138,7 +2228,7 @@ def create_group():
     reparto = ", ".join(f"{n}\u00d7 {t}" for t, n in
                         Counter(x["name"] for x in tipos).most_common())
     audit(db, seller_name, "generacion",
-          f"Generó un grupo de {size} [{reparto}] ({', '.join(names)}) "
+          f"Generó un {'2x1' if size == 2 else f'grupo de {size}'} [{reparto}] ({', '.join(names)}) "
           f"por ${total/100:,.2f}"
           + (f" · representante: {representative}" if representative else ""))
     db.commit()
@@ -5147,7 +5237,8 @@ def save_settings():
     # Promociones: dos interruptores y un porcentaje. Cada cambio deja su línea porque
     # mueve el precio de todos los boletos que se vendan a partir de ese momento.
     for clave, etq in (("grupo10_activo", "grupos de 10"), ("grupo5_activo", "grupos de 5"),
-                       ("grupo10_desc", "el descuento del grupo de 10")):
+                       ("grupo10_desc", "el descuento del grupo de 10"),
+                       ("pareja_activo", "la promoción 2x1")):
         if clave in b:
             on = "1" if str(b[clave]) in ("1", "True", "true") else "0"
             if setting(db, clave) != on:
@@ -5163,6 +5254,34 @@ def save_settings():
                 return jsonify(error=f"El descuento del {etq} debe ser un número entre 0 y 90"), 400
             set_setting(db, clave, str(pc))
             changed.append(f"descuento del {etq} en {pc:g}%")
+
+    # El 2x1: su precio es un número cerrado en centavos y el tipo al que aplica.
+    # Se valida con horquilla porque quien teclea 70000 queriendo $700 no puede
+    # terminar vendiendo la pareja en setecientos mil pesos —ni en siete.
+    if "pareja_precio_cents" in b:
+        try:
+            pv = int(float(b["pareja_precio_cents"]))
+        except (TypeError, ValueError):
+            return jsonify(error="El precio del 2x1 debe ser un número"), 400
+        if pv < 200 or pv > 2000000:
+            return jsonify(error="El precio del 2x1 debe estar entre $2 y $20,000"), 400
+        set_setting(db, "pareja_precio_cents", str(pv))
+        changed.append(f"precio del 2x1 en ${pv/100:,.0f} la pareja")
+    if "pareja_tipo" in b:
+        tv = str(b["pareja_tipo"] or "").strip()
+        if tv:
+            try:
+                fila = db.execute("SELECT name, needs_faculty FROM ticket_types "
+                                  "WHERE id=? AND active=1", (int(tv),)).fetchone()
+            except (TypeError, ValueError):
+                fila = None
+            if not fila:
+                return jsonify(error="Ese tipo de boleto no existe o está desactivado"), 400
+            if fila["needs_faculty"]:
+                return jsonify(error=f"El 2x1 no puede ser de {fila['name']}: ese "
+                                     f"boleto pide facultad por persona"), 400
+            changed.append(f"2x1 sobre {fila['name']}")
+        set_setting(db, "pareja_tipo", tv)
 
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
     for v in FLYER_VARIANTS:

@@ -148,8 +148,20 @@ function aplicarPromos() {
   if (corto) corto.textContent = pct5 > 0 ? texto5 : 'Precio de grupo';
   // Con los dos abiertos se ponen lado a lado y se acortan los textos; con uno
   // solo, ese botón se queda con el ancho entero y el renglón largo de siempre.
-  const caja = $('#group-switch');
+  const caja = $('#group-row');
   if (caja) caja.classList.toggle('dos', g10 && g5);
+  // El 2x1: temporal, con su precio cerrado y su propio interruptor. Se pinta con lo
+  // que diga el servidor —tipo, total y mitad— y no con un n\u00famero escrito aqu\u00ed: el
+  // d\u00eda que el organizador lo cambie, el bot\u00f3n lo dice solo.
+  const p2 = !!CATALOG.pareja_activo;
+  const b2 = $('#btn-group-2');
+  if (b2) b2.classList.toggle('hidden', !p2);
+  if (p2) {
+    const tit = $('#g2-titulo'), sub2 = $('#g2-sub');
+    if (tit) tit.textContent = '2x1 en ' + (CATALOG.pareja_tipo_nombre || 'boletos');
+    if (sub2) sub2.textContent = 'Dos boletos por ' + fmtMoney(CATALOG.pareja_total_cents / 100)
+      + ' \u00b7 ' + fmtMoney(CATALOG.pareja_mitad_cents / 100) + ' c/u';
+  }
   // Su descuento del QR, si el organizador se lo autoriz\u00f3. Se lo quitaron con el
   // interruptor prendido: se apaga aqu\u00ed o seguir\u00eda cobrando de menos.
   const mi = Number(CATALOG.mi_descuento || 0);
@@ -159,7 +171,7 @@ function aplicarPromos() {
   // debajo de los precios es una pregunta sin respuesta.
   const sw = $('#group-switch');
   if (sw && !GROUP_SIZE && !(CATALOG && CATALOG.ventas_cerradas)) {
-    sw.classList.toggle('hidden', !(g10 || g5));
+    sw.classList.toggle('hidden', !(g10 || g5 || p2));
   }
 }
 
@@ -403,11 +415,13 @@ async function pulso() {
     // nombres escritos, y no al final con los cinco y el dinero en la mano. Si ya
     // generó no se le toca nada: le faltan por descargar los boletos.
     if (GROUP_SIZE && !GROUP_RESULT
-        && !(GROUP_SIZE === 5 ? c.grupo5_activo : c.grupo10_activo)) {
+        && !(GROUP_SIZE === 2 ? c.pareja_activo
+           : GROUP_SIZE === 5 ? c.grupo5_activo : c.grupo10_activo)) {
       const cual = GROUP_SIZE;          // exitGroupMode lo borra
       exitGroupMode();
       aplicarCierre();
-      toast('El organizador cerr\u00f3 los grupos de ' + cual);
+      toast(cual === 2 ? 'El organizador quit\u00f3 la promoci\u00f3n 2x1'
+                       : 'El organizador cerr\u00f3 los grupos de ' + cual);
       return;
     }
     if (GROUP_SIZE) {
@@ -485,16 +499,28 @@ function enterGroupMode(size) {
   // con un solo tipo disponible no hay nada que elegir: se entra directo
   GROUP_TYPE = GROUP_TYPE && tipos.some(t => t.id === GROUP_TYPE.id)
     ? GROUP_TYPE : (tipos.length === 1 ? tipos[0] : null);
+  // El 2x1 no se elige: el organizador ya dijo sobre qu\u00e9 boleto va y a qu\u00e9 precio.
+  // Preguntarle el tipo al vendedor abrir\u00eda la puerta a vender dos generales a
+  // precio de pareja de Ultra VIP.
+  if (size === 2) {
+    const tp = tipos.find(t => t.id === CATALOG.pareja_tipo_id);
+    if (!tp) { GROUP_SIZE = null; toast('El 2x1 no est\u00e1 disponible ahora mismo'); return; }
+    GROUP_TYPE = tp;
+    GROUP_TYPES = [tp, tp];
+  }
   $('#mode-individual').classList.add('hidden');
   $('#group-switch').classList.add('hidden');
   $('#mode-group').classList.remove('hidden');
   $('#btn-generate').classList.add('hidden');
   $('#btn-generate-group').classList.remove('hidden');
-  $('#btn-generate-group').textContent = 'GENERAR GRUPO DE ' + size;
+  $('#btn-generate-group').textContent = size === 2 ? 'GENERAR LOS DOS BOLETOS'
+                                                    : 'GENERAR GRUPO DE ' + size;
   $('#btn-group-done').classList.add('hidden');
   $('#btn-group-back').classList.remove('hidden');
   $('#group-result-bar').classList.add('hidden'); $('#group-result-bar').classList.remove('done');
-  $('#f-hint').textContent = 'Grupo de ' + size + ' · un boleto por integrante';
+  $('#f-hint').textContent = size === 2
+    ? '2x1 · ' + fmtMoney(CATALOG.pareja_total_cents / 100) + ' los dos · un boleto y un QR para cada quien'
+    : 'Grupo de ' + size + ' · un boleto por integrante';
   $('#f-err').textContent = '';
   pintaDescuento();          // aquí su descuento no pinta nada: fuera de la pantalla
   renderGroupPriceBar();
@@ -529,6 +555,9 @@ function pctGrupo() {
   return 0;
 }
 function precioGrupo(cents) {
+  // El 2x1 no es un porcentaje: es un precio cerrado. Cada boleto se lleva la mitad
+  // exacta de lo que paga la pareja, igual que lo congela el servidor.
+  if (GROUP_SIZE === 2) return Number(CATALOG.pareja_mitad_cents || 0);
   const p = pctGrupo();
   if (!(p > 0) || !(cents > 0)) return cents;
   return Math.max(0, Math.floor(Math.floor(cents * (100 - p) / 100) / 100) * 100);
@@ -586,11 +615,13 @@ function renderGroupPriceBar() {
   usados.forEach(t => cuenta.set(t.name, (cuenta.get(t.name) || 0) + 1));
   const reparto = [...cuenta.entries()].map(([n, c]) => `${c} ${esc(n)}`).join(' \u00b7 ');
   barra.innerHTML = `
-    <div class="gp-line">Grupo de ${GROUP_SIZE} \u00b7 ${GROUP_MIXTO ? 'mixto' : esc(GROUP_TYPE.name)}
-      <button type="button" class="gt-cambiar" id="gt-cambiar">cambiar</button></div>
+    <div class="gp-line">${GROUP_SIZE === 2 ? '2x1' : 'Grupo de ' + GROUP_SIZE} \u00b7 ${GROUP_MIXTO ? 'mixto' : esc(GROUP_TYPE.name)}
+      ${GROUP_SIZE === 2 ? '' : '<button type="button" class="gt-cambiar" id="gt-cambiar">cambiar</button>'}</div>
     <div class="gp-price">${total < sinDesc
         ? `<span class="f-antes">${fmtMoney(sinDesc / 100)}</span> ` : ''}${fmtMoney(total / 100)} <span class="gp-cu">total</span></div>
-    <div class="gp-save">${GROUP_MIXTO ? esc(reparto) + ' \u00b7 ' : ''}${GROUP_SIZE === 5
+    <div class="gp-save">${GROUP_MIXTO ? esc(reparto) + ' \u00b7 ' : ''}${GROUP_SIZE === 2
+        ? 'Los dos entran con su propio boleto y su propio QR \u00b7 ' + fmtMoney(total / 2 / 100) + ' cada uno'
+        : GROUP_SIZE === 5
         ? (total < sinDesc
             ? pctGrupo() + '% menos para los cinco \u00b7 este grupo no lleva botella'
             : 'los cinco juntos \u00b7 este grupo no lleva botella')
@@ -696,9 +727,11 @@ function showGroupResult(r) {
   $('#group-result-bar').classList.remove('hidden');
   $('#group-result-bar').classList.add('done');
   $('#group-result-bar').innerHTML = `
-    <div class="gp-line">¡Listo! Grupo de ${r.size} generado ✓</div>
+    <div class="gp-line">¡Listo! ${r.size === 2 ? '2x1' : 'Grupo de ' + r.size} generado ✓</div>
     <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
-    <div class="gp-save">${r.size === 5
+    <div class="gp-save">${r.size === 2
+      ? 'Entrega un boleto a cada quien: son dos QR distintos y en la puerta se escanean por separado'
+      : r.size === 5
       ? 'Los cinco ya salieron con su descuento \u00b7 este grupo no lleva botella'
       : `El boleto de ${esc(r.representative || 'el representante')} lleva la ★: con ese recoge la botella en la barra`}</div>`;
   $('#f-hint').textContent = 'Descarga cada boleto abajo';
@@ -737,7 +770,8 @@ async function generateGroup() {
     $('#f-err').textContent = e.message;
   } finally {
     btn.disabled = false;
-    if (!GROUP_RESULT) btn.textContent = 'GENERAR GRUPO DE ' + GROUP_SIZE;
+    if (!GROUP_RESULT) btn.textContent = GROUP_SIZE === 2 ? 'GENERAR LOS DOS BOLETOS'
+                                                          : 'GENERAR GRUPO DE ' + GROUP_SIZE;
   }
 }
 
@@ -1006,6 +1040,7 @@ $('#btn-generate').addEventListener('click', generate);
 $('#btn-generate-group').addEventListener('click', generateGroup);
 $('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
 $('#btn-group-5').addEventListener('click', () => enterGroupMode(5));
+$('#btn-group-2').addEventListener('click', () => enterGroupMode(2));
 $('#mi-desc').addEventListener('click', () => {
   DESCUENTO_ON = !DESCUENTO_ON;
   pintaDescuento();

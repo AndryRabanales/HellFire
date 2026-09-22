@@ -467,6 +467,16 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
 .btn.grupo10.g5 .g-s{color:var(--cream-60)}
 .btn.grupo10.g5:active{background:linear-gradient(180deg,rgba(243,210,122,.26),rgba(243,210,122,.1))}
 
+/* El 2x1: relleno en ORO, el único botón macizo de la pantalla que no es naranja.
+   Mientras la promoción esté prendida tiene que verse antes que los dos grupos, y en
+   oro no se confunde con GENERAR BOLETO —que es el naranja de abajo—: dos botones
+   grandes del mismo color en la misma pantalla es un dedazo esperando a pasar. */
+.btn.grupo10.g2{border-color:#f3d27a;
+  background:linear-gradient(180deg,#f7dc93,#e0bb5c)}
+.btn.grupo10.g2 .g-t{color:#2a1c04;font-size:15px}
+.btn.grupo10.g2 .g-s{color:rgba(42,28,4,.74);font-weight:700}
+.btn.grupo10.g2:active{background:linear-gradient(180deg,#e0bb5c,#c9a445)}
+
 /* Con los dos grupos abiertos se ponen lado a lado y el texto se acorta: a media
    pantalla el renglón largo se partía en tres y el botón dejaba de leerse de un
    vistazo. Con uno solo, ese botón ocupa el ancho entero, como siempre. */

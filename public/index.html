@@ -103,7 +103,8 @@
        los dos se ponen lado a lado y los textos se acortan solos (ver .grupos.dos):
        a media pantalla, "El representante se lleva botella gratis" se parte en tres
        renglones y el botón deja de leerse de un vistazo. -->
-  <div class="grupos mt16" id="group-switch">
+  <div class="mt16" id="group-switch">
+   <div class="grupos" id="group-row">
     <button class="btn grupo10" id="btn-group-10">
       <span class="g-t"><span class="g-largo">Armar grupo de 10</span><span class="g-corto">Grupo de 10</span><span class="g-arrow">›</span></span>
       <span class="g-s"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"
@@ -119,6 +120,19 @@
         stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
         <path d="M20 4 4 20"/><circle cx="7.5" cy="7.5" r="2.6"/><circle cx="16.5" cy="16.5" r="2.6"/></svg>
         <span class="g-largo">Los cinco pagan <span id="g5-sub">10% menos</span></span><span class="g-corto" id="g5-corto">10% menos</span></span>
+    </button>
+   </div>
+    <!-- El 2x1 es una promoción TEMPORAL y va en su propio renglón, ancho completo:
+         mientras dure tiene que verse antes que nada, y el día que el organizador la
+         apague desaparece de aquí sin dejar hueco. -->
+    <button class="btn grupo10 g2 hidden mt8" id="btn-group-2">
+      <span class="g-t"><span id="g2-titulo">2x1</span><span class="g-arrow">›</span></span>
+      <span class="g-s"><svg viewBox="0 0 24 24" width="12" height="12" fill="none"
+        stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 8.2V6.6c0-.9.7-1.6 1.6-1.6h14.8c.9 0 1.6.7 1.6 1.6v1.6a2.2 2.2 0 0 0 0 4.4v1.6"/>
+        <path d="M21 14.2v3.2c0 .9-.7 1.6-1.6 1.6H4.6c-.9 0-1.6-.7-1.6-1.6v-1.6a2.2 2.2 0 0 0 0-4.4"/>
+        <path d="M12 5v14"/></svg>
+        <span id="g2-sub">Dos boletos por el precio de la promoción</span></span>
     </button>
   </div>
 

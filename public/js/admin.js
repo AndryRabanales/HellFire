@@ -3254,6 +3254,33 @@ async function loadCatalogs() {
       pct10.onchange = () => guarda({ grupo10_pct: pct10.value });
       g5.onchange  = () => guarda({ grupo5_activo:  g5.checked  ? '1' : '0' });
       pct.onchange = () => guarda({ grupo5_pct: pct.value });
+      // ----- el 2x1: interruptor, precio de la pareja y sobre qué boleto va -----
+      // El precio se escribe en PESOS y viaja en centavos. Se enseña debajo a cuánto
+      // sale cada uno: es el número que el vendedor va a decir en voz alta, y si la
+      // mitad no es redonda hay que verlo ANTES de anunciar la promoción.
+      const p2 = $('#pr-p2'), p2p = $('#pr-p2-precio'), p2t = $('#pr-p2-tipo'), p2cu = $('#pr-p2-cu');
+      if (p2) {
+        p2.checked = !!cat.pareja_on;
+        p2p.value = Math.round((cat.pareja_total_cents || 0) / 100);
+        const elegibles = tt.types.filter(t => t.active && !t.needs_faculty);
+        p2t.innerHTML = elegibles.map(t =>
+          `<option value="${t.id}">${esc(t.name)}</option>`).join('')
+          || '<option value="">sin tipos disponibles</option>';
+        if (cat.pareja_tipo_id) p2t.value = String(cat.pareja_tipo_id);
+        const pintaCu = () => {
+          const pesos = Number(p2p.value || 0);
+          const mitad = Math.floor(pesos / 2);
+          p2cu.innerHTML = pesos > 0
+            ? `Cada boleto sale a <b>${fmtMoney(mitad)}</b>${
+                pesos % 2 ? ` · el peso suelto lo absorbe la casa: la pareja paga ${fmtMoney(mitad * 2)}` : ''}`
+            : '';
+        };
+        pintaCu();
+        p2.onchange = () => guarda({ pareja_activo: p2.checked ? '1' : '0' });
+        p2p.oninput = pintaCu;
+        p2p.onchange = () => { pintaCu(); guarda({ pareja_precio_cents: Math.round(Number(p2p.value || 0) * 100) }); };
+        p2t.onchange = () => guarda({ pareja_tipo: p2t.value });
+      }
     }
   } catch (e) { /* si falla, los interruptores se quedan como estaban */ }
 
