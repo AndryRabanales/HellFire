@@ -84,6 +84,8 @@ function flyerVariantFor(ticket) {
 // Etiqueta visible: el NOMBRE REAL del tipo, tal cual lo escribió el admin. Antes
 // estaba fijo a UADY/Externo/VIP, así que un tipo nuevo salía mal etiquetado.
 function ticketTypeLabel(ticket) {
+  // El 2x1 no es "un grupo de dos": es la promoción, y así la pidió el comprador.
+  if (ticket.group_size === 2) return '2x1';
   if (ticket.group_size) return 'Grupo';
   return ticket.type_name || 'General';
 }
@@ -158,7 +160,8 @@ function ticketBadgeSpec(ticket) {
       return { text: '★ BOTELLA · REPRESENTANTE' + (esCategoriaAlta(ticket)
                  ? ' · ' + (ticket.type_name || '').toUpperCase() : ''),
                grad: t.grad, textColor: t.texto };
-    return { text: 'GRUPO ' + ticket.group_size + (esCategoriaAlta(ticket)
+    return { text: (ticket.group_size === 2 ? '2X1' : 'GRUPO ' + ticket.group_size)
+               + (esCategoriaAlta(ticket)
                ? ' · ' + (ticket.type_name || '').toUpperCase() : ''),
              grad: t.grad, textColor: t.texto };
   }
