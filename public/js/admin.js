@@ -1098,10 +1098,10 @@ async function loadTicketsTable(silent) {
     tr.innerHTML = `
       <td data-label="Folio" style="font-family:'Space Grotesk';color:var(--ember-soft)">${esc(t.folio)}</td>
       <td data-label="Comprador" class="strike cell-name"><span class="clip" title="${esc(t.buyer_name)}">${esc(t.buyer_name)}</span></td>
-      <td data-label="Facultad">${esc(t.faculty_name)}</td>
-      <td data-label="Tipo">${esc(t.type_name)}${t.es_cortesia
+      <td data-label="Tipo" style="font-weight:700">${esc(t.type_name)}${t.es_cortesia
           ? `<div style="font-size:9px;color:${tonoDe(t).tinta};margin-top:2px">${
               estrellaDe(t)}CORTESÍA</div>` : ''}</td>
+      <td data-label="Facultad" class="muted">${esc(t.faculty_name)}</td>
       <td data-label="Precio" class="strike" style="font-family:'Space Grotesk'">${t.es_cortesia
           ? `<span style="color:${tonoDe(t).tinta}">Cortesía</span>`
           : (t.normal_price > t.price
