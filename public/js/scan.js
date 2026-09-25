@@ -244,7 +244,8 @@ function etiquetasDe(t) {
   if (t.group_size) {
     html += t.es_representante
       ? '<div class="r-tag botella">★ BOTELLA · le toca a él</div>'
-      : `<div class="r-tag grupo">${t.group_size === 2 ? '2X1' : 'GRUPO DE ' + t.group_size}</div>`;
+      : `<div class="r-tag grupo">${t.group_size === 2 ? '2X1'
+          : t.group_size === 4 ? '3+1' : 'GRUPO DE ' + t.group_size}</div>`;
   }
   return html;
 }

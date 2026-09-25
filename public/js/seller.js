@@ -169,9 +169,15 @@ function aplicarPromos() {
   pintaDescuento();
   // Sin ning\u00fan rengl\u00f3n que ense\u00f1ar, el bloque entero sobra: un marco vac\u00edo
   // debajo de los precios es una pregunta sin respuesta.
+  // El 3+1: se pagan tres y el cuarto va gratis. No tiene precio propio que
+  // ense\u00f1ar —sale del precio de hoy de la categor\u00eda que elijan—, as\u00ed que el
+  // bot\u00f3n solo se prende y se apaga.
+  const p31 = !!CATALOG.tres_uno_activo;
+  const b31 = $('#btn-group-4');
+  if (b31) b31.classList.toggle('hidden', !p31);
   const sw = $('#group-switch');
   if (sw && !GROUP_SIZE && !(CATALOG && CATALOG.ventas_cerradas)) {
-    sw.classList.toggle('hidden', !(g10 || g5 || p2));
+    sw.classList.toggle('hidden', !(g10 || g5 || p2 || p31));
   }
 }
 
@@ -416,11 +422,13 @@ async function pulso() {
     // generó no se le toca nada: le faltan por descargar los boletos.
     if (GROUP_SIZE && !GROUP_RESULT
         && !(GROUP_SIZE === 2 ? c.pareja_activo
+           : GROUP_SIZE === 4 ? c.tres_uno_activo
            : GROUP_SIZE === 5 ? c.grupo5_activo : c.grupo10_activo)) {
       const cual = GROUP_SIZE;          // exitGroupMode lo borra
       exitGroupMode();
       aplicarCierre();
       toast(cual === 2 ? 'El organizador quit\u00f3 la promoci\u00f3n 2x1'
+          : cual === 4 ? 'El organizador quit\u00f3 la promoci\u00f3n 3+1'
                        : 'El organizador cerr\u00f3 los grupos de ' + cual);
       return;
     }
@@ -514,12 +522,15 @@ function enterGroupMode(size) {
   $('#btn-generate').classList.add('hidden');
   $('#btn-generate-group').classList.remove('hidden');
   $('#btn-generate-group').textContent = size === 2 ? 'GENERAR LOS DOS BOLETOS'
+                                       : size === 4 ? 'GENERAR LOS CUATRO BOLETOS'
                                                     : 'GENERAR GRUPO DE ' + size;
   $('#btn-group-done').classList.add('hidden');
   $('#btn-group-back').classList.remove('hidden');
   $('#group-result-bar').classList.add('hidden'); $('#group-result-bar').classList.remove('done');
   $('#f-hint').textContent = size === 2
     ? '2x1 · ' + fmtMoney(CATALOG.pareja_total_cents / 100) + ' los dos · un boleto y un QR para cada quien'
+    : size === 4
+    ? '3+1 · cobra tres, el cuarto va gratis · los cuatro de la misma categoría'
     : 'Grupo de ' + size + ' · un boleto por integrante';
   $('#f-err').textContent = '';
   pintaDescuento();          // aquí su descuento no pinta nada: fuera de la pantalla
@@ -554,6 +565,11 @@ function pctGrupo() {
   if (GROUP_SIZE === 5)  return CATALOG.grupo5_activo ? Number(CATALOG.grupo5_pct || 0) : 0;
   return 0;
 }
+/* Cu\u00e1ntos de los boletos del grupo SE COBRAN. En el 3+1 son tres de cuatro: el
+   total tiene que salir de aqu\u00ed y no del n\u00famero de integrantes, o la barra
+   prometer\u00eda un cobro de m\u00e1s parado frente a cuatro personas. */
+function boletosCobrados(size) { return size === 4 ? 3 : size; }
+
 function precioGrupo(cents) {
   // El 2x1 no es un porcentaje: es un precio cerrado. Cada boleto se lleva la mitad
   // exacta de lo que paga la pareja, igual que lo congela el servidor.
@@ -574,7 +590,8 @@ function renderGroupPriceBar() {
   if (!GROUP_TYPE) {
     barra.classList.add('eligiendo');
     barra.innerHTML =
-      `<div class="gt-h">¿De qué tipo es el grupo de ${GROUP_SIZE}?</div>
+      `<div class="gt-h">${GROUP_SIZE === 4 ? '¿De qué tipo son los cuatro boletos?'
+                          : `¿De qué tipo es el grupo de ${GROUP_SIZE}?`}</div>
        <div class="gt-list">${tipos.map(t => {
          const final = precioGrupo(t.price_cents);
          // con descuento de grupo el tachado es el precio de hoy de ese boleto; sin
@@ -584,11 +601,12 @@ function renderGroupPriceBar() {
          return `<button type="button" class="gt-row" data-gt="${t.id}">
            <span class="gt-n">${esc(t.name)}</span>
            <span class="gt-p">
-             <span class="gt-tot">${fmtMoney(final * GROUP_SIZE / 100)}</span>
-             <span class="gt-cu">${antes ? `<s>${fmtMoney(antes / 100)}</s> ` : ''}${fmtMoney(final / 100)} c/u</span>
+             <span class="gt-tot">${fmtMoney(final * boletosCobrados(GROUP_SIZE) / 100)}</span>
+             <span class="gt-cu">${antes ? `<s>${fmtMoney(antes / 100)}</s> ` : ''}${fmtMoney(final / 100)} c/u${
+               GROUP_SIZE === 4 ? ' \u00b7 el 4\u00ba gratis' : ''}</span>
            </span>
            <span class="gt-ar">›</span></button>`;
-       }).join('')}${tipos.length > 1 ? `
+       }).join('')}${tipos.length > 1 && GROUP_SIZE !== 4 ? `
          <button type="button" class="gt-row gt-mix" data-gt="mixto">
            <span class="gt-n">Mixto</span>
            <span class="gt-p"><span class="gt-cu">cada quien elige el suyo</span></span>
@@ -609,17 +627,25 @@ function renderGroupPriceBar() {
   // el vendedor le cobra al grupo.
   barra.classList.remove('eligiendo');
   const usados = GROUP_TYPES.filter(Boolean);
-  const total = usados.reduce((a, t) => a + precioGrupo(t.price_cents), 0);
-  const sinDesc = usados.reduce((a, t) => a + t.price_cents, 0);
+  // En el 3+1 se cobran TRES del mismo precio y el cuarto va en cero; el tachado es
+  // lo que habr\u00edan pagado los cuatro por separado, que es de donde sale el regalo.
+  const total = GROUP_SIZE === 4
+    ? precioGrupo(GROUP_TYPE.price_cents) * 3
+    : usados.reduce((a, t) => a + precioGrupo(t.price_cents), 0);
+  const sinDesc = GROUP_SIZE === 4
+    ? GROUP_TYPE.price_cents * 4
+    : usados.reduce((a, t) => a + t.price_cents, 0);
   const cuenta = new Map();
   usados.forEach(t => cuenta.set(t.name, (cuenta.get(t.name) || 0) + 1));
   const reparto = [...cuenta.entries()].map(([n, c]) => `${c} ${esc(n)}`).join(' \u00b7 ');
   barra.innerHTML = `
-    <div class="gp-line">${GROUP_SIZE === 2 ? '2x1' : 'Grupo de ' + GROUP_SIZE} \u00b7 ${GROUP_MIXTO ? 'mixto' : esc(GROUP_TYPE.name)}
+    <div class="gp-line">${GROUP_SIZE === 2 ? '2x1' : GROUP_SIZE === 4 ? '3+1' : 'Grupo de ' + GROUP_SIZE} \u00b7 ${GROUP_MIXTO ? 'mixto' : esc(GROUP_TYPE.name)}
       ${GROUP_SIZE === 2 ? '' : '<button type="button" class="gt-cambiar" id="gt-cambiar">cambiar</button>'}</div>
     <div class="gp-price">${total < sinDesc
         ? `<span class="f-antes">${fmtMoney(sinDesc / 100)}</span> ` : ''}${fmtMoney(total / 100)} <span class="gp-cu">total</span></div>
-    <div class="gp-save">${GROUP_MIXTO ? esc(reparto) + ' \u00b7 ' : ''}${GROUP_SIZE === 2
+    <div class="gp-save">${GROUP_MIXTO ? esc(reparto) + ' \u00b7 ' : ''}${GROUP_SIZE === 4
+        ? 'Cobra ' + fmtMoney(total / 100) + ' por los cuatro \u00b7 el cuarto boleto va gratis'
+        : GROUP_SIZE === 2
         ? 'Los dos entran con su propio boleto y su propio QR \u00b7 ' + fmtMoney(total / 2 / 100) + ' cada uno'
         : GROUP_SIZE === 5
         ? (total < sinDesc
@@ -651,7 +677,9 @@ function renderGroupNames() {
     row.appendChild(num);
     const col = document.createElement('div');
     col.style.cssText = 'flex:1;min-width:0';
-    col.innerHTML = `<div class="gr-label">Boleto ${i + 1}</div>`;
+    col.innerHTML = `<div class="gr-label">Boleto ${i + 1}${
+      GROUP_SIZE === 4 && i === 3
+        ? ' \u00b7 <span style="color:#f3d27a">GRATIS</span>' : ''}</div>`;
     const input = document.createElement('input');
     input.className = 'input grow'; input.dataset.idx = i;
     input.placeholder = 'Nombre completo';
@@ -727,9 +755,11 @@ function showGroupResult(r) {
   $('#group-result-bar').classList.remove('hidden');
   $('#group-result-bar').classList.add('done');
   $('#group-result-bar').innerHTML = `
-    <div class="gp-line">¡Listo! ${r.size === 2 ? '2x1' : 'Grupo de ' + r.size} generado ✓</div>
+    <div class="gp-line">¡Listo! ${r.size === 2 ? '2x1' : r.size === 4 ? '3+1' : 'Grupo de ' + r.size} generado ✓</div>
     <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
-    <div class="gp-save">${r.size === 2
+    <div class="gp-save">${r.size === 4
+      ? 'El cuarto boleto sali\u00f3 marcado GRATIS \u00b7 los cuatro entran con su propio QR'
+      : r.size === 2
       ? 'Entrega un boleto a cada quien: son dos QR distintos y en la puerta se escanean por separado'
       : r.size === 5
       ? 'Los cinco ya salieron con su descuento \u00b7 este grupo no lleva botella'
@@ -771,6 +801,7 @@ async function generateGroup() {
   } finally {
     btn.disabled = false;
     if (!GROUP_RESULT) btn.textContent = GROUP_SIZE === 2 ? 'GENERAR LOS DOS BOLETOS'
+                                       : GROUP_SIZE === 4 ? 'GENERAR LOS CUATRO BOLETOS'
                                                           : 'GENERAR GRUPO DE ' + GROUP_SIZE;
   }
 }
@@ -1041,6 +1072,7 @@ $('#btn-generate-group').addEventListener('click', generateGroup);
 $('#btn-group-10').addEventListener('click', () => enterGroupMode(10));
 $('#btn-group-5').addEventListener('click', () => enterGroupMode(5));
 $('#btn-group-2').addEventListener('click', () => enterGroupMode(2));
+$('#btn-group-4').addEventListener('click', () => enterGroupMode(4));
 $('#mi-desc').addEventListener('click', () => {
   DESCUENTO_ON = !DESCUENTO_ON;
   pintaDescuento();

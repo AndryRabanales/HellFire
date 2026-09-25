@@ -3258,6 +3258,14 @@ async function loadCatalogs() {
       // El precio se escribe en PESOS y viaja en centavos. Se enseña debajo a cuánto
       // sale cada uno: es el número que el vendedor va a decir en voz alta, y si la
       // mitad no es redonda hay que verlo ANTES de anunciar la promoción.
+      // ----- el 3+1: un solo interruptor -----
+      // No tiene precio ni tipo que elegir: el precio sale del que tenga hoy la
+      // categoría que el vendedor escoja, y el cuarto boleto va en cero.
+      const p31 = $('#pr-p31');
+      if (p31) {
+        p31.checked = !!cat.tres_uno_activo;
+        p31.onchange = () => guarda({ tres_uno_activo: p31.checked ? '1' : '0' });
+      }
       const p2 = $('#pr-p2'), p2p = $('#pr-p2-precio'), p2t = $('#pr-p2-tipo'), p2cu = $('#pr-p2-cu');
       if (p2) {
         p2.checked = !!cat.pareja_on;

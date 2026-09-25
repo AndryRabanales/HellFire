@@ -460,6 +460,9 @@ DEFAULT_SETTINGS = {
     # 2x1: una promoción temporal, con su propio interruptor y su propio precio.
     # Nace apagada a propósito: se prende el día que se anuncia y se apaga sola en
     # cuanto el organizador la quita, sin tener que tocar ningún precio de fase.
+    # 3+1: se pagan tres y el cuarto sale gratis. Aplica a todas las categorías
+    # activas y también nace apagada.
+    "tres_uno_activo": "0",
     "pareja_activo": "0",
     "pareja_precio_cents": "70000",
     "pareja_tipo": "",
@@ -1783,7 +1786,7 @@ def estado_venta():
     # Las promociones se prenden y se apagan a mitad del día ("hoy sí hay grupos de
     # 5"), así que viajan aquí y no solo en el catálogo: van en una sola cadena para
     # que el vendedor la compare de un vistazo y recargue únicamente si cambió.
-    promos = "%s|%s|%s|%s|%s|%s|%s|%s|%s" % (setting(db, "grupo10_activo") or "0",
+    promos = "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" % (setting(db, "grupo10_activo") or "0",
                                     setting(db, "grupo10_desc") or "0",
                                     setting(db, "grupo10_pct") or "0",
                                     setting(db, "grupo5_activo") or "0",
@@ -1791,7 +1794,8 @@ def estado_venta():
                                     _mi_descuento(s),
                                     setting(db, "pareja_activo") or "0",
                                     setting(db, "pareja_precio_cents") or "0",
-                                    setting(db, "pareja_tipo") or "")
+                                    setting(db, "pareja_tipo") or "",
+                                    setting(db, "tres_uno_activo") or "0")
     return jsonify(flash_manual=flash_manual(db), ventas_cerradas=ventas_cerradas(db),
                    promos=promos)
 
@@ -1896,6 +1900,7 @@ def catalog():
                    # 2x1: se enseña solo si además queda lugar en ese tipo. Un botón
                    # que existe y luego rebota es el vendedor callándose después de
                    # haberle prometido el precio a dos personas.
+                   tres_uno_activo=setting(db, "tres_uno_activo") == "1",
                    pareja_activo=_par_ok,
                    # el interruptor tal como está guardado: el panel del organizador
                    # tiene que enseñar lo que ÉL prendió, no si hoy alcanza el cupo
@@ -2104,8 +2109,15 @@ def create_group():
     # BOTELLA al representante y no baja el precio; el de 5 da DESCUENTO a los cinco
     # y no da botella. Apagados desde Catálogos, el servidor los rechaza aquí aunque
     # alguien fuerce la llamada.
-    if size not in (2, 5, 10):
-        return jsonify(error="El grupo debe ser de 2, de 5 o de 10 integrantes"), 400
+    if size not in (2, 4, 5, 10):
+        return jsonify(error="El grupo debe ser de 2, 4, 5 o 10 integrantes"), 400
+    # El 3+1 es temporal, igual que el 2x1: apagado, el servidor lo rechaza aquí.
+    # Los cuatro van de la MISMA categoría —si no, alguien arma tres generales y se
+    # lleva un Ultra vip de regalo—, así que el tipo se impone desde el primero.
+    if size == 4:
+        if setting(db, "tres_uno_activo") != "1":
+            return jsonify(error="La promoción 3+1 no está disponible."), 403
+        b["types"] = None
     if size == 10 and setting(db, "grupo10_activo") != "1":
         return jsonify(error="Los grupos de 10 están cerrados por ahora."), 403
     if size == 5 and setting(db, "grupo5_activo") != "1":
@@ -2165,7 +2177,12 @@ def create_group():
                 return jsonify(error=f"Los grupos no se pueden armar con {fila['name']}, "
                                      f"porque cada boleto necesita su facultad."), 400
             precio, fase, normal = effective_price(db, fila)
-            if size == 2:
+            if size == 4:
+                # Los tres que pagan llevan el precio de hoy, tal cual. El regalado
+                # se arma abajo, fuera de la caché: es el mismo tipo y el mismo
+                # precio, pero en CERO.
+                pass
+            elif size == 2:
                 # 2x1: el precio de la pareja es un número cerrado del organizador.
                 # No lo mueve la fase ni la flash y NO se le encima ningún descuento;
                 # cada boleto se congela con su mitad. El tachado es lo que esa
@@ -2179,12 +2196,21 @@ def create_group():
                 if _d:
                     precio, normal = con_descuento(precio, normal, _d)
                     fase = etiqueta_descuento(fase, _d)
+            # el 3+1 no lleva descuento encima: el descuento ES el cuarto boleto
             if precio <= 0:
                 return jsonify(error=f"El precio de {fila['name']} aún no está configurado"), 400
             cache[tid] = (fila, precio, fase, normal)
         fila, precio, fase, normal = cache[tid]
         tipos.append(fila)
         precios.append((precio, fase, normal))
+    # El cuarto boleto del 3+1 va en CERO. Se pone aquí y no en la caché porque es
+    # el mismo tipo y el mismo precio que los otros tres: lo único distinto es que
+    # este no se cobra. Lleva tachado lo que habría costado —es el regalo, y el
+    # boleto tiene que poder enseñarlo— y la fase se cambia por "3+1", que es lo
+    # que explica el cero.
+    if size == 4:
+        _p4, _f4, _n4 = precios[3]
+        precios[3] = (0, "3+1", _p4)
     # Un grupo pide varios lugares del mismo tipo de una vez: se revisa el total, no
     # de uno en uno. Con 3 lugares libres y 4 integrantes de backstage, el grupo entero
     # se rechaza antes de generar nada; a medias quedarían boletos huérfanos cobrados.
@@ -2228,7 +2254,7 @@ def create_group():
     reparto = ", ".join(f"{n}\u00d7 {t}" for t, n in
                         Counter(x["name"] for x in tipos).most_common())
     audit(db, seller_name, "generacion",
-          f"Generó un {'2x1' if size == 2 else f'grupo de {size}'} [{reparto}] ({', '.join(names)}) "
+          f"Generó un {'2x1' if size == 2 else '3+1' if size == 4 else f'grupo de {size}'} [{reparto}] ({', '.join(names)}) "
           f"por ${total/100:,.2f}"
           + (f" · representante: {representative}" if representative else ""))
     db.commit()
@@ -5238,7 +5264,8 @@ def save_settings():
     # mueve el precio de todos los boletos que se vendan a partir de ese momento.
     for clave, etq in (("grupo10_activo", "grupos de 10"), ("grupo5_activo", "grupos de 5"),
                        ("grupo10_desc", "el descuento del grupo de 10"),
-                       ("pareja_activo", "la promoción 2x1")):
+                       ("pareja_activo", "la promoción 2x1"),
+                       ("tres_uno_activo", "la promoción 3+1")):
         if clave in b:
             on = "1" if str(b[clave]) in ("1", "True", "true") else "0"
             if setting(db, clave) != on:

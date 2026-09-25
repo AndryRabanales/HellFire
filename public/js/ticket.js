@@ -86,7 +86,7 @@ function flyerVariantFor(ticket) {
 function ticketTypeLabel(ticket) {
   // El 2x1 se nombra por su tipo, como cualquier boleto suelto: es el nombre de la
   // zona lo que hay que leer. La promoción ya se dice junto al precio.
-  if (ticket.group_size && ticket.group_size !== 2) return 'Grupo';
+  if (ticket.group_size && ticket.group_size !== 2 && ticket.group_size !== 4) return 'Grupo';
   return ticket.type_name || 'General';
 }
 
@@ -145,11 +145,12 @@ function ticketBadgeSpec(ticket) {
     return { text: estrellaDe(ticket) + 'CORTESÍA · ' + (ticket.type_name || 'INVITADO').toUpperCase(),
              grad: t.grad, textColor: t.texto };
   }
-  // El 2x1 NO entra aquí: su insignia es la de su categoría, a secas. El "2x1" ya
+  // Ni el 2x1 ni el 3+1 entran aquí: su insignia es la de su categoría, a secas. La
+  // promoción ya
   // está escrito abajo, junto al precio, que es donde explica el número; repetirlo
   // arriba le quita el renglón a lo único que la puerta necesita leer de un golpe,
   // que es de qué zona es el boleto.
-  if (ticket.group_size && ticket.group_size !== 2) {
+  if (ticket.group_size && ticket.group_size !== 2 && ticket.group_size !== 4) {
     // El grupo lleva el color de SU categoría, no un rojo de "grupo" para todos: en
     // la puerta y en la barra el color es lo primero que se mira, y un grupo VIP en
     // rojo se lee como general aunque el texto diga otra cosa.
@@ -276,7 +277,12 @@ function dibujarPrecio(ctx, ticket, x, y) {
   // normal: venta flash o un grupo con descuento. El boleto congeló los dos números
   // al generarse, así que sigue saliendo igual aunque el flash ya haya terminado.
   if (ticket.normal_price > ticket.price) {
-    const normal = fmtMoney(ticket.normal_price), pagado = fmtMoney(ticket.price);
+    // El cuarto boleto del 3+1 vale cero, y un "$0" grande en el boleto se lee como
+    // un error del sistema, no como un regalo. Se escribe la palabra, con el precio
+    // que habr\u00eda costado tachado al lado: as\u00ed el que lo recibe ve lo que se le
+    // regal\u00f3, y el de la puerta ve que ese boleto no se cobr\u00f3 a prop\u00f3sito.
+    const normal = fmtMoney(ticket.normal_price);
+    const pagado = ticket.price > 0 ? fmtMoney(ticket.price) : 'GRATIS';
     ctx.font = '600 17px "Space Grotesk", monospace';
     ctx.fillStyle = 'rgba(246,241,231,.38)';
     ctx.fillText(normal, x, y);

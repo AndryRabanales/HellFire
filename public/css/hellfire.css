@@ -476,6 +476,13 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
 .btn.grupo10.g2 .g-t{color:#2a1c04;font-size:15px}
 .btn.grupo10.g2 .g-s{color:rgba(42,28,4,.74);font-weight:700}
 .btn.grupo10.g2:active{background:linear-gradient(180deg,#e0bb5c,#c9a445)}
+/* El 3+1: oro contorneado. Con las dos promociones prendidas quedan una encima de
+   la otra, y dos botones macizos seguidos se leen como uno solo partido. */
+.btn.grupo10.g31{border-color:rgba(243,210,122,.6);
+  background:linear-gradient(180deg,rgba(243,210,122,.18),rgba(243,210,122,.06))}
+.btn.grupo10.g31 .g-t{color:#f3d27a;font-size:15px}
+.btn.grupo10.g31 .g-s{color:var(--cream-60)}
+.btn.grupo10.g31:active{background:linear-gradient(180deg,rgba(243,210,122,.3),rgba(243,210,122,.12))}
 
 /* Con los dos grupos abiertos se ponen lado a lado y el texto se acorta: a media
    pantalla el renglón largo se partía en tres y el botón dejaba de leerse de un
