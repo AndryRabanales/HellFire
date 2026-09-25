@@ -530,7 +530,7 @@ function enterGroupMode(size) {
   $('#f-hint').textContent = size === 2
     ? '2x1 · ' + fmtMoney(CATALOG.pareja_total_cents / 100) + ' los dos · un boleto y un QR para cada quien'
     : size === 4
-    ? '3+1 · cobra tres, el cuarto va gratis · los cuatro de la misma categoría'
+    ? 'Escribe los cuatro nombres'
     : 'Grupo de ' + size + ' · un boleto por integrante';
   $('#f-err').textContent = '';
   pintaDescuento();          // aquí su descuento no pinta nada: fuera de la pantalla
@@ -644,7 +644,7 @@ function renderGroupPriceBar() {
     <div class="gp-price">${total < sinDesc
         ? `<span class="f-antes">${fmtMoney(sinDesc / 100)}</span> ` : ''}${fmtMoney(total / 100)} <span class="gp-cu">total</span></div>
     <div class="gp-save">${GROUP_MIXTO ? esc(reparto) + ' \u00b7 ' : ''}${GROUP_SIZE === 4
-        ? 'Cobra ' + fmtMoney(total / 100) + ' por los cuatro \u00b7 el cuarto boleto va gratis'
+        ? 'Cuatro boletos \u00b7 pagan tres'
         : GROUP_SIZE === 2
         ? 'Los dos entran con su propio boleto y su propio QR \u00b7 ' + fmtMoney(total / 2 / 100) + ' cada uno'
         : GROUP_SIZE === 5
@@ -684,8 +684,10 @@ function renderGroupNames() {
     row.appendChild(num);
     const col = document.createElement('div');
     col.style.cssText = 'flex:1;min-width:0';
-    col.innerHTML = `<div class="gr-label">${esGratis
-      ? 'Boleto 4 \u00b7 este va gratis' : 'Boleto ' + (i + 1)}</div>`;
+    // En el 3+1 el rengl\u00f3n se queda en dos cosas: su n\u00famero y el campo. "BOLETO 3"
+    // encima de un campo que ya tiene el 3 al lado es una palabra que el vendedor
+    // lee cuatro veces y no le dice nada.
+    col.innerHTML = GROUP_SIZE === 4 ? '' : `<div class="gr-label">Boleto ${i + 1}</div>`;
     const input = document.createElement('input');
     input.className = 'input grow'; input.dataset.idx = i;
     input.placeholder = 'Nombre completo';
@@ -706,13 +708,16 @@ function renderGroupNames() {
       });
       col.appendChild(sel);
     }
-    if (esGratis) {
-      const pie = document.createElement('div');
-      pie.className = 'gr-pie';
-      pie.textContent = 'Su boleto sale en $0';
-      col.appendChild(pie);
-    }
     row.appendChild(col);
+    // Una sola marca, pegada a SU campo: el que caiga en este rengl\u00f3n es el del
+    // boleto que no se cobra. Antes la misma frase estaba cuatro veces en la misma
+    // pantalla, y lo que se repite cuatro veces deja de leerse.
+    if (esGratis) {
+      const chip = document.createElement('span');
+      chip.className = 'gr-chip';
+      chip.textContent = 'GRATIS';
+      row.appendChild(chip);
+    }
     if (GROUP_SIZE === 10) {
       const rep = document.createElement('button');
       rep.className = 'repbtn'; rep.type = 'button';

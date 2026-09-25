@@ -417,7 +417,10 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
   border-color:rgba(243,210,122,.5)}
 .grouprow.gratis .gr-num{background:linear-gradient(160deg,#f7dc93,#d9ae4a);color:#2a1c04}
 .grouprow.gratis .gr-label{color:#f3d27a}
-.gr-pie{font:700 10px Manrope;color:#f3d27a;margin-top:5px;opacity:.85}
+.gr-chip{flex:0 0 auto;align-self:center;
+  font:800 9.5px "Space Grotesk";letter-spacing:.1em;color:#2a1c04;
+  padding:6px 9px;border-radius:8px;
+  background:linear-gradient(160deg,#f7dc93,#d9ae4a)}
 /* El tipo de cada integrante, bajo su nombre. Un grupo casi nunca es de un solo
    tipo —"somos 7 en general y 3 en VIP"— y antes eso obligaba a partir la venta
    en dos. Los que van distinto al tipo base se encienden, para que la mezcla se
