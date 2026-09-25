@@ -300,7 +300,9 @@ function dibujarPrecio(ctx, ticket, x, y) {
     if (fase) {
       ctx.font = '800 12px "Space Grotesk", monospace';
       ctx.fillStyle = '#f3d27a';
-      ctx.fillText('\u26a1 PROMOCI\u00d3N ' + fase.toUpperCase(), px, y + 26);
+      // alineada con el tachado, no con el cero: arrancando a media l\u00ednea el
+      // bloque se ve\u00eda descuadrado, como si el rengl\u00f3n fuera de otro boleto
+      ctx.fillText('\u26a1 PROMOCI\u00d3N ' + fase.toUpperCase(), x, y + 26);
     }
     return;
   }

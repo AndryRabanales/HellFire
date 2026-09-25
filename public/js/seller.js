@@ -671,15 +671,21 @@ function renderGroupNames() {
   if (bg && !(CATALOG && CATALOG.ventas_cerradas)) bg.classList.remove('hidden');
   for (let i = 0; i < GROUP_SIZE; i++) {
     const row = document.createElement('div');
-    row.className = 'grouprow';
+    // El cuarto del 3+1 va pintado distinto: con 104 vendedores no se puede
+    // depender de que alguien les haya explicado cu\u00e1l es el gratis. El rengl\u00f3n
+    // se ve en oro, la ficha dice GRATIS en vez de su n\u00famero y debajo del campo
+    // se lee "este boleto sale en $0". Nadie tiene que acordarse de nada.
+    const esGratis = GROUP_SIZE === 4 && i === 3;
+    row.className = 'grouprow' + (esGratis ? ' gratis' : '');
     const num = document.createElement('div');
+    // el n\u00famero se queda: la estrella ya significa "este recoge la botella" en el
+    // grupo de 10, y dos cosas distintas con el mismo s\u00edmbolo es peor que ninguna
     num.className = 'gr-num'; num.textContent = i + 1;
     row.appendChild(num);
     const col = document.createElement('div');
     col.style.cssText = 'flex:1;min-width:0';
-    col.innerHTML = `<div class="gr-label">Boleto ${i + 1}${
-      GROUP_SIZE === 4 && i === 3
-        ? ' \u00b7 <span style="color:#f3d27a">GRATIS</span>' : ''}</div>`;
+    col.innerHTML = `<div class="gr-label">${esGratis
+      ? 'Boleto 4 \u00b7 este va gratis' : 'Boleto ' + (i + 1)}</div>`;
     const input = document.createElement('input');
     input.className = 'input grow'; input.dataset.idx = i;
     input.placeholder = 'Nombre completo';
@@ -699,6 +705,12 @@ function renderGroupNames() {
         renderGroupPriceBar();
       });
       col.appendChild(sel);
+    }
+    if (esGratis) {
+      const pie = document.createElement('div');
+      pie.className = 'gr-pie';
+      pie.textContent = 'Su boleto sale en $0';
+      col.appendChild(pie);
     }
     row.appendChild(col);
     if (GROUP_SIZE === 10) {

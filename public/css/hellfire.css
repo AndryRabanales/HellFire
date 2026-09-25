@@ -409,6 +409,15 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
 .gr-label{font:700 9px "Space Grotesk";letter-spacing:.12em;text-transform:uppercase;
   color:var(--ember-dim);margin-bottom:4px}
 .grouprow.done .gr-label{color:rgba(255,150,130,.85)}
+/* El renglón del boleto que no se cobra (el cuarto del 3+1). Va en oro —el color
+   que en este panel ya significa "promoción"— y con estrella en vez de número: el
+   vendedor tiene que ver cuál es el gratis sin que nadie se lo haya explicado, y
+   son más de cien vendedores. */
+.grouprow.gratis{background:linear-gradient(135deg,rgba(243,210,122,.14),rgba(243,210,122,.03));
+  border-color:rgba(243,210,122,.5)}
+.grouprow.gratis .gr-num{background:linear-gradient(160deg,#f7dc93,#d9ae4a);color:#2a1c04}
+.grouprow.gratis .gr-label{color:#f3d27a}
+.gr-pie{font:700 10px Manrope;color:#f3d27a;margin-top:5px;opacity:.85}
 /* El tipo de cada integrante, bajo su nombre. Un grupo casi nunca es de un solo
    tipo —"somos 7 en general y 3 en VIP"— y antes eso obligaba a partir la venta
    en dos. Los que van distinto al tipo base se encienden, para que la mezcla se
