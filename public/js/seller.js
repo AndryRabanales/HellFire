@@ -758,7 +758,7 @@ function showGroupResult(r) {
     <div class="gp-line">¡Listo! ${r.size === 2 ? '2x1' : r.size === 4 ? '3+1' : 'Grupo de ' + r.size} generado ✓</div>
     <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
     <div class="gp-save">${r.size === 4
-      ? 'El cuarto boleto sali\u00f3 marcado GRATIS \u00b7 los cuatro entran con su propio QR'
+      ? 'El cuarto boleto sali\u00f3 en $0 \u00b7 los cuatro entran con su propio QR'
       : r.size === 2
       ? 'Entrega un boleto a cada quien: son dos QR distintos y en la puerta se escanean por separado'
       : r.size === 5

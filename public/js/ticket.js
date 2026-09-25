@@ -276,13 +276,36 @@ function dibujarPrecio(ctx, ticket, x, y) {
   // El tachado aparece siempre que el boleto se vendió por DEBAJO de su precio
   // normal: venta flash o un grupo con descuento. El boleto congeló los dos números
   // al generarse, así que sigue saliendo igual aunque el flash ya haya terminado.
+  // El boleto que no se cobr\u00f3 \u2014el cuarto del 3+1\u2014 lleva su CERO, porque es lo
+  // que se registr\u00f3, y DEBAJO el nombre de la promoci\u00f3n. Un cero suelto en la
+  // puerta se lee como un boleto mal hecho; con el rengl\u00f3n de abajo se lee como lo
+  // que es. La promoci\u00f3n va debajo y no al lado porque al lado de un n\u00famero corto
+  // como "$0" queda pegada al tachado y las tres cosas se leen como una sola.
+  if (!(ticket.price > 0)) {
+    let px = x;
+    if (ticket.normal_price > 0) {
+      const normal = fmtMoney(ticket.normal_price);
+      ctx.font = '600 17px "Space Grotesk", monospace';
+      ctx.fillStyle = 'rgba(246,241,231,.38)';
+      ctx.fillText(normal, x, y);
+      const w0 = ctx.measureText(normal).width;
+      ctx.strokeStyle = 'rgba(246,241,231,.45)';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(x - 2, y - 6); ctx.lineTo(x + w0 + 2, y - 6); ctx.stroke();
+      px = x + w0 + 14;
+    }
+    ctx.font = '800 28px Manrope, sans-serif';
+    ctx.fillStyle = '#ff8a4d';
+    ctx.fillText(fmtMoney(0), px, y + 3);
+    if (fase) {
+      ctx.font = '800 12px "Space Grotesk", monospace';
+      ctx.fillStyle = '#f3d27a';
+      ctx.fillText('\u26a1 PROMOCI\u00d3N ' + fase.toUpperCase(), px, y + 26);
+    }
+    return;
+  }
   if (ticket.normal_price > ticket.price) {
-    // El cuarto boleto del 3+1 vale cero, y un "$0" grande en el boleto se lee como
-    // un error del sistema, no como un regalo. Se escribe la palabra, con el precio
-    // que habr\u00eda costado tachado al lado: as\u00ed el que lo recibe ve lo que se le
-    // regal\u00f3, y el de la puerta ve que ese boleto no se cobr\u00f3 a prop\u00f3sito.
-    const normal = fmtMoney(ticket.normal_price);
-    const pagado = ticket.price > 0 ? fmtMoney(ticket.price) : 'GRATIS';
+    const normal = fmtMoney(ticket.normal_price), pagado = fmtMoney(ticket.price);
     ctx.font = '600 17px "Space Grotesk", monospace';
     ctx.fillStyle = 'rgba(246,241,231,.38)';
     ctx.fillText(normal, x, y);
