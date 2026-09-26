@@ -358,93 +358,116 @@
   </section>
 
   <!-- ===== Catálogos (RF-80/81) ===== -->
-  <section id="tab-catalogos" class="mt16 hidden" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px">
-    <!-- La venta flash va con los precios: es un precio, no un reporte. -->
-    <div class="card" id="fl-card">
-      <div class="row fl-cab" style="justify-content:space-between;align-items:center;gap:10px">
-        <div style="min-width:0;flex:1 1 220px">
-          <div class="label" style="margin:0">⚡ Venta flash</div>
-          <div class="muted" id="fl-estado" style="font-size:11px;margin-top:2px;line-height:1.45">Cargando…</div>
+  <!-- Catálogos en VENTANILLAS. Antes era una sola pared de cinco tarjetas y para
+       llegar a las facultades había que pasar por todos los precios. Cada ventanilla
+       se abre sola y las demás se quedan cerradas; la de precios arranca abierta
+       porque ahí vive la venta flash, y una flash prendida no puede estar escondida. -->
+  <section id="tab-catalogos" class="mt16 hidden" style="display:flex;flex-direction:column;gap:10px;max-width:780px">
+    <details class="card vent" id="vent-precios" open>
+      <summary class="vent-t">Precios y venta flash</summary>
+      <div class="vent-bloque">
+        <div class="label">Tipos de boleto · precio base</div>
+        <div class="muted" style="margin-bottom:10px">Se usa cuando ninguna fase está vigente. Las fases (abajo) suben todos los tipos a la vez.</div>
+        <div id="tt-list"></div>
+        <div class="row mt12" style="flex-wrap:wrap;gap:8px">
+          <input class="input grow" id="tt-name" placeholder="Nuevo tipo (ej. General)" style="min-width:130px;padding:11px">
+          <input class="input" id="tt-price" type="number" min="1" placeholder="$" style="width:90px;padding:11px">
+          <label class="muted row" style="gap:5px"><input type="checkbox" id="tt-vip">VIP ★</label>
+          <label class="muted row" style="gap:5px"><input type="checkbox" id="tt-needfac">Pide facultad</label>
+          <button class="btn sm" id="btn-tt-create">Añadir</button>
         </div>
-        <button class="btn" id="fl-toggle" style="width:auto;white-space:nowrap;flex:none">…</button>
+        <div class="err mt8" id="tt-err"></div>
       </div>
-      <div class="muted" style="margin:10px 0 0;font-size:11px">Escribe a cuánto queda cada boleto y préndela cuando quieras: se aplica al instante en el teléfono de todos los vendedores, y se apaga igual. El precio sale de la fase que esté corriendo, así que no hay que volver a escribirlo cada vez.</div>
-      <div id="fl-tabla" class="mt12"></div>
-      <div class="err mt8" id="fl-err"></div>
-    </div>
-    <div class="card">
-      <div class="label">Promociones</div>
-      <div class="muted" style="margin-bottom:10px">Cada una es aparte y con su propio porcentaje. Se apagan y se prenden cuando quieras; los boletos ya vendidos no cambian de precio.</div>
-      <div class="promo">
-        <div class="promo-t"><b>Grupo de 10</b><span>botella al representante</span></div>
-        <div class="muted promo-d">La botella no se quita nunca. Si además le prendes el descuento, los diez se llevan las dos cosas.</div>
-        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
-          <label class="sw"><input type="checkbox" id="pr-g10"><span></span><i>Abierto</i></label>
-          <label class="sw"><input type="checkbox" id="pr-g10d"><span></span><i>Con descuento</i></label>
-          <input class="input" id="pr-g10-pct" type="number" min="0" max="90" step="1"
-                 style="width:78px;padding:8px;font-size:14px"><span class="muted">%</span>
+      <div class="vent-bloque">
+        <div class="label">Fases de venta · suben todos los boletos</div>
+        <div class="muted" style="margin-bottom:10px">La fecha es cuándo <b>ARRANCA</b> esa fase: ese día a las 00:00 todos los tipos pasan al precio que pongas aquí, y siguen así hasta que empiece la siguiente. No se pone fecha de fin. Los boletos ya generados no cambian de precio.</div>
+        <div id="ph-list"></div>
+        <div id="ph-add" class="mt12"></div>
+        <div class="err mt8" id="ph-err"></div>
+      </div>
+      <div class="vent-bloque" id="fl-card">
+          <div class="row fl-cab" style="justify-content:space-between;align-items:center;gap:10px">
+            <div style="min-width:0;flex:1 1 220px">
+              <div class="label" style="margin:0">⚡ Venta flash</div>
+              <div class="muted" id="fl-estado" style="font-size:11px;margin-top:2px;line-height:1.45">Cargando…</div>
+            </div>
+            <button class="btn" id="fl-toggle" style="width:auto;white-space:nowrap;flex:none">…</button>
+          </div>
+          <div class="muted" style="margin:10px 0 0;font-size:11px">Escribe a cuánto queda cada boleto y préndela cuando quieras: se aplica al instante en el teléfono de todos los vendedores, y se apaga igual. El precio sale de la fase que esté corriendo, así que no hay que volver a escribirlo cada vez.</div>
+          <div id="fl-tabla" class="mt12"></div>
+          <div class="err mt8" id="fl-err"></div>
         </div>
-      </div>
-      <div class="promo">
-        <div class="promo-t"><b>Grupo de 5</b><span>descuento a los cinco</span></div>
-        <div class="muted promo-d">Sin botella: el beneficio es el precio.</div>
-        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
-          <label class="sw"><input type="checkbox" id="pr-g5"><span></span><i>Abierto</i></label>
-          <input class="input" id="pr-g5-pct" type="number" min="0" max="90" step="1"
-                 style="width:78px;padding:8px;font-size:14px"><span class="muted">% de descuento</span>
+    </details>
+    <details class="card vent" id="vent-promos">
+      <summary class="vent-t">Promociones temporales</summary>
+      <div class="vent-bloque">
+        <div class="muted" style="margin-bottom:10px">Las que duran unos días. Se prenden y se apagan aquí; los boletos ya vendidos no cambian de precio.</div>
+        <div class="promo">
+          <div class="promo-t"><b>2x1</b><span>temporal · precio cerrado</span></div>
+          <div class="muted promo-d">Dos boletos por un solo precio que tú pones. No lo mueve la fase ni la venta flash: cada uno de los dos se congela con la mitad exacta. El día que se acabe lo apagas aquí y el botón desaparece del teléfono de los vendedores.</div>
+          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+            <label class="sw"><input type="checkbox" id="pr-p2"><span></span><i>Abierto</i></label>
+            <span class="muted">$</span>
+            <input class="input" id="pr-p2-precio" type="number" min="2" max="20000" step="1"
+                   style="width:92px;padding:8px;font-size:14px"><span class="muted">los dos, en</span>
+            <select class="input" id="pr-p2-tipo" style="width:auto;padding:8px;font-size:14px"></select>
+          </div>
+          <div class="muted mt8" id="pr-p2-cu" style="font-size:11px"></div>
         </div>
-      </div>
-      <div class="promo">
-        <div class="promo-t"><b>2x1</b><span>temporal · precio cerrado</span></div>
-        <div class="muted promo-d">Dos boletos por un solo precio que tú pones. No lo mueve la fase ni la venta flash: cada uno de los dos se congela con la mitad exacta. El día que se acabe lo apagas aquí y el botón desaparece del teléfono de los vendedores.</div>
-        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
-          <label class="sw"><input type="checkbox" id="pr-p2"><span></span><i>Abierto</i></label>
-          <span class="muted">$</span>
-          <input class="input" id="pr-p2-precio" type="number" min="2" max="20000" step="1"
-                 style="width:92px;padding:8px;font-size:14px"><span class="muted">los dos, en</span>
-          <select class="input" id="pr-p2-tipo" style="width:auto;padding:8px;font-size:14px"></select>
+        <div class="promo">
+          <div class="promo-t"><b>3+1</b><span>temporal · el cuarto gratis</span></div>
+          <div class="muted promo-d">Se llevan cuatro boletos y pagan tres. Los cuatro de la misma categoría —si no, alguien arma tres generales y se lleva un Ultra vip de regalo— y aplica a todas las que estén a la venta. El cuarto boleto sale marcado GRATIS, con el precio que habría costado tachado.</div>
+          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+            <label class="sw"><input type="checkbox" id="pr-p31"><span></span><i>Abierto</i></label>
+          </div>
         </div>
-        <div class="muted mt8" id="pr-p2-cu" style="font-size:11px"></div>
+        <div class="err mt8" id="pr-err"></div>
       </div>
-      <div class="promo">
-        <div class="promo-t"><b>3+1</b><span>temporal · el cuarto gratis</span></div>
-        <div class="muted promo-d">Se llevan cuatro boletos y pagan tres. Los cuatro de la misma categoría —si no, alguien arma tres generales y se lleva un Ultra vip de regalo— y aplica a todas las que estén a la venta. El cuarto boleto sale marcado GRATIS, con el precio que habría costado tachado.</div>
-        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
-          <label class="sw"><input type="checkbox" id="pr-p31"><span></span><i>Abierto</i></label>
+    </details>
+    <details class="card vent" id="vent-grupos">
+      <summary class="vent-t">Grupos</summary>
+      <div class="vent-bloque">
+        <div class="muted" style="margin-bottom:10px">Los de siempre: el de 10 da botella y el de 5 da descuento. Cada uno con su propio interruptor.</div>
+        <div class="promo">
+          <div class="promo-t"><b>Grupo de 10</b><span>botella al representante</span></div>
+          <div class="muted promo-d">La botella no se quita nunca. Si además le prendes el descuento, los diez se llevan las dos cosas.</div>
+          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+            <label class="sw"><input type="checkbox" id="pr-g10"><span></span><i>Abierto</i></label>
+            <label class="sw"><input type="checkbox" id="pr-g10d"><span></span><i>Con descuento</i></label>
+            <input class="input" id="pr-g10-pct" type="number" min="0" max="90" step="1"
+                   style="width:78px;padding:8px;font-size:14px"><span class="muted">%</span>
+          </div>
         </div>
+        <div class="promo">
+          <div class="promo-t"><b>Grupo de 5</b><span>descuento a los cinco</span></div>
+          <div class="muted promo-d">Sin botella: el beneficio es el precio.</div>
+          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+            <label class="sw"><input type="checkbox" id="pr-g5"><span></span><i>Abierto</i></label>
+            <input class="input" id="pr-g5-pct" type="number" min="0" max="90" step="1"
+                   style="width:78px;padding:8px;font-size:14px"><span class="muted">% de descuento</span>
+          </div>
+        </div>
+        <div class="err mt8" id="pr-err2"></div>
       </div>
-      <div class="muted mt8" style="font-size:11px">El <b>descuento del código</b> del paradero es aparte de estos dos: se le da a un vendedor en <b>Vendedores</b> &rsaquo; su ficha, y él lo prende venta por venta.</div>
-      <div class="err mt8" id="pr-err"></div>
-    </div>
-    <div class="card">
-      <div class="label">Tipos de boleto · precio base</div>
-      <div class="muted" style="margin-bottom:10px">Se usa cuando ninguna fase está vigente. Las fases (abajo) suben todos los tipos a la vez.</div>
-      <div id="tt-list"></div>
-      <div class="row mt12" style="flex-wrap:wrap;gap:8px">
-        <input class="input grow" id="tt-name" placeholder="Nuevo tipo (ej. General)" style="min-width:130px;padding:11px">
-        <input class="input" id="tt-price" type="number" min="1" placeholder="$" style="width:90px;padding:11px">
-        <label class="muted row" style="gap:5px"><input type="checkbox" id="tt-vip">VIP ★</label>
-        <label class="muted row" style="gap:5px"><input type="checkbox" id="tt-needfac">Pide facultad</label>
-        <button class="btn sm" id="btn-tt-create">Añadir</button>
+    </details>
+    <details class="card vent" id="vent-desc">
+      <summary class="vent-t">Descuentos</summary>
+      <div class="vent-bloque">
+        <div class="muted mt8" style="font-size:11px">El <b>descuento del código</b> del paradero es aparte de estos dos: se le da a un vendedor en <b>Vendedores</b> &rsaquo; su ficha, y él lo prende venta por venta.</div>
+        <div class="muted mt8" style="font-size:11px">El del grupo de 5 y el del grupo de 10 viven en <b>Grupos</b>, porque van pegados a su grupo.</div>
       </div>
-      <div class="err mt8" id="tt-err"></div>
-    </div>
-    <div class="card">
-      <div class="label">Fases de venta · suben todos los boletos</div>
-      <div class="muted" style="margin-bottom:10px">La fecha es cuándo <b>ARRANCA</b> esa fase: ese día a las 00:00 todos los tipos pasan al precio que pongas aquí, y siguen así hasta que empiece la siguiente. No se pone fecha de fin. Los boletos ya generados no cambian de precio.</div>
-      <div id="ph-list"></div>
-      <div id="ph-add" class="mt12"></div>
-      <div class="err mt8" id="ph-err"></div>
-    </div>
-    <div class="card">
-      <div class="label">Facultades</div>
-      <div id="fc-list" class="mt8"></div>
-      <div class="row mt12">
-        <input class="input grow" id="fc-name" placeholder="Nueva facultad" style="padding:11px">
-        <button class="btn sm" id="btn-fc-create">Añadir</button>
+    </details>
+    <details class="card vent" id="vent-facs">
+      <summary class="vent-t">Facultades</summary>
+      <div class="vent-bloque">
+        <div id="fc-list" class="mt8"></div>
+        <div class="row mt12">
+          <input class="input grow" id="fc-name" placeholder="Nueva facultad" style="padding:11px">
+          <button class="btn sm" id="btn-fc-create">Añadir</button>
+        </div>
+        <div class="err mt8" id="fc-err"></div>
       </div>
-      <div class="err mt8" id="fc-err"></div>
-    </div>
+    </details>
   </section>
 
   <!-- ===== Ajustes ===== -->

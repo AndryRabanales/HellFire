@@ -507,6 +507,26 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
 .grupos.dos .btn.grupo10{padding:11px 8px}
 .grupos.dos .btn.grupo10 .g-t{font-size:13px}
 
+/* ---- las ventanillas de Catálogos ----
+   Cinco tarjetas abiertas a la vez eran una pared: para llegar a Facultades había
+   que pasar por todos los precios, y en un teléfono eso es medio minuto de dedo.
+   Cada ventanilla se abre sola, con su flecha, y guarda adentro lo que va junto. */
+.card.vent{padding:0;overflow:hidden}
+.vent-t{cursor:pointer;list-style:none;display:flex;align-items:center;gap:9px;
+  padding:15px 16px;font:800 12px "Space Grotesk";letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ember-soft)}
+.vent-t::-webkit-details-marker{display:none}
+.vent-t::before{content:"";flex:none;width:0;height:0;
+  border:5px solid transparent;border-left-color:var(--ember);
+  transition:transform .16s ease;transform-origin:25% 50%}
+.card.vent[open] > .vent-t::before{transform:rotate(90deg)}
+.card.vent[open] > .vent-t{border-bottom:1px solid var(--line)}
+.vent-t:active{background:rgba(255,122,46,.07)}
+/* Cada cosa dentro de su ventanilla, separada por una línea: "tipos de boleto",
+   "fases" y "venta flash" son tres asuntos distintos aunque vivan en la misma. */
+.vent-bloque{padding:14px 16px}
+.vent-bloque + .vent-bloque{border-top:1px solid rgba(255,120,40,.14)}
+
 /* Interruptor del descuento del QR: va arriba del formulario porque cambia los
    precios que el vendedor está por leer en voz alta. Prendido se rellena de ámbar,
    que en esta pantalla ya significa "activo"; apagado es un renglón discreto. Toda

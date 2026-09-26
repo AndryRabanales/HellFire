@@ -3244,10 +3244,18 @@ async function loadCatalogs() {
       pct10.value = cat.grupo10_pct != null ? cat.grupo10_pct : 10;
       g5.checked = !!cat.grupo5_activo;
       pct.value = cat.grupo5_pct != null ? cat.grupo5_pct : 10;
+      // El error va TAMBIÉN al aviso flotante: las promociones viven repartidas en
+      // dos ventanillas y el renglón rojo de una puede quedar dentro de la que está
+      // cerrada. Un cambio que no se guardó y no avisa es peor que el error.
       const guarda = async cuerpo => {
-        $('#pr-err').textContent = '';
+        $$('#pr-err, #pr-err2').forEach(e => { e.textContent = ''; });
         try { await API.post('/api/admin/settings', cuerpo); toast('Guardado'); }
-        catch (e) { if (!guard(e)) $('#pr-err').textContent = e.message; }
+        catch (e) {
+          if (!guard(e)) {
+            toast(e.message);
+            $$('#pr-err, #pr-err2').forEach(el => { el.textContent = e.message; });
+          }
+        }
       };
       g10.onchange = () => guarda({ grupo10_activo: g10.checked ? '1' : '0' });
       g10d.onchange = () => guarda({ grupo10_desc: g10d.checked ? '1' : '0' });
