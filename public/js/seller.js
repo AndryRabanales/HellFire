@@ -752,9 +752,28 @@ function showGroupResult(r) {
           ${esc(t.buyer_name)}${r.representative === t.buyer_name ? ' <span style="color:#f3d27a">★</span>' : ''}
         </div>
       </div>
-      <button class="iconbtn" data-idx="${i}" title="Descargar boleto">${DL_ICON}</button>
+      <span style="display:flex;gap:6px;flex:0 0 auto">
+        <button class="iconbtn dl-b" data-idx="${i}" title="Descargar boleto">${DL_ICON}</button>
+        ${hayPresumible(t, CATALOG) ? `<button class="iconbtn ig-b" data-idx="${i}"
+          title="Imagen para sus redes \u00b7 sin QR, se puede publicar"
+          style="color:#f3d27a;border-color:rgba(243,210,122,.5);background:rgba(243,210,122,.1)"
+          >\u2605</button>` : ''}
+      </span>
     </div>`).join('');
-  box.querySelectorAll('.iconbtn').forEach(b => {
+  // La imagen para redes tambi\u00e9n aqu\u00ed. Estaba solo en el boleto suelto y en el
+  // historial, as\u00ed que quien compraba en grupo —o un 2x1, que es un grupo— se iba
+  // con su boleto y sin nada que presumir: el vendedor ten\u00eda que ir a buscarla al
+  // historial sin saber que exist\u00eda.
+  box.querySelectorAll('.ig-b').forEach(ig => {
+    ig.addEventListener('click', async () => {
+      ig.disabled = true;
+      try { if (await downloadPresumible(r.tickets[Number(ig.dataset.idx)], CATALOG))
+              toast('Imagen para redes descargada \u2713'); }
+      catch (e) { toast(e.message); }
+      finally { ig.disabled = false; }
+    });
+  });
+  box.querySelectorAll('.dl-b').forEach(b => {
     b.addEventListener('click', async () => {
       b.disabled = true;
       try {
