@@ -527,6 +527,12 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
 .vent-bloque{padding:14px 16px}
 .vent-bloque + .vent-bloque{border-top:1px solid rgba(255,120,40,.14)}
 
+/* La imagen de cada promoción: vive pegada a su interruptor porque es de esa
+   promoción, no del evento. Se ve chica —es una referencia, no una galería—. */
+.promo-img{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.promo-img-v{width:74px;height:74px;object-fit:cover;border-radius:10px;
+  border:1px solid var(--line-strong)}
+
 /* Interruptor del descuento del QR: va arriba del formulario porque cambia los
    precios que el vendedor está por leer en voz alta. Prendido se rellena de ámbar,
    que en esta pantalla ya significa "activo"; apagado es un renglón discreto. Toda

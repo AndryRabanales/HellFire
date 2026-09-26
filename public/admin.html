@@ -398,30 +398,57 @@
           <div class="err mt8" id="fl-err"></div>
         </div>
     </details>
-    <details class="card vent" id="vent-promos">
-      <summary class="vent-t">Promociones temporales</summary>
+    <!-- Las dos ventanillas de promoción. Nunca las dos prendidas: prender una
+         apaga la otra, y el servidor lo vuelve a comprobar por su cuenta. -->
+    <details class="card vent" id="vent-promo-cant">
+      <summary class="vent-t">Promoción por cantidad</summary>
       <div class="vent-bloque">
-        <div class="muted" style="margin-bottom:10px">Las que duran unos días. Se prenden y se apagan aquí; los boletos ya vendidos no cambian de precio.</div>
-        <div class="promo">
-          <div class="promo-t"><b>2x1</b><span>temporal · precio cerrado</span></div>
-          <div class="muted promo-d">Dos boletos por un solo precio que tú pones. No lo mueve la fase ni la venta flash: cada uno de los dos se congela con la mitad exacta. El día que se acabe lo apagas aquí y el botón desaparece del teléfono de los vendedores.</div>
-          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
-            <label class="sw"><input type="checkbox" id="pr-p2"><span></span><i>Abierto</i></label>
-            <span class="muted">$</span>
-            <input class="input" id="pr-p2-precio" type="number" min="2" max="20000" step="1"
-                   style="width:92px;padding:8px;font-size:14px"><span class="muted">los dos, en</span>
-            <select class="input" id="pr-p2-tipo" style="width:auto;padding:8px;font-size:14px"></select>
-          </div>
-          <div class="muted mt8" id="pr-p2-cu" style="font-size:11px"></div>
+        <div class="muted" style="margin-bottom:12px">Un grupo donde no todos pagan: <b>4 boletos y pagan 3</b>, <b>3 y pagan 2</b>, lo que quieras. Los que no pagan salen en <b>$0</b>. Al vendedor le aparece su botón; cuando la promo se acabe, la apagas, le cambias los números y la vuelves a prender.</div>
+        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="sw"><input type="checkbox" id="pc-on"><span></span><i>Abierta</i></label>
         </div>
-        <div class="promo">
-          <div class="promo-t"><b>3+1</b><span>temporal · el cuarto gratis</span></div>
-          <div class="muted promo-d">Se llevan cuatro boletos y pagan tres. Los cuatro de la misma categoría —si no, alguien arma tres generales y se lleva un Ultra vip de regalo— y aplica a todas las que estén a la venta. El cuarto boleto sale marcado GRATIS, con el precio que habría costado tachado.</div>
-          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
-            <label class="sw"><input type="checkbox" id="pr-p31"><span></span><i>Abierto</i></label>
-          </div>
+        <div class="row mt12" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <input class="input" id="pc-boletos" type="number" min="2" max="20" step="1"
+                 style="width:70px;padding:9px;font-size:15px"><span class="muted">boletos</span>
+          <span class="muted">y pagan</span>
+          <input class="input" id="pc-pagan" type="number" min="1" max="20" step="1"
+                 style="width:70px;padding:9px;font-size:15px">
         </div>
-        <div class="err mt8" id="pr-err"></div>
+        <div class="muted mt8" id="pc-cuenta" style="font-size:11.5px"></div>
+        <div class="label mt16" style="font-size:11px">Precio cerrado <span class="muted" style="text-transform:none;letter-spacing:0">— opcional</span></div>
+        <div class="muted" style="font-size:11px;margin-bottom:6px">Déjalo vacío y los que pagan pagan el precio de hoy de su categoría. Si le escribes un total, ese total se reparte entre los que pagan.</div>
+        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <span class="muted">$</span>
+          <input class="input" id="pc-precio" type="number" min="0" max="20000" step="1"
+                 placeholder="sin precio cerrado" style="width:150px;padding:9px;font-size:15px">
+          <span class="muted">por todo el grupo</span>
+        </div>
+        <div class="label mt16" style="font-size:11px">Nombre <span class="muted" style="text-transform:none;letter-spacing:0">— opcional</span></div>
+        <input class="input" id="pc-nombre" maxlength="40" placeholder="Se arma solo: 4x3" style="padding:9px">
+        <div class="label mt16" style="font-size:11px">¿En qué categorías?</div>
+        <div class="muted" style="font-size:11px;margin-bottom:6px">Sin marcar ninguna, entra en todas las que estén a la venta.</div>
+        <div id="pc-tipos" class="row" style="gap:8px;flex-wrap:wrap"></div>
+        <div class="label mt16" style="font-size:11px">Imagen para el sitio web</div>
+        <div class="promo-img" id="pc-img"></div>
+        <div class="err mt8" id="pc-err"></div>
+      </div>
+    </details>
+    <details class="card vent" id="vent-promo-precio">
+      <summary class="vent-t">Promoción de precio</summary>
+      <div class="vent-bloque">
+        <div class="muted" style="margin-bottom:12px">Le pones otro precio a las categorías que quieras, con su nombre y su imagen: <b>promo mujeres</b>, <b>cumpleañeros</b>, lo que sea. <b>Le gana a la venta flash</b>: si la flash dice $200 y aquí dice $150, se cobra $150. Al vendedor se le actualizan los precios solos, sin botón.</div>
+        <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+          <label class="sw"><input type="checkbox" id="pp-on"><span></span><i>Abierta</i></label>
+        </div>
+        <div class="label mt16" style="font-size:11px">Nombre de la promoción</div>
+        <div class="muted" style="font-size:11px;margin-bottom:6px">Sale impreso en el boleto, donde iría la fase.</div>
+        <input class="input" id="pp-nombre" maxlength="40" placeholder="ej. Promo mujeres" style="padding:9px">
+        <div class="label mt16" style="font-size:11px">Precios de la promoción</div>
+        <div class="muted" style="font-size:11px;margin-bottom:6px">Escribe solo las que entran. La que dejes vacía se queda con su precio de siempre.</div>
+        <div id="pp-tabla"></div>
+        <div class="label mt16" style="font-size:11px">Imagen para el sitio web</div>
+        <div class="promo-img" id="pp-img"></div>
+        <div class="err mt8" id="pp-err"></div>
       </div>
     </details>
     <details class="card vent" id="vent-grupos">

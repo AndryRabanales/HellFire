@@ -3207,6 +3207,133 @@ async function loadRanking(silent) {
 }
 let _sigRanking = null;
 
+/* Las dos ventanillas de promoci\u00f3n. Se pintan con lo que diga el servidor y se
+   guardan al instante: un interruptor que hay que confirmar aparte se queda a
+   medias y nadie sabe si aplic\u00f3. Nunca las dos prendidas \u2014el servidor apaga una al
+   prender la otra\u2014, as\u00ed que despu\u00e9s de cada cambio se relee el cat\u00e1logo y los dos
+   interruptores se repintan con la verdad. */
+function montaPromos(cat, tipos, guarda) {
+  const elegibles = tipos.filter(t => t.active && !t.needs_faculty);
+  const num = v => Number(v || 0);
+
+  // ---- ventanilla 1: por cantidad ----
+  const on = $('#pc-on');
+  if (on) {
+    const bol = $('#pc-boletos'), pag = $('#pc-pagan'), pre = $('#pc-precio'),
+          nom = $('#pc-nombre'), caja = $('#pc-tipos'), cuenta = $('#pc-cuenta');
+    on.checked = !!cat.promo_cant_on;
+    bol.value = num(cat.promo_cant_boletos) || 4;
+    pag.value = num(cat.promo_cant_pagan) || 3;
+    pre.value = num(cat.promo_cant_precio_cents) ? Math.round(num(cat.promo_cant_precio_cents) / 100) : '';
+    nom.value = cat.promo_cant_nombre || '';
+    const marcados = new Set(String(cat.promo_cant_tipos || '').split(',').filter(Boolean));
+    caja.innerHTML = elegibles.map(t =>
+      `<label class="muted row" style="gap:6px;flex:0 0 auto"><input type="checkbox" class="pc-t" value="${t.id}"${
+        marcados.has(String(t.id)) ? ' checked' : ''}>${esc(t.name)}</label>`).join('')
+      || '<span class="muted">No hay categor\u00edas que puedan ir en grupo.</span>';
+    // La cuenta en voz alta, mientras teclea: es el n\u00famero que el vendedor va a
+    // decirle al comprador, y hay que verlo ANTES de anunciar la promoci\u00f3n.
+    const pinta = () => {
+      const n = num(bol.value), m = num(pag.value), t = num(pre.value) * 100;
+      if (!(n >= 2) || !(m >= 1) || m > n) {
+        cuenta.innerHTML = '<span style="color:var(--danger)">De ' + (n || '?') +
+          ' boletos no pueden pagar ' + (m || '?') + '.</span>';
+        return;
+      }
+      const gratis = n - m;
+      const cu = t ? Math.floor(Math.floor(t / m) / 100) * 100 : 0;
+      cuenta.innerHTML = 'Se llevan <b>' + n + '</b> y pagan <b>' + m + '</b>'
+        + (gratis ? ' \u00b7 ' + gratis + (gratis === 1 ? ' boleto sale' : ' boletos salen') + ' en <b>$0</b>' : '')
+        + (t ? ' \u00b7 cada uno de los ' + m + ' paga <b>' + fmtMoney(cu / 100) + '</b>'
+             : ' \u00b7 los ' + m + ' pagan el precio de hoy de su categor\u00eda');
+    };
+    pinta();
+    const guardaCant = () => {
+      pinta();
+      guarda({
+        promo_cant_boletos: num(bol.value), promo_cant_pagan: num(pag.value),
+        promo_cant_precio_cents: Math.round(num(pre.value) * 100),
+        promo_cant_nombre: nom.value,
+        promo_cant_tipos: $$('.pc-t').filter(c => c.checked).map(c => c.value).join(','),
+      });
+    };
+    [bol, pag, pre].forEach(e => { e.oninput = pinta; e.onchange = guardaCant; });
+    nom.onchange = guardaCant;
+    $$('.pc-t').forEach(c => { c.onchange = guardaCant; });
+    on.onchange = async () => {
+      await guarda({ promo_cant_activo: on.checked ? '1' : '0' });
+      if (on.checked) { const o = $('#pp-on'); if (o) o.checked = false; }
+    };
+    montaImagenPromo('#pc-img', 'promocant', cat.promo_cant_img);
+  }
+
+  // ---- ventanilla 2: por precio ----
+  const on2 = $('#pp-on');
+  if (on2) {
+    const nom2 = $('#pp-nombre'), tabla = $('#pp-tabla');
+    on2.checked = !!cat.promo_precio_on;
+    nom2.value = cat.promo_precio_nombre || '';
+    let mapa = {};
+    try { mapa = JSON.parse(cat.promo_precio_json || '{}') || {}; } catch (e) { mapa = {}; }
+    // Todas las categor\u00edas, con lo que cuestan HOY al lado: el precio de promoci\u00f3n
+    // se escribe comparando, no de memoria.
+    tabla.innerHTML = tipos.filter(t => t.active).map(t => `
+      <div class="row" style="gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,120,40,.1)">
+        <div style="flex:1;min-width:0">
+          <div style="font:700 13px Manrope">${esc(t.name)}</div>
+          <div class="muted" style="font-size:10px">hoy ${fmtMoney(t.current_price_cents / 100)}</div>
+        </div>
+        <span class="muted">$</span>
+        <input class="input pp-p" data-id="${t.id}" type="number" min="0" max="20000" step="1"
+               placeholder="\u2014" style="width:92px;padding:8px;font-size:14px"
+               value="${mapa[String(t.id)] ? Math.round(mapa[String(t.id)] / 100) : ''}">
+      </div>`).join('');
+    const guardaPrecio = () => {
+      const m = {};
+      $$('.pp-p').forEach(i => { const v = num(i.value); if (v > 0) m[i.dataset.id] = Math.round(v * 100); });
+      guarda({ promo_precio_nombre: nom2.value, promo_precio_json: m });
+    };
+    $$('.pp-p').forEach(i => { i.onchange = guardaPrecio; });
+    nom2.onchange = guardaPrecio;
+    on2.onchange = async () => {
+      await guarda({ promo_precio_activo: on2.checked ? '1' : '0' });
+      if (on2.checked) { const o = $('#pc-on'); if (o) o.checked = false; }
+    };
+    montaImagenPromo('#pp-img', 'promoprecio', cat.promo_precio_img);
+  }
+}
+
+/* La imagen de la promoci\u00f3n. No es el flyer del boleto: es la que tu p\u00e1gina va a
+   ense\u00f1ar mientras la promoci\u00f3n est\u00e9 prendida, y por eso vive aqu\u00ed, pegada a su
+   interruptor, y no en la pantalla de flyers. */
+function montaImagenPromo(sel, variant, hay) {
+  const caja = $(sel);
+  if (!caja) return;
+  const url = () => '/flyer?v=' + variant + '&ts=' + Date.now();
+  caja.innerHTML = `
+    ${hay ? `<img src="${url()}" alt="" class="promo-img-v">` : ''}
+    <label class="btn sm ghost" style="width:auto;display:inline-flex;cursor:pointer">
+      ${hay ? 'Cambiar imagen' : 'Subir imagen'}
+      <input type="file" accept="image/*" hidden></label>
+    <span class="muted" style="font-size:10.5px">JPG o PNG \u00b7 sale en el sitio web</span>
+    <div class="err" style="margin-top:6px"></div>`;
+  const inp = caja.querySelector('input[type=file]');
+  const err = caja.querySelector('.err');
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    err.textContent = '';
+    const fd = new FormData();
+    fd.append('flyer', f);
+    fd.append('variant', variant);
+    try {
+      await API.post('/api/admin/flyer', fd);
+      toast('Imagen guardada \u2713');
+      montaImagenPromo(sel, variant, true);
+    } catch (e) { if (!guard(e)) err.textContent = e.message; }
+  };
+}
+
 async function loadCatalogs() {
   loadFlash();
   const [tt, fc] = await Promise.all([
@@ -3266,37 +3393,7 @@ async function loadCatalogs() {
       // El precio se escribe en PESOS y viaja en centavos. Se enseña debajo a cuánto
       // sale cada uno: es el número que el vendedor va a decir en voz alta, y si la
       // mitad no es redonda hay que verlo ANTES de anunciar la promoción.
-      // ----- el 3+1: un solo interruptor -----
-      // No tiene precio ni tipo que elegir: el precio sale del que tenga hoy la
-      // categoría que el vendedor escoja, y el cuarto boleto va en cero.
-      const p31 = $('#pr-p31');
-      if (p31) {
-        p31.checked = !!cat.tres_uno_activo;
-        p31.onchange = () => guarda({ tres_uno_activo: p31.checked ? '1' : '0' });
-      }
-      const p2 = $('#pr-p2'), p2p = $('#pr-p2-precio'), p2t = $('#pr-p2-tipo'), p2cu = $('#pr-p2-cu');
-      if (p2) {
-        p2.checked = !!cat.pareja_on;
-        p2p.value = Math.round((cat.pareja_total_cents || 0) / 100);
-        const elegibles = tt.types.filter(t => t.active && !t.needs_faculty);
-        p2t.innerHTML = elegibles.map(t =>
-          `<option value="${t.id}">${esc(t.name)}</option>`).join('')
-          || '<option value="">sin tipos disponibles</option>';
-        if (cat.pareja_tipo_id) p2t.value = String(cat.pareja_tipo_id);
-        const pintaCu = () => {
-          const pesos = Number(p2p.value || 0);
-          const mitad = Math.floor(pesos / 2);
-          p2cu.innerHTML = pesos > 0
-            ? `Cada boleto sale a <b>${fmtMoney(mitad)}</b>${
-                pesos % 2 ? ` · el peso suelto lo absorbe la casa: la pareja paga ${fmtMoney(mitad * 2)}` : ''}`
-            : '';
-        };
-        pintaCu();
-        p2.onchange = () => guarda({ pareja_activo: p2.checked ? '1' : '0' });
-        p2p.oninput = pintaCu;
-        p2p.onchange = () => { pintaCu(); guarda({ pareja_precio_cents: Math.round(Number(p2p.value || 0) * 100) }); };
-        p2t.onchange = () => guarda({ pareja_tipo: p2t.value });
-      }
+      montaPromos(cat, tt.types, guarda);
     }
   } catch (e) { /* si falla, los interruptores se quedan como estaban */ }
 

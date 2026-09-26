@@ -86,7 +86,11 @@ function flyerVariantFor(ticket) {
 function ticketTypeLabel(ticket) {
   // El 2x1 se nombra por su tipo, como cualquier boleto suelto: es el nombre de la
   // zona lo que hay que leer. La promoción ya se dice junto al precio.
-  if (ticket.group_size && ticket.group_size !== 2 && ticket.group_size !== 4) return 'Grupo';
+  // Solo los grupos de verdad —el de 10 con su botella y el de 5 con su
+  // porcentaje— se nombran "Grupo". Lo que sale de una promoción se nombra por su
+  // categoría, que es lo que hay que reconocer en la puerta; la promoción ya está
+  // escrita junto al precio.
+  if (ticket.group_size === 5 || ticket.group_size === 10) return 'Grupo';
   return ticket.type_name || 'General';
 }
 
@@ -145,12 +149,12 @@ function ticketBadgeSpec(ticket) {
     return { text: estrellaDe(ticket) + 'CORTESÍA · ' + (ticket.type_name || 'INVITADO').toUpperCase(),
              grad: t.grad, textColor: t.texto };
   }
-  // Ni el 2x1 ni el 3+1 entran aquí: su insignia es la de su categoría, a secas. La
+  // Las promociones NO entran aquí: su insignia es la de su categoría, a secas. La
   // promoción ya
   // está escrito abajo, junto al precio, que es donde explica el número; repetirlo
   // arriba le quita el renglón a lo único que la puerta necesita leer de un golpe,
   // que es de qué zona es el boleto.
-  if (ticket.group_size && ticket.group_size !== 2 && ticket.group_size !== 4) {
+  if (ticket.group_size === 5 || ticket.group_size === 10) {
     // El grupo lleva el color de SU categoría, no un rojo de "grupo" para todos: en
     // la puerta y en la barra el color es lo primero que se mira, y un grupo VIP en
     // rojo se lee como general aunque el texto diga otra cosa.

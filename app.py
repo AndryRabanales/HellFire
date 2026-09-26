@@ -460,12 +460,25 @@ DEFAULT_SETTINGS = {
     # 2x1: una promoción temporal, con su propio interruptor y su propio precio.
     # Nace apagada a propósito: se prende el día que se anuncia y se apaga sola en
     # cuanto el organizador la quita, sin tener que tocar ningún precio de fase.
-    # 3+1: se pagan tres y el cuarto sale gratis. Aplica a todas las categorías
-    # activas y también nace apagada.
-    "tres_uno_activo": "0",
-    "pareja_activo": "0",
-    "pareja_precio_cents": "70000",
-    "pareja_tipo": "",
+    # --- Las dos ventanillas de promoción. NUNCA las dos prendidas a la vez: el
+    # servidor apaga una al prender la otra. La venta flash sí convive con
+    # cualquiera de las dos, y la de precio le gana.
+    #
+    # 1) POR CANTIDAD: un grupo de N donde solo pagan M. Los que no pagan salen en
+    #    $0. Si además se le escribe un precio cerrado, ese total se reparte entre
+    #    los que pagan.
+    "promo_cant_activo": "0",
+    "promo_cant_nombre": "",          # vacío = se arma solo ("4x3")
+    "promo_cant_boletos": "4",
+    "promo_cant_pagan": "3",
+    "promo_cant_precio_cents": "0",   # 0 = sin precio cerrado
+    "promo_cant_tipos": "",           # ids separados por coma; vacío = todas
+    # 2) POR PRECIO: le pone precio nuevo a las categorías que se elijan. Es una
+    #    venta flash con nombre, imagen y PRIORIDAD: si la flash dice 200 y la promo
+    #    dice 150, se cobra 150.
+    "promo_precio_activo": "0",
+    "promo_precio_nombre": "",
+    "promo_precio_json": "{}",        # {"<type_id>": centavos}
     "lockout_minutes": "10",
 }
 
@@ -477,7 +490,8 @@ def set_setting(db, key, value):
     db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
-FLYER_VARIANTS = ("uady", "externo", "vip", "grupo10", "ultravip", "backstage",
+FLYER_VARIANTS = ("promocant", "promoprecio",
+                  "uady", "externo", "vip", "grupo10", "ultravip", "backstage",
                   "grupo10vip", "grupo10ultra",
                   "cortesiaexterno", "cortesiavip", "cortesiaultra", "cortesiabackstage",
                   "redesexterno", "redesvip", "redesultra", "redesbackstage",
@@ -603,36 +617,29 @@ def descuento_de(db, sel, group_size=None):
     return 0.0
 
 
-def tipo_pareja(db):
-    """A qué boleto aplica el 2x1. El organizador lo elige en Promociones; si nunca
-    lo tocó se toma el Ultra VIP, que es donde nació la promoción."""
-    tid = (setting(db, "pareja_tipo") or "").strip()
-    if tid:
+def promo_cantidad(db):
+    """La promoción por cantidad que esté prendida, o None.
+
+    Devuelve cuántos boletos lleva, cuántos de ellos pagan, el precio cerrado si lo
+    tiene y en qué categorías entra. Un solo lugar que lea los ajustes: si cada
+    pantalla los interpretara por su cuenta, el día que no cuadren el vendedor
+    prometería un precio que el servidor no va a cobrar."""
+    if setting(db, "promo_cant_activo") != "1":
+        return None
+    def _ent(clave, por_omision=0):
         try:
-            r = db.execute("SELECT * FROM ticket_types WHERE id=? AND active=1",
-                           (int(tid),)).fetchone()
+            return int(float(setting(db, clave) or 0))
         except (TypeError, ValueError):
-            r = None
-        if r:
-            return r
-    return db.execute("SELECT * FROM ticket_types WHERE active=1 AND needs_faculty=0 "
-                      "AND LOWER(name) LIKE '%ultra%' ORDER BY price_cents DESC "
-                      "LIMIT 1").fetchone()
-
-
-def precio_pareja(db):
-    """Lo que paga la pareja y lo que se le congela a CADA boleto.
-
-    Es un número cerrado que pone el organizador: no lo mueve la fase, no lo mueve la
-    flash y no se le encima ningún descuento. Se parte en dos mitades iguales y al
-    peso, porque son dos boletos y cada uno tiene que decir cuánto costó; si el total
-    fuera impar la casa absorbe el peso suelto antes que dejar dos boletos distintos."""
-    try:
-        total = int(float(setting(db, "pareja_precio_cents") or 0))
-    except (TypeError, ValueError):
-        total = 0
-    mitad = max(0, (total // 2 // 100) * 100)
-    return mitad * 2, mitad
+            return por_omision
+    n = _ent("promo_cant_boletos")
+    m = _ent("promo_cant_pagan")
+    if n < 2 or m < 1 or m > n:
+        return None
+    total = max(0, (_ent("promo_cant_precio_cents") // 100) * 100)
+    tipos = [t for t in (setting(db, "promo_cant_tipos") or "").split(",") if t.strip()]
+    nombre = (setting(db, "promo_cant_nombre") or "").strip() or f"{n}x{m}"
+    return {"boletos": n, "pagan": m, "precio_total": total,
+            "tipos": tipos, "nombre": nombre}
 
 
 def con_descuento(precio, normal, pct):
@@ -723,6 +730,29 @@ def migrar_precios_flash(db):
               "y siguen en el calendario (ya no cambian precios): " + ", ".join(huerfanas))
 
 
+def promo_precio(db, type_row):
+    """El precio que le pone la PROMOCIÓN a este tipo, si hay una prendida y lo
+    incluye. Devuelve (centavos, nombre) o (None, None).
+
+    Manda sobre todo lo demás —fase y venta flash— porque es lo que se anunció con
+    una imagen afuera: si el flyer dice 150, en la puerta no se puede cobrar 200
+    porque la flash diga otra cosa."""
+    if setting(db, "promo_precio_activo") != "1":
+        return None, None
+    try:
+        mapa = json.loads(setting(db, "promo_precio_json") or "{}")
+    except (TypeError, ValueError):
+        return None, None
+    v = mapa.get(str(type_row["id"]))
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return None, None
+    if v <= 0:
+        return None, None
+    return v, (setting(db, "promo_precio_nombre") or "Promoción").strip()
+
+
 def effective_price(db, type_row):
     """Lo que cuesta HOY un tipo de boleto. Devuelve (precio, nombre_fase, normal).
 
@@ -747,12 +777,20 @@ def effective_price(db, type_row):
         # sirve aquí, con el precio de flash guardado en el tipo.
         base = type_row["price_cents"]
         suyo = type_row["flash_price_cents"] if "flash_price_cents" in type_row.keys() else None
+        pp, pn = promo_precio(db, type_row)
+        if pp is not None:
+            return pp, pn, (base if base > pp else None)
         if flash_manual(db) and suyo and suyo < base:
             return suyo, "Venta flash", base
         return base, None, None
     # Prender el botón cobra el flash DE LA FASE QUE ESTÉ CORRIENDO: en Fase 1 sale
     # el de Fase 1 y en Fase 4 el de Fase 4, sin tocar nada. Apagar y volver a
     # prender dentro de la misma fase no mueve el precio.
+    # La promoción va ENCIMA de la fase y de la flash. El tachado sigue siendo el
+    # precio de la fase, que es de lo que de verdad se está bajando.
+    pp, pn = promo_precio(db, type_row)
+    if pp is not None:
+        return pp, pn, (ph["price_cents"] if ph["price_cents"] > pp else None)
     if flash_manual(db) and ph["flash_price_cents"] and ph["flash_price_cents"] < ph["price_cents"]:
         return ph["flash_price_cents"], ph["name"] + " Flash", ph["price_cents"]
     return ph["price_cents"], ph["name"], None
@@ -1578,9 +1616,28 @@ def precios_publicos():
             fila["vendidos"] = ocupados_de(db, t["id"])
             fila["libres"] = libres
         tipos.append(fila)
+    # La promoción que esté corriendo, para que el sitio la anuncie con su imagen.
+    # Solo una de las dos puede estar prendida, así que aquí sale una o ninguna.
+    promo = None
+    _pc = promo_cantidad(db)
+    if _pc:
+        promo = {"tipo": "cantidad", "nombre": _pc["nombre"],
+                 "boletos": _pc["boletos"], "pagan": _pc["pagan"],
+                 "precio_total": money(_pc["precio_total"]) if _pc["precio_total"] else None,
+                 "categorias": [int(x) for x in _pc["tipos"]] or None,
+                 "imagen": "/flyer?v=promocant" if setting(db, "flyer_data_promocant") else None}
+    elif setting(db, "promo_precio_activo") == "1":
+        promo = {"tipo": "precio",
+                 "nombre": (setting(db, "promo_precio_nombre") or "Promoción").strip(),
+                 # los precios ya vienen aplicados en cada tipo de arriba; aquí solo
+                 # se dice en cuáles entra, para que el sitio la pueda señalar
+                 "categorias": sorted(int(k) for k in
+                                      (json.loads(setting(db, "promo_precio_json") or "{}") or {})),
+                 "imagen": "/flyer?v=promoprecio" if setting(db, "flyer_data_promoprecio") else None}
     out = {
         "evento": setting(db, "event_name"),
         "flash_activa": flash_manual(db),
+        "promocion": promo,
         "ventas_cerradas": ventas_cerradas(db),
         "actualizado": now_iso(),
         "tipos": tipos,
@@ -1786,16 +1843,21 @@ def estado_venta():
     # Las promociones se prenden y se apagan a mitad del día ("hoy sí hay grupos de
     # 5"), así que viajan aquí y no solo en el catálogo: van en una sola cadena para
     # que el vendedor la compare de un vistazo y recargue únicamente si cambió.
-    promos = "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s" % (setting(db, "grupo10_activo") or "0",
-                                    setting(db, "grupo10_desc") or "0",
-                                    setting(db, "grupo10_pct") or "0",
-                                    setting(db, "grupo5_activo") or "0",
-                                    setting(db, "grupo5_pct") or "0",
-                                    _mi_descuento(s),
-                                    setting(db, "pareja_activo") or "0",
-                                    setting(db, "pareja_precio_cents") or "0",
-                                    setting(db, "pareja_tipo") or "",
-                                    setting(db, "tres_uno_activo") or "0")
+    promos = "|".join([setting(db, "grupo10_activo") or "0",
+                       setting(db, "grupo10_desc") or "0",
+                       setting(db, "grupo10_pct") or "0",
+                       setting(db, "grupo5_activo") or "0",
+                       setting(db, "grupo5_pct") or "0",
+                       str(_mi_descuento(s)),
+                       setting(db, "promo_cant_activo") or "0",
+                       setting(db, "promo_cant_boletos") or "",
+                       setting(db, "promo_cant_pagan") or "",
+                       setting(db, "promo_cant_precio_cents") or "0",
+                       setting(db, "promo_cant_tipos") or "",
+                       setting(db, "promo_cant_nombre") or "",
+                       setting(db, "promo_precio_activo") or "0",
+                       setting(db, "promo_precio_nombre") or "",
+                       setting(db, "promo_precio_json") or ""])
     return jsonify(flash_manual=flash_manual(db), ventas_cerradas=ventas_cerradas(db),
                    promos=promos)
 
@@ -1851,15 +1913,21 @@ def catalog():
                       "tipos": [{"id": t["id"], "name": t["name"], "is_vip": t["is_vip"],
                                  "price_cents": t["price_cents"],
                                  "normal_cents": t.get("normal_cents")} for t in opciones]}
-    # El 2x1 necesita DOS lugares libres del mismo tipo: con uno solo la pareja se
-    # queda a medias y el segundo boleto reventaría después de cobrar.
-    _par_tipo = tipo_pareja(db)
-    _par_total, _par_mitad = precio_pareja(db)
-    _par_ok = bool(setting(db, "pareja_activo") == "1" and _par_tipo is not None
-                   and _par_mitad > 0
-                   and any(t["id"] == _par_tipo["id"] for t in opciones)
-                   and (lambda l: l is None or l >= 2)(
-                       lugares_libres(db, _par_tipo)))
+    # La promoción por cantidad, tal como la va a ver el vendedor. Se enseña solo si
+    # además queda lugar para TODO el grupo en alguna categoría suya: con tres
+    # lugares libres y un 4x3, la promoción se cae después de cobrar. Un botón que
+    # existe y luego rebota es el vendedor callándose después de haber prometido el
+    # precio a cuatro personas.
+    _pc = promo_cantidad(db)
+    _promo = None
+    if _pc:
+        _eleg = [t for t in opciones
+                 if (not _pc["tipos"] or str(t["id"]) in _pc["tipos"])
+                 and (t["libres"] is None or t["libres"] >= _pc["boletos"])]
+        if _eleg:
+            _promo = {"nombre": _pc["nombre"], "boletos": _pc["boletos"],
+                      "pagan": _pc["pagan"], "precio_total_cents": _pc["precio_total"],
+                      "tipos": [t["id"] for t in _eleg]}
 
     # ¿le falta el tutorial? Va aquí y no solo en la respuesta del login: si el
     # vendedor recarga la página a media guía, con la sesión ya guardada no vuelve a
@@ -1900,15 +1968,25 @@ def catalog():
                    # 2x1: se enseña solo si además queda lugar en ese tipo. Un botón
                    # que existe y luego rebota es el vendedor callándose después de
                    # haberle prometido el precio a dos personas.
-                   tres_uno_activo=setting(db, "tres_uno_activo") == "1",
-                   pareja_activo=_par_ok,
-                   # el interruptor tal como está guardado: el panel del organizador
-                   # tiene que enseñar lo que ÉL prendió, no si hoy alcanza el cupo
-                   pareja_on=setting(db, "pareja_activo") == "1",
-                   pareja_total_cents=_par_total,
-                   pareja_mitad_cents=_par_mitad,
-                   pareja_tipo_id=(_par_tipo["id"] if _par_tipo else None),
-                   pareja_tipo_nombre=(_par_tipo["name"] if _par_tipo else None),
+                   # la promoción por cantidad lista para pintar, o null
+                   promo=_promo,
+                   # los interruptores tal como están guardados: el panel del
+                   # organizador tiene que enseñar lo que ÉL prendió, no si hoy
+                   # alcanza el cupo
+                   promo_cant_on=setting(db, "promo_cant_activo") == "1",
+                   promo_cant_boletos=setting(db, "promo_cant_boletos"),
+                   promo_cant_pagan=setting(db, "promo_cant_pagan"),
+                   promo_cant_nombre=setting(db, "promo_cant_nombre"),
+                   promo_cant_precio_cents=setting(db, "promo_cant_precio_cents"),
+                   promo_cant_tipos=setting(db, "promo_cant_tipos"),
+                   promo_precio_on=setting(db, "promo_precio_activo") == "1",
+                   promo_precio_nombre=setting(db, "promo_precio_nombre"),
+                   promo_precio_json=setting(db, "promo_precio_json"),
+                   # si ya hay imagen subida para cada ventanilla. Se pregunta por el
+                   # dato exacto y no por flyer_info, que cae al flyer viejo del
+                   # evento y enseñaría una imagen que nadie subió para esta promo
+                   promo_cant_img=bool(setting(db, "flyer_data_promocant")),
+                   promo_precio_img=bool(setting(db, "flyer_data_promoprecio")),
                    mi_descuento=_mi_descuento(s),
                    mi_boletos=mi_boletos,
                    mi_vendido=money(mi_vendido), mi_en_grupo=mi_en_grupo,
@@ -2105,41 +2183,37 @@ def create_group():
         return jsonify(error="Las ventas ya cerraron. Habla con tu administrador."), 403
     b = request.json or {}
     size = b.get("size")
-    # Dos grupos con reglas distintas y cada uno con su interruptor. El de 10 da
-    # BOTELLA al representante y no baja el precio; el de 5 da DESCUENTO a los cinco
-    # y no da botella. Apagados desde Catálogos, el servidor los rechaza aquí aunque
-    # alguien fuerce la llamada.
-    if size not in (2, 4, 5, 10):
-        return jsonify(error="El grupo debe ser de 2, 4, 5 o 10 integrantes"), 400
-    # El 3+1 es temporal, igual que el 2x1: apagado, el servidor lo rechaza aquí.
-    # Los cuatro van de la MISMA categoría —si no, alguien arma tres generales y se
-    # lleva un Ultra vip de regalo—, así que el tipo se impone desde el primero.
-    if size == 4:
-        if setting(db, "tres_uno_activo") != "1":
-            return jsonify(error="La promoción 3+1 no está disponible."), 403
+    # Aquí entran dos cosas distintas por la misma puerta:
+    #
+    #   · Los GRUPOS de siempre, de 5 y de 10, con sus reglas fijas (botella,
+    #     porcentaje) y su propio interruptor.
+    #   · La PROMOCIÓN POR CANTIDAD, que arma el organizador: N boletos donde solo
+    #     pagan M. El tamaño no está escrito en el código —hoy 4x3, mañana 3x2—, así
+    #     que el servidor no acepta el número que mande la pantalla: acepta
+    #     exactamente el que esté configurado y prendido en ese momento.
+    p = promo_cantidad(db)
+    # Una promoción de 5 y el grupo de 5 piden lo mismo por fuera —cinco nombres—,
+    # así que la pantalla dice por cuál botón entró. Sin esa marca, el día que las
+    # dos estén abiertas el grupo de 5 saldría vendido como promoción.
+    es_promo = bool(p and size == p["boletos"]
+                    and (bool(b.get("promo")) or size not in (5, 10)))
+    if not isinstance(size, int):
+        return jsonify(error="Falta decir de cuántos es el grupo"), 400
+    if not es_promo:
+        if size == 10 and setting(db, "grupo10_activo") != "1":
+            return jsonify(error="Los grupos de 10 están cerrados por ahora."), 403
+        if size == 5 and setting(db, "grupo5_activo") != "1":
+            return jsonify(error="Los grupos de 5 están cerrados por ahora."), 403
+        if size not in (5, 10):
+            return jsonify(error="Esa promoción ya no está disponible."), 403
+    if es_promo:
+        # Todos de la MISMA categoría: si el vendedor pudiera mezclarlas, alguien
+        # arma tres generales y se lleva un Ultra vip de regalo. El tipo se impone
+        # desde el primero y el resto lo hereda.
         b["types"] = None
-    if size == 10 and setting(db, "grupo10_activo") != "1":
-        return jsonify(error="Los grupos de 10 están cerrados por ahora."), 403
-    if size == 5 and setting(db, "grupo5_activo") != "1":
-        return jsonify(error="Los grupos de 5 están cerrados por ahora."), 403
-    # El 2x1 es temporal: mientras esté apagado el servidor lo rechaza aquí aunque
-    # alguien se guarde la pantalla o fuerce la llamada.
-    pareja_total = pareja_mitad = 0
-    if size == 2:
-        if setting(db, "pareja_activo") != "1":
-            return jsonify(error="La promoción 2x1 no está disponible."), 403
-        tp = tipo_pareja(db)
-        if not tp:
-            return jsonify(error="El 2x1 no tiene tipo de boleto configurado."), 400
-        if tp["needs_faculty"]:
-            return jsonify(error=f"El 2x1 no se puede armar con {tp['name']}, porque "
-                                 f"cada boleto necesita su facultad."), 400
-        pareja_total, pareja_mitad = precio_pareja(db)
-        if pareja_mitad <= 0:
-            return jsonify(error="El precio del 2x1 aún no está configurado."), 400
-        # el tipo lo pone el organizador, no la pantalla: la pareja no elige
-        b["types"] = None
-        b["type_id"] = tp["id"]
+        tid_p = b.get("type_id")
+        if p["tipos"] and str(tid_p) not in p["tipos"]:
+            return jsonify(error="Esa categoría no entra en la promoción de hoy."), 400
     names = b.get("names") or []
     if not isinstance(names, list) or len(names) != size:
         return jsonify(error=f"Escribe los {size} nombres del grupo"), 400
@@ -2177,20 +2251,17 @@ def create_group():
                 return jsonify(error=f"Los grupos no se pueden armar con {fila['name']}, "
                                      f"porque cada boleto necesita su facultad."), 400
             precio, fase, normal = effective_price(db, fila)
-            if size == 4:
-                # Los tres que pagan llevan el precio de hoy, tal cual. El regalado
-                # se arma abajo, fuera de la caché: es el mismo tipo y el mismo
-                # precio, pero en CERO.
-                pass
-            elif size == 2:
-                # 2x1: el precio de la pareja es un número cerrado del organizador.
-                # No lo mueve la fase ni la flash y NO se le encima ningún descuento;
-                # cada boleto se congela con su mitad. El tachado es lo que esa
-                # persona habría pagado hoy sola: es de ahí de donde sale el ahorro.
-                individual = precio
-                precio = pareja_mitad
-                fase = "2x1"
-                normal = individual if individual > precio else None
+            if es_promo:
+                # Los que pagan llevan el precio de hoy tal cual —el de la fase, el
+                # de la flash o el de la promoción de precio, lo que esté corriendo—,
+                # salvo que la promoción traiga su propio total cerrado: entonces ese
+                # total se reparte entre los que pagan, al peso. Los que NO pagan se
+                # arman abajo, fuera de la caché, con el mismo tipo y en CERO.
+                if p["precio_total"] > 0:
+                    individual = precio
+                    precio = max(0, (p["precio_total"] // p["pagan"] // 100) * 100)
+                    fase = p["nombre"]
+                    normal = individual if individual > precio else None
             else:
                 _d = descuento_de(db, s["seller"], size)
                 if _d:
@@ -2203,14 +2274,15 @@ def create_group():
         fila, precio, fase, normal = cache[tid]
         tipos.append(fila)
         precios.append((precio, fase, normal))
-    # El cuarto boleto del 3+1 va en CERO. Se pone aquí y no en la caché porque es
-    # el mismo tipo y el mismo precio que los otros tres: lo único distinto es que
-    # este no se cobra. Lleva tachado lo que habría costado —es el regalo, y el
-    # boleto tiene que poder enseñarlo— y la fase se cambia por "3+1", que es lo
-    # que explica el cero.
-    if size == 4:
-        _p4, _f4, _n4 = precios[3]
-        precios[3] = (0, "3+1", _p4)
+    # Los boletos que NO se cobran van en CERO. Se ponen aquí y no en la caché
+    # porque son el mismo tipo y el mismo precio que los demás: lo único distinto es
+    # que estos no se cobran. Cada uno lleva tachado lo que habría costado —es el
+    # regalo, y el boleto tiene que poder enseñarlo— y en lugar de la fase lleva el
+    # nombre de la promoción, que es lo que explica el cero.
+    if es_promo and p["pagan"] < p["boletos"]:
+        for i in range(p["pagan"], p["boletos"]):
+            _pi, _fi, _ni = precios[i]
+            precios[i] = (0, p["nombre"], _pi)
     # Un grupo pide varios lugares del mismo tipo de una vez: se revisa el total, no
     # de uno en uno. Con 3 lugares libres y 4 integrantes de backstage, el grupo entero
     # se rechaza antes de generar nada; a medias quedarían boletos huérfanos cobrados.
@@ -2254,7 +2326,7 @@ def create_group():
     reparto = ", ".join(f"{n}\u00d7 {t}" for t, n in
                         Counter(x["name"] for x in tipos).most_common())
     audit(db, seller_name, "generacion",
-          f"Generó un {'2x1' if size == 2 else '3+1' if size == 4 else f'grupo de {size}'} [{reparto}] ({', '.join(names)}) "
+          f"Generó un {p['nombre'] if es_promo else f'grupo de {size}'} [{reparto}] ({', '.join(names)}) "
           f"por ${total/100:,.2f}"
           + (f" · representante: {representative}" if representative else ""))
     db.commit()
@@ -5264,8 +5336,8 @@ def save_settings():
     # mueve el precio de todos los boletos que se vendan a partir de ese momento.
     for clave, etq in (("grupo10_activo", "grupos de 10"), ("grupo5_activo", "grupos de 5"),
                        ("grupo10_desc", "el descuento del grupo de 10"),
-                       ("pareja_activo", "la promoción 2x1"),
-                       ("tres_uno_activo", "la promoción 3+1")):
+                       ("promo_cant_activo", "la promoción por cantidad"),
+                       ("promo_precio_activo", "la promoción de precio")):
         if clave in b:
             on = "1" if str(b[clave]) in ("1", "True", "true") else "0"
             if setting(db, clave) != on:
@@ -5282,33 +5354,94 @@ def save_settings():
             set_setting(db, clave, str(pc))
             changed.append(f"descuento del {etq} en {pc:g}%")
 
-    # El 2x1: su precio es un número cerrado en centavos y el tipo al que aplica.
-    # Se valida con horquilla porque quien teclea 70000 queriendo $700 no puede
-    # terminar vendiendo la pareja en setecientos mil pesos —ni en siete.
-    if "pareja_precio_cents" in b:
+    # --- Las dos ventanillas de promoción ---------------------------------------
+    # NUNCA las dos prendidas: prender una apaga la otra aquí mismo, y no en la
+    # pantalla. Si el candado viviera solo en el panel, dos pestañas abiertas —o el
+    # colíder con su teléfono— dejarían el evento con dos promociones peleándose el
+    # precio y nadie sabría cuál cobró el vendedor.
+    for prende, apaga, etq in (("promo_cant_activo", "promo_precio_activo", "de precio"),
+                               ("promo_precio_activo", "promo_cant_activo", "por cantidad")):
+        if str(b.get(prende, "")) in ("1", "True", "true") and setting(db, apaga) == "1":
+            set_setting(db, apaga, "0")
+            changed.append(f"se apagó la promoción {etq}: no pueden ir dos a la vez")
+
+    if "promo_cant_boletos" in b or "promo_cant_pagan" in b:
+        def _leer(clave, actual):
+            if clave not in b:
+                return int(float(setting(db, actual) or 0))
+            return int(float(b[clave]))
         try:
-            pv = int(float(b["pareja_precio_cents"]))
+            n = _leer("promo_cant_boletos", "promo_cant_boletos")
+            m = _leer("promo_cant_pagan", "promo_cant_pagan")
         except (TypeError, ValueError):
-            return jsonify(error="El precio del 2x1 debe ser un número"), 400
-        if pv < 200 or pv > 2000000:
-            return jsonify(error="El precio del 2x1 debe estar entre $2 y $20,000"), 400
-        set_setting(db, "pareja_precio_cents", str(pv))
-        changed.append(f"precio del 2x1 en ${pv/100:,.0f} la pareja")
-    if "pareja_tipo" in b:
-        tv = str(b["pareja_tipo"] or "").strip()
-        if tv:
+            return jsonify(error="Los boletos de la promoción deben ser números"), 400
+        if n < 2 or n > 20:
+            return jsonify(error="La promoción debe ser de entre 2 y 20 boletos"), 400
+        # Un "4x5" no existe: no se puede cobrar por más gente de la que entra, y un
+        # dedazo así dejaría al vendedor cobrando un boleto de más toda la noche.
+        if m < 1 or m > n:
+            return jsonify(error=f"De {n} boletos pueden pagar entre 1 y {n}"), 400
+        set_setting(db, "promo_cant_boletos", str(n))
+        set_setting(db, "promo_cant_pagan", str(m))
+        changed.append(f"promoción de {n} boletos donde pagan {m}")
+    if "promo_cant_precio_cents" in b:
+        try:
+            pv = int(float(b["promo_cant_precio_cents"] or 0))
+        except (TypeError, ValueError):
+            return jsonify(error="El precio de la promoción debe ser un número"), 400
+        if pv < 0 or pv > 2000000:
+            return jsonify(error="El precio de la promoción debe estar entre $0 y $20,000"), 400
+        set_setting(db, "promo_cant_precio_cents", str(pv))
+        changed.append("precio cerrado de la promoción en "
+                       + (f"${pv/100:,.0f}" if pv else "ninguno"))
+    if "promo_cant_nombre" in b:
+        set_setting(db, "promo_cant_nombre", str(b["promo_cant_nombre"] or "").strip()[:40])
+    if "promo_precio_nombre" in b:
+        set_setting(db, "promo_precio_nombre", str(b["promo_precio_nombre"] or "").strip()[:40])
+    for clave in ("promo_cant_tipos",):
+        if clave in b:
+            ids = [x.strip() for x in str(b[clave] or "").split(",") if x.strip()]
+            buenos = []
+            for x in ids:
+                try:
+                    fila = db.execute("SELECT name, needs_faculty FROM ticket_types "
+                                      "WHERE id=? AND active=1", (int(x),)).fetchone()
+                except (TypeError, ValueError):
+                    fila = None
+                if not fila:
+                    return jsonify(error="Una de las categorías no existe o está desactivada"), 400
+                # la facultad se pide por persona y en un grupo solo se piden nombres
+                if fila["needs_faculty"]:
+                    return jsonify(error=f"{fila['name']} no puede entrar en una "
+                                         f"promoción de grupo: pide facultad por persona"), 400
+                buenos.append(str(int(x)))
+            set_setting(db, clave, ",".join(buenos))
+            changed.append("categorías de la promoción")
+    if "promo_precio_json" in b:
+        crudo = b["promo_precio_json"]
+        if isinstance(crudo, str):
             try:
-                fila = db.execute("SELECT name, needs_faculty FROM ticket_types "
-                                  "WHERE id=? AND active=1", (int(tv),)).fetchone()
+                crudo = json.loads(crudo or "{}")
             except (TypeError, ValueError):
-                fila = None
-            if not fila:
-                return jsonify(error="Ese tipo de boleto no existe o está desactivado"), 400
-            if fila["needs_faculty"]:
-                return jsonify(error=f"El 2x1 no puede ser de {fila['name']}: ese "
-                                     f"boleto pide facultad por persona"), 400
-            changed.append(f"2x1 sobre {fila['name']}")
-        set_setting(db, "pareja_tipo", tv)
+                return jsonify(error="No se entendieron los precios de la promoción"), 400
+        if not isinstance(crudo, dict):
+            return jsonify(error="No se entendieron los precios de la promoción"), 400
+        limpio = {}
+        for k, v in crudo.items():
+            try:
+                tid, cents = int(k), int(float(v or 0))
+            except (TypeError, ValueError):
+                return jsonify(error="Los precios de la promoción deben ser números"), 400
+            if cents <= 0:
+                continue          # vacío = esa categoría no entra en la promoción
+            if cents > 2000000:
+                return jsonify(error="Un precio de la promoción se pasa de $20,000"), 400
+            if not db.execute("SELECT 1 FROM ticket_types WHERE id=? AND active=1",
+                              (tid,)).fetchone():
+                return jsonify(error="Una de las categorías no existe o está desactivada"), 400
+            limpio[str(tid)] = cents
+        set_setting(db, "promo_precio_json", json.dumps(limpio))
+        changed.append(f"precios de promoción en {len(limpio)} categoría(s)")
 
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
     for v in FLYER_VARIANTS:

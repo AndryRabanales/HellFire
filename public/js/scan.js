@@ -241,11 +241,12 @@ function etiquetasDe(t) {
   const nombre = (t.type_name || 'General').toUpperCase();
   let html = `<div class="r-type ${clase}">${alta ? '★ ' : ''}${esc(nombre)}</div>`;
   if (t.es_cortesia) html += '<div class="r-tag cortesia">CORTESÍA · no pagó</div>';
-  if (t.group_size) {
-    html += t.es_representante
-      ? '<div class="r-tag botella">★ BOTELLA · le toca a él</div>'
-      : `<div class="r-tag grupo">${t.group_size === 2 ? '2X1'
-          : t.group_size === 4 ? '3+1' : 'GRUPO DE ' + t.group_size}</div>`;
+  if (t.es_representante) {
+    html += '<div class="r-tag botella">★ BOTELLA · le toca a él</div>';
+  } else if (t.group_size === 5 || t.group_size === 10) {
+    // Solo los grupos de verdad llevan etiqueta: son los que cambian lo que la barra
+    // le debe a esa persona. Un boleto de promoción entra como cualquier otro.
+    html += `<div class="r-tag grupo">GRUPO DE ${t.group_size}</div>`;
   }
   return html;
 }
