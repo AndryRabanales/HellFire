@@ -3266,6 +3266,10 @@ function montaPromos(cat, tipos, guarda) {
     };
     montaImagenPromo('#pc-img', 'promocant', cat.promo_cant_img);
   }
+  // La venta flash también lleva la suya: cada flash es otra oferta y otra imagen.
+  if ($('#fl-img')) {
+    montaImagenPromo('#fl-img', 'ventaflash', cat.flash_img);
+  }
 
   // ---- ventanilla 2: por precio ----
   const on2 = $('#pp-on');

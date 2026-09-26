@@ -490,13 +490,16 @@ def set_setting(db, key, value):
     db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
-FLYER_VARIANTS = ("promocant", "promoprecio",
+FLYER_VARIANTS = ("promocant", "promoprecio", "ventaflash",
                   "uady", "externo", "vip", "grupo10", "ultravip", "backstage",
                   "grupo10vip", "grupo10ultra",
                   "cortesiaexterno", "cortesiavip", "cortesiaultra", "cortesiabackstage",
                   "redesexterno", "redesvip", "redesultra", "redesbackstage",
                   "redespagoexterno", "redespagovip", "redespagoultra", "redespagobackstage")
-FLYER_LABEL = {"uady": "UADY", "externo": "Externo", "vip": "VIP",
+FLYER_LABEL = {"promocant": "Promoción por cantidad",
+               "promoprecio": "Promoción de precio",
+               "ventaflash": "Venta flash",
+               "uady": "UADY", "externo": "Externo", "vip": "VIP",
                "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
                "grupo10vip": "Grupo de 10 · VIP", "grupo10ultra": "Grupo de 10 · Ultra VIP",
                "cortesiaexterno": "Cortesía Externo", "cortesiavip": "Cortesía VIP",
@@ -1618,6 +1621,10 @@ def precios_publicos():
         tipos.append(fila)
     # La promoción que esté corriendo, para que el sitio la anuncie con su imagen.
     # Solo una de las dos puede estar prendida, así que aquí sale una o ninguna.
+    # La imagen de la venta flash: cambia con cada flash, así que se manda solo
+    # mientras esté prendida.
+    flash_img = ("/flyer?v=ventaflash"
+                 if flash_manual(db) and setting(db, "flyer_data_ventaflash") else None)
     promo = None
     _pc = promo_cantidad(db)
     if _pc:
@@ -1637,6 +1644,7 @@ def precios_publicos():
     out = {
         "evento": setting(db, "event_name"),
         "flash_activa": flash_manual(db),
+        "flash_imagen": flash_img,
         "promocion": promo,
         "ventas_cerradas": ventas_cerradas(db),
         "actualizado": now_iso(),
@@ -1987,6 +1995,7 @@ def catalog():
                    # evento y enseñaría una imagen que nadie subió para esta promo
                    promo_cant_img=bool(setting(db, "flyer_data_promocant")),
                    promo_precio_img=bool(setting(db, "flyer_data_promoprecio")),
+                   flash_img=bool(setting(db, "flyer_data_ventaflash")),
                    mi_descuento=_mi_descuento(s),
                    mi_boletos=mi_boletos,
                    mi_vendido=money(mi_vendido), mi_en_grupo=mi_en_grupo,
@@ -5489,7 +5498,10 @@ def upload_flyer():
                                        ("flyer_nomw", 0.15, 0.95, 0.569)):
         if request.form.get(campo) is not None:
             set_setting(db, f"{campo}_{variant}", _clamp(request.form.get(campo), lo, hi, por_omision))
-    audit(db, s["admin"]["username"], "ajustes", f"Subió el flyer {FLYER_LABEL[variant]}")
+    # .get y no [ ]: una variante nueva sin nombre en la tabla tiraba la subida
+    # entera con un 500, y en el panel eso se lee como "error de conexión".
+    audit(db, s["admin"]["username"], "ajustes",
+          f"Subió la imagen {FLYER_LABEL.get(variant, variant)}")
     db.commit()
     return jsonify(ok=True)
 
