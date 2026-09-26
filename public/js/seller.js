@@ -162,10 +162,10 @@ function aplicarPromos() {
     const tit = $('#promo-t'), sub = $('#promo-s');
     if (tit) tit.textContent = pr.nombre;
     const gratis = pr.boletos - pr.pagan;
-    if (sub) sub.textContent = pr.precio_total_cents
-      ? (pr.boletos + ' boletos por ' + fmtMoney(pr.precio_total_cents / 100))
-      : ('Se llevan ' + pr.boletos + ' y pagan ' + pr.pagan
-         + (gratis ? ' \u00b7 ' + gratis + (gratis === 1 ? ' va' : ' van') + ' en $0' : ''));
+    // El bot\u00f3n no dice precios: cada categor\u00eda puede tener el suyo, y el vendedor
+    // los ve enseguida, en la lista de categor\u00edas, con el total ya calculado.
+    if (sub) sub.textContent = 'Se llevan ' + pr.boletos + ' y pagan ' + pr.pagan
+      + (gratis ? ' \u00b7 ' + gratis + (gratis === 1 ? ' va' : ' van') + ' en $0' : '');
   }
   const sw = $('#group-switch');
   if (sw && !GROUP_SIZE && !(CATALOG && CATALOG.ventas_cerradas)) {
@@ -571,13 +571,23 @@ function pctGrupo() {
    prometer\u00eda un cobro de m\u00e1s parado frente a cuatro personas. */
 function boletosCobrados() { return GROUP_PROMO ? GROUP_PROMO.pagan : GROUP_SIZE; }
 
-function precioGrupo(cents) {
-  // Una promoción con precio cerrado no es un porcentaje: ese total se reparte entre
-  // los que pagan, al peso, igual que lo congela el servidor.
-  if (GROUP_PROMO && GROUP_PROMO.precio_total_cents) {
-    return Math.max(0, Math.floor(Math.floor(
-      GROUP_PROMO.precio_total_cents / GROUP_PROMO.pagan) / 100) * 100);
+/* Lo que va a costar CADA boleto que se cobra, para ESTA categoría.
+   En una promoción el monto cerrado es por categoría: si la tiene, ese total se
+   reparte entre los que pagan —al peso, igual que lo congela el servidor—; si no,
+   se cobra el precio que esté corriendo hoy, que ya viene con la venta flash
+   aplicada desde el servidor. */
+function precioPorBoleto(t) {
+  if (GROUP_PROMO) {
+    const tot = Number((GROUP_PROMO.precios || {})[t.id] || 0);
+    if (tot > 0) {
+      return Math.max(0, Math.floor(Math.floor(tot / GROUP_PROMO.pagan) / 100) * 100);
+    }
+    return t.price_cents;
   }
+  return precioGrupo(t.price_cents);
+}
+
+function precioGrupo(cents) {
   const p = pctGrupo();
   if (!(p > 0) || !(cents > 0)) return cents;
   return Math.max(0, Math.floor(Math.floor(cents * (100 - p) / 100) / 100) * 100);
@@ -597,7 +607,7 @@ function renderGroupPriceBar() {
       `<div class="gt-h">${GROUP_PROMO ? `¿De qué tipo son los ${GROUP_SIZE} boletos?`
                           : `¿De qué tipo es el grupo de ${GROUP_SIZE}?`}</div>
        <div class="gt-list">${tipos.map(t => {
-         const final = precioGrupo(t.price_cents);
+         const final = precioPorBoleto(t);
          // con descuento de grupo el tachado es el precio de hoy de ese boleto; sin
          // él, el de antes de la flash
          const antes = final < t.price_cents ? t.price_cents
@@ -635,7 +645,7 @@ function renderGroupPriceBar() {
   // En el 3+1 se cobran TRES del mismo precio y el cuarto va en cero; el tachado es
   // lo que habr\u00edan pagado los cuatro por separado, que es de donde sale el regalo.
   const total = GROUP_PROMO
-    ? precioGrupo(GROUP_TYPE.price_cents) * GROUP_PROMO.pagan
+    ? precioPorBoleto(GROUP_TYPE) * GROUP_PROMO.pagan
     : usados.reduce((a, t) => a + precioGrupo(t.price_cents), 0);
   const sinDesc = GROUP_PROMO
     ? GROUP_TYPE.price_cents * GROUP_SIZE

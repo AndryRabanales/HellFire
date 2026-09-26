@@ -3219,47 +3219,68 @@ function montaPromos(cat, tipos, guarda) {
   // ---- ventanilla 1: por cantidad ----
   const on = $('#pc-on');
   if (on) {
-    const bol = $('#pc-boletos'), pag = $('#pc-pagan'), pre = $('#pc-precio'),
+    const bol = $('#pc-boletos'), pag = $('#pc-pagan'),
           nom = $('#pc-nombre'), caja = $('#pc-tipos'), cuenta = $('#pc-cuenta');
     on.checked = !!cat.promo_cant_on;
     bol.value = num(cat.promo_cant_boletos) || 4;
     pag.value = num(cat.promo_cant_pagan) || 3;
-    pre.value = num(cat.promo_cant_precio_cents) ? Math.round(num(cat.promo_cant_precio_cents) / 100) : '';
     nom.value = cat.promo_cant_nombre || '';
     const marcados = new Set(String(cat.promo_cant_tipos || '').split(',').filter(Boolean));
-    caja.innerHTML = elegibles.map(t =>
-      `<label class="muted row" style="gap:6px;flex:0 0 auto"><input type="checkbox" class="pc-t" value="${t.id}"${
-        marcados.has(String(t.id)) ? ' checked' : ''}>${esc(t.name)}</label>`).join('')
+    let montos = {};
+    try { montos = JSON.parse(cat.promo_cant_precios_json || '{}') || {}; } catch (e) { montos = {}; }
+    // Cada categor\u00eda con SU monto al lado: un 4x3 de General y uno de Ultra vip no
+    // pueden costar lo mismo, y con un solo campo arriba eso no se pod\u00eda decir.
+    caja.innerHTML = elegibles.map(t => `
+      <div class="row pc-fila" style="gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,120,40,.1)">
+        <label class="row" style="gap:7px;flex:1;min-width:0;cursor:pointer">
+          <input type="checkbox" class="pc-t" value="${t.id}"${marcados.has(String(t.id)) ? ' checked' : ''}>
+          <span style="min-width:0">
+            <span style="font:700 13px Manrope;color:var(--cream)">${esc(t.name)}</span>
+            <span class="muted" style="display:block;font-size:10px">hoy ${fmtMoney(t.current_price_cents / 100)} c/u</span>
+          </span></label>
+        <span class="muted">$</span>
+        <input class="input pc-m" data-id="${t.id}" type="number" min="0" max="200000" step="1"
+               placeholder="\u2014" style="width:96px;padding:8px;font-size:14px"
+               value="${montos[String(t.id)] ? Math.round(montos[String(t.id)] / 100) : ''}">
+      </div>`).join('')
       || '<span class="muted">No hay categor\u00edas que puedan ir en grupo.</span>';
     // La cuenta en voz alta, mientras teclea: es el n\u00famero que el vendedor va a
     // decirle al comprador, y hay que verlo ANTES de anunciar la promoci\u00f3n.
     const pinta = () => {
-      const n = num(bol.value), m = num(pag.value), t = num(pre.value) * 100;
+      const n = num(bol.value), m = num(pag.value);
       if (!(n >= 2) || !(m >= 1) || m > n) {
         cuenta.innerHTML = '<span style="color:var(--danger)">De ' + (n || '?') +
           ' boletos no pueden pagar ' + (m || '?') + '.</span>';
         return;
       }
       const gratis = n - m;
-      const cu = t ? Math.floor(Math.floor(t / m) / 100) * 100 : 0;
+      const conMonto = $$('.pc-m').filter(i => num(i.value) > 0);
       cuenta.innerHTML = 'Se llevan <b>' + n + '</b> y pagan <b>' + m + '</b>'
         + (gratis ? ' \u00b7 ' + gratis + (gratis === 1 ? ' boleto sale' : ' boletos salen') + ' en <b>$0</b>' : '')
-        + (t ? ' \u00b7 cada uno de los ' + m + ' paga <b>' + fmtMoney(cu / 100) + '</b>'
-             : ' \u00b7 los ' + m + ' pagan el precio de hoy de su categor\u00eda');
+        + (conMonto.length
+            ? ' \u00b7 ' + conMonto.map(i => {
+                const cu = Math.floor(Math.floor(num(i.value) * 100 / m) / 100) * 100;
+                const nom = (elegibles.find(t => String(t.id) === i.dataset.id) || {}).name || '';
+                return esc(nom) + ' a <b>' + fmtMoney(cu / 100) + '</b> c/u';
+              }).join(' \u00b7 ')
+            : ' \u00b7 pagan el precio de ese momento');
     };
     pinta();
     const guardaCant = () => {
       pinta();
+      const m = {};
+      $$('.pc-m').forEach(i => { const v = num(i.value); if (v > 0) m[i.dataset.id] = Math.round(v * 100); });
       guarda({
         promo_cant_boletos: num(bol.value), promo_cant_pagan: num(pag.value),
-        promo_cant_precio_cents: Math.round(num(pre.value) * 100),
         promo_cant_nombre: nom.value,
         promo_cant_tipos: $$('.pc-t').filter(c => c.checked).map(c => c.value).join(','),
+        promo_cant_precios_json: m,
       });
     };
-    [bol, pag, pre].forEach(e => { e.oninput = pinta; e.onchange = guardaCant; });
+    [bol, pag].forEach(e => { e.oninput = pinta; e.onchange = guardaCant; });
     nom.onchange = guardaCant;
     $$('.pc-t').forEach(c => { c.onchange = guardaCant; });
+    $$('.pc-m').forEach(i => { i.oninput = pinta; i.onchange = guardaCant; });
     on.onchange = async () => {
       await guarda({ promo_cant_activo: on.checked ? '1' : '0' });
       if (on.checked) { const o = $('#pp-on'); if (o) o.checked = false; }

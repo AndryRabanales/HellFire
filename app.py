@@ -471,8 +471,10 @@ DEFAULT_SETTINGS = {
     "promo_cant_nombre": "",          # vacío = se arma solo ("4x3")
     "promo_cant_boletos": "4",
     "promo_cant_pagan": "3",
-    "promo_cant_precio_cents": "0",   # 0 = sin precio cerrado
     "promo_cant_tipos": "",           # ids separados por coma; vacío = todas
+    # monto cerrado POR CATEGORÍA: {"<type_id>": centavos}. La que no tenga monto
+    # cobra el precio que esté corriendo ese día (fase, flash o promoción de precio).
+    "promo_cant_precios_json": "{}",
     # 2) POR PRECIO: le pone precio nuevo a las categorías que se elijan. Es una
     #    venta flash con nombre, imagen y PRIORIDAD: si la flash dice 200 y la promo
     #    dice 150, se cobra 150.
@@ -638,10 +640,23 @@ def promo_cantidad(db):
     m = _ent("promo_cant_pagan")
     if n < 2 or m < 1 or m > n:
         return None
-    total = max(0, (_ent("promo_cant_precio_cents") // 100) * 100)
     tipos = [t for t in (setting(db, "promo_cant_tipos") or "").split(",") if t.strip()]
+    # El monto cerrado es POR CATEGORÍA: un 4x3 de General y uno de Ultra vip no
+    # pueden costar lo mismo. La categoría sin monto cobra el precio de ese día.
+    try:
+        crudo = json.loads(setting(db, "promo_cant_precios_json") or "{}") or {}
+    except (TypeError, ValueError):
+        crudo = {}
+    precios = {}
+    for k, v in crudo.items():
+        try:
+            c = max(0, (int(v) // 100) * 100)
+        except (TypeError, ValueError):
+            continue
+        if c > 0:
+            precios[str(k)] = c
     nombre = (setting(db, "promo_cant_nombre") or "").strip() or f"{n}x{m}"
-    return {"boletos": n, "pagan": m, "precio_total": total,
+    return {"boletos": n, "pagan": m, "precios": precios,
             "tipos": tipos, "nombre": nombre}
 
 
@@ -1630,7 +1645,7 @@ def precios_publicos():
     if _pc:
         promo = {"tipo": "cantidad", "nombre": _pc["nombre"],
                  "boletos": _pc["boletos"], "pagan": _pc["pagan"],
-                 "precio_total": money(_pc["precio_total"]) if _pc["precio_total"] else None,
+                 "precios": {k: money(v) for k, v in _pc["precios"].items()} or None,
                  "categorias": [int(x) for x in _pc["tipos"]] or None,
                  "imagen": "/flyer?v=promocant" if setting(db, "flyer_data_promocant") else None}
     elif setting(db, "promo_precio_activo") == "1":
@@ -1860,7 +1875,7 @@ def estado_venta():
                        setting(db, "promo_cant_activo") or "0",
                        setting(db, "promo_cant_boletos") or "",
                        setting(db, "promo_cant_pagan") or "",
-                       setting(db, "promo_cant_precio_cents") or "0",
+                       setting(db, "promo_cant_precios_json") or "",
                        setting(db, "promo_cant_tipos") or "",
                        setting(db, "promo_cant_nombre") or "",
                        setting(db, "promo_precio_activo") or "0",
@@ -1934,7 +1949,7 @@ def catalog():
                  and (t["libres"] is None or t["libres"] >= _pc["boletos"])]
         if _eleg:
             _promo = {"nombre": _pc["nombre"], "boletos": _pc["boletos"],
-                      "pagan": _pc["pagan"], "precio_total_cents": _pc["precio_total"],
+                      "pagan": _pc["pagan"], "precios": _pc["precios"],
                       "tipos": [t["id"] for t in _eleg]}
 
     # ¿le falta el tutorial? Va aquí y no solo en la respuesta del login: si el
@@ -1985,7 +2000,7 @@ def catalog():
                    promo_cant_boletos=setting(db, "promo_cant_boletos"),
                    promo_cant_pagan=setting(db, "promo_cant_pagan"),
                    promo_cant_nombre=setting(db, "promo_cant_nombre"),
-                   promo_cant_precio_cents=setting(db, "promo_cant_precio_cents"),
+                   promo_cant_precios_json=setting(db, "promo_cant_precios_json"),
                    promo_cant_tipos=setting(db, "promo_cant_tipos"),
                    promo_precio_on=setting(db, "promo_precio_activo") == "1",
                    promo_precio_nombre=setting(db, "promo_precio_nombre"),
@@ -2266,9 +2281,10 @@ def create_group():
                 # salvo que la promoción traiga su propio total cerrado: entonces ese
                 # total se reparte entre los que pagan, al peso. Los que NO pagan se
                 # arman abajo, fuera de la caché, con el mismo tipo y en CERO.
-                if p["precio_total"] > 0:
+                cerrado = p["precios"].get(str(fila["id"]), 0)
+                if cerrado > 0:
                     individual = precio
-                    precio = max(0, (p["precio_total"] // p["pagan"] // 100) * 100)
+                    precio = max(0, (cerrado // p["pagan"] // 100) * 100)
                     fase = p["nombre"]
                     normal = individual if individual > precio else None
             else:
@@ -5393,16 +5409,6 @@ def save_settings():
         set_setting(db, "promo_cant_boletos", str(n))
         set_setting(db, "promo_cant_pagan", str(m))
         changed.append(f"promoción de {n} boletos donde pagan {m}")
-    if "promo_cant_precio_cents" in b:
-        try:
-            pv = int(float(b["promo_cant_precio_cents"] or 0))
-        except (TypeError, ValueError):
-            return jsonify(error="El precio de la promoción debe ser un número"), 400
-        if pv < 0 or pv > 2000000:
-            return jsonify(error="El precio de la promoción debe estar entre $0 y $20,000"), 400
-        set_setting(db, "promo_cant_precio_cents", str(pv))
-        changed.append("precio cerrado de la promoción en "
-                       + (f"${pv/100:,.0f}" if pv else "ninguno"))
     if "promo_cant_nombre" in b:
         set_setting(db, "promo_cant_nombre", str(b["promo_cant_nombre"] or "").strip()[:40])
     if "promo_precio_nombre" in b:
@@ -5426,31 +5432,35 @@ def save_settings():
                 buenos.append(str(int(x)))
             set_setting(db, clave, ",".join(buenos))
             changed.append("categorías de la promoción")
-    if "promo_precio_json" in b:
-        crudo = b["promo_precio_json"]
+    for clave, etq, tope in (("promo_precio_json", "promoción de precio", 2000000),
+                             ("promo_cant_precios_json", "montos de la promoción", 20000000)):
+        if clave not in b:
+            continue
+        crudo = b[clave]
         if isinstance(crudo, str):
             try:
                 crudo = json.loads(crudo or "{}")
             except (TypeError, ValueError):
-                return jsonify(error="No se entendieron los precios de la promoción"), 400
+                return jsonify(error=f"No se entendieron los {etq}"), 400
         if not isinstance(crudo, dict):
-            return jsonify(error="No se entendieron los precios de la promoción"), 400
+            return jsonify(error=f"No se entendieron los {etq}"), 400
         limpio = {}
         for k, v in crudo.items():
             try:
                 tid, cents = int(k), int(float(v or 0))
             except (TypeError, ValueError):
-                return jsonify(error="Los precios de la promoción deben ser números"), 400
+                return jsonify(error=f"Los {etq} deben ser números"), 400
             if cents <= 0:
-                continue          # vacío = esa categoría no entra en la promoción
-            if cents > 2000000:
-                return jsonify(error="Un precio de la promoción se pasa de $20,000"), 400
+                continue          # vacío = esa categoría cobra lo de siempre
+            if cents > tope:
+                return jsonify(error=f"Un monto de la promoción se pasa de "
+                                     f"${tope/100:,.0f}"), 400
             if not db.execute("SELECT 1 FROM ticket_types WHERE id=? AND active=1",
                               (tid,)).fetchone():
                 return jsonify(error="Una de las categorías no existe o está desactivada"), 400
             limpio[str(tid)] = cents
-        set_setting(db, "promo_precio_json", json.dumps(limpio))
-        changed.append(f"precios de promoción en {len(limpio)} categoría(s)")
+        set_setting(db, clave, json.dumps(limpio))
+        changed.append(f"{etq} en {len(limpio)} categoría(s)")
 
     # posición/zoom de cada flyer (reposicionar sin volver a subir la imagen)
     for v in FLYER_VARIANTS:
