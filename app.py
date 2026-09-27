@@ -2038,6 +2038,32 @@ def catalog():
                       "pagan": _pc["pagan"], "precios": _pc["precios"],
                       "tipos": [t["id"] for t in _eleg]}
 
+    # La CONFIGURACIÓN de las promociones es del organizador, no del vendedor. Él
+    # solo necesita saber qué promoción está corriendo y a cuánto (eso va en `promo`,
+    # arriba). Lo demás —los interruptores, los precios de una promoción todavía
+    # apagada, en qué categorías la piensa poner— viajaba a todos los teléfonos y se
+    # leía abriendo la consola del navegador: el vendedor veía los planes antes de
+    # que existieran. Ahora solo sale para quien entra al panel.
+    _ajustes_promo = {}
+    if s.get("role") == "admin":
+        _ajustes_promo = {
+            "promo_cant_on": setting(db, "promo_cant_activo") == "1",
+            "promo_cant_boletos": setting(db, "promo_cant_boletos"),
+            "promo_cant_pagan": setting(db, "promo_cant_pagan"),
+            "promo_cant_nombre": setting(db, "promo_cant_nombre"),
+            "promo_cant_precios_json": setting(db, "promo_cant_precios_json"),
+            "promo_cant_tipos": setting(db, "promo_cant_tipos"),
+            "promo_precio_on": setting(db, "promo_precio_activo") == "1",
+            "promo_precio_nombre": setting(db, "promo_precio_nombre"),
+            "promo_precio_json": setting(db, "promo_precio_json"),
+            # si ya hay imagen subida para cada ventanilla. Se pregunta por el dato
+            # exacto y no por flyer_info, que cae al flyer viejo del evento y
+            # enseñaría una imagen que nadie subió para esta promoción
+            "promo_cant_img": bool(setting(db, "flyer_data_promocant")),
+            "promo_precio_img": bool(setting(db, "flyer_data_promoprecio")),
+            "flash_img": bool(setting(db, "flyer_data_ventaflash")),
+        }
+
     # ¿le falta el tutorial? Va aquí y no solo en la respuesta del login: si el
     # vendedor recarga la página a media guía, con la sesión ya guardada no vuelve a
     # pasar por el login y se quedaría sin verla nunca.
@@ -2079,24 +2105,7 @@ def catalog():
                    # haberle prometido el precio a dos personas.
                    # la promoción por cantidad lista para pintar, o null
                    promo=_promo,
-                   # los interruptores tal como están guardados: el panel del
-                   # organizador tiene que enseñar lo que ÉL prendió, no si hoy
-                   # alcanza el cupo
-                   promo_cant_on=setting(db, "promo_cant_activo") == "1",
-                   promo_cant_boletos=setting(db, "promo_cant_boletos"),
-                   promo_cant_pagan=setting(db, "promo_cant_pagan"),
-                   promo_cant_nombre=setting(db, "promo_cant_nombre"),
-                   promo_cant_precios_json=setting(db, "promo_cant_precios_json"),
-                   promo_cant_tipos=setting(db, "promo_cant_tipos"),
-                   promo_precio_on=setting(db, "promo_precio_activo") == "1",
-                   promo_precio_nombre=setting(db, "promo_precio_nombre"),
-                   promo_precio_json=setting(db, "promo_precio_json"),
-                   # si ya hay imagen subida para cada ventanilla. Se pregunta por el
-                   # dato exacto y no por flyer_info, que cae al flyer viejo del
-                   # evento y enseñaría una imagen que nadie subió para esta promo
-                   promo_cant_img=bool(setting(db, "flyer_data_promocant")),
-                   promo_precio_img=bool(setting(db, "flyer_data_promoprecio")),
-                   flash_img=bool(setting(db, "flyer_data_ventaflash")),
+                   **_ajustes_promo,
                    mi_descuento=_mi_descuento(s),
                    mi_boletos=mi_boletos,
                    mi_vendido=money(mi_vendido), mi_en_grupo=mi_en_grupo,
