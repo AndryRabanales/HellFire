@@ -494,7 +494,22 @@
 
   <!-- ===== Ajustes ===== -->
   <section id="tab-ajustes" class="mt16 hidden" style="max-width:760px">
-    <button class="card st-abrir" id="btn-st-abrir" type="button">
+    <details class="card vent" id="vent-seguridad">
+      <summary class="vent-t">Seguridad de tu cuenta</summary>
+      <div class="vent-bloque">
+        <div class="label" style="font-size:11px">Cambiar tu contraseña</div>
+        <div class="muted" style="font-size:11px;margin-bottom:8px">Al cambiarla se cierran <b>todas</b> las sesiones abiertas de tu cuenta —incluida la de este teléfono, que vuelve a entrar sola—. Si alguien te vio la clave o te quedó la sesión abierta en otro lado, esto lo saca.</div>
+        <input class="input" id="sg-actual" type="password" autocomplete="current-password" placeholder="Tu contraseña de ahora" style="padding:11px">
+        <input class="input mt8" id="sg-nueva" type="password" autocomplete="new-password" placeholder="La nueva (mín. 10 caracteres)" style="padding:11px">
+        <input class="input mt8" id="sg-nueva2" type="password" autocomplete="new-password" placeholder="Escríbela otra vez" style="padding:11px">
+        <button class="btn sm mt12" id="btn-sg-pass" style="width:auto">Cambiar contraseña</button>
+        <div class="err mt8" id="sg-err"></div>
+        <div class="label mt16" style="font-size:11px">Cerrar todas las sesiones</div>
+        <div class="muted" style="font-size:11px;margin-bottom:8px">Saca a <b>todos</b> —vendedores, colíderes y la puerta— de las sesiones que tengan abiertas. Cada quien vuelve a entrar con su código o su clave, que siguen siendo los mismos. Es para el teléfono perdido o prestado.</div>
+        <button class="btn sm ghost" id="btn-sg-sesiones" style="width:auto">Cerrar todas las sesiones</button>
+      </div>
+    </details>
+    <button class="card st-abrir mt12" id="btn-st-abrir" type="button">
       <span>
         <span class="label" style="margin:0">Evento</span>
         <span class="muted" style="display:block;font-size:11px;margin-top:3px">Nombre, subtítulo, comisión general y folio inicial</span>

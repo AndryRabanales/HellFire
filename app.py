@@ -50,6 +50,19 @@ def revalidate_assets(resp):
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
+    # Tres candados del navegador que no cuestan nada y cierran tres puertas:
+    #   · nosniff  — que no adivine que un archivo subido es otra cosa y lo ejecute.
+    #   · frame    — que nadie meta el panel dentro de OTRA página para que el
+    #                organizador toque botones creyendo que toca los de esa página.
+    #   · referrer — que al salir a otro sitio no se lleve en el encabezado la
+    #                dirección exacta del panel.
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "no-referrer")
+    # HSTS solo cuando ya venimos por https (Railway lo termina y lo dice en este
+    # encabezado): en local, sin certificado, obligaría a https y no abriría nada.
+    if request.headers.get("X-Forwarded-Proto", "").lower() == "https":
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=15552000")
     return resp
 
 # ---------------------------------------------------------------- utilidades
@@ -1464,9 +1477,18 @@ def create_session(db, role, user_id):
 def client_ip():
     """La IP real del cliente. Detrás del proxy de Railway, remote_addr es la IP del
     PROXY —la misma para todo el mundo—, así que usarla para el candado de intentos
-    convertía 8 códigos mal tecleados por cualquiera en un bloqueo para todos."""
-    return (request.headers.get("X-Forwarded-For", request.remote_addr or "?")
-            .split(",")[0].strip())
+    convertía 8 códigos mal tecleados por cualquiera en un bloqueo para todos.
+
+    Se lee la ÚLTIMA dirección de X-Forwarded-For, no la primera. Cada proxy AÑADE
+    al final la dirección desde la que le llegó la petición, así que la última es la
+    que escribió nuestro proxy y nadie más puede falsificar. Tomar la primera era
+    tomar la que manda el cliente: bastaba con cambiarla en cada intento para que el
+    candado no contara nunca. Con eso, un código de cinco dígitos se adivina
+    probando; está comprobado que 60 intentos seguidos no bloqueaban ninguno."""
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff.strip():
+        return xff.split(",")[-1].strip()
+    return request.remote_addr or "?"
 
 def grupo_congelado(db, seller):
     """¿El colíder de este vendedor está desactivado?
@@ -1554,6 +1576,30 @@ def mi_ambito(s):
     sistema (admin). Un número = solo lo de ese colíder."""
     return s["admin"]["id"] if es_colider(s) else None
 
+# El candado por identidad es más flojo a propósito: nadie teclea mal su propio
+# código veinte veces, pero el que rocía un código desde cien direcciones sí. Si
+# fuera tan estricto como el de IP, un dedazo repetido dejaría al vendedor fuera.
+INTENTOS_POR_IDENTIDAD = 20
+
+
+def rate_limited_id(db, ident):
+    """El segundo cerrojo: cuenta los intentos contra el MISMO código o usuario,
+    vengan de donde vengan.
+
+    El de IP solo no alcanza. Quien tenga cien direcciones —o quien vuelva a
+    encontrar la forma de falsear la suya— tiene ocho intentos por cada una; este
+    cuenta los del objetivo, y por eso no se puede repartir."""
+    if not ident:
+        return 0
+    window = int(setting(db, "lockout_minutes")) * 60
+    cutoff = time.time() - window
+    r = db.execute("SELECT COUNT(*) c, COALESCE(MAX(ts),0) ult FROM login_attempts "
+                   "WHERE key=? AND ts>=?", ("id:" + ident, cutoff)).fetchone()
+    if r["c"] < INTENTOS_POR_IDENTIDAD:
+        return 0
+    return max(1, int(r["ult"] + window - time.time()))
+
+
 def rate_limited(db, key):
     """¿Está bloqueado por intentos fallidos? Devuelve los SEGUNDOS que faltan (0 si
     puede pasar).
@@ -1577,6 +1623,21 @@ def aviso_bloqueo(seg):
     if seg > 90:
         return f"Demasiados intentos. Espera {round(seg / 60)} minutos y vuelve a intentar."
     return f"Demasiados intentos. Espera {seg} segundos y vuelve a intentar." 
+
+def _avisar_aporreo(db, username):
+    """Deja una línea en Movimientos cuando alguien está probando contraseñas contra
+    una cuenta del panel. Se apunta UNA vez por tanda —cada 20 fallos— para que el
+    aviso se lea y no se vuelva ruido de cien renglones iguales."""
+    ident = "id:user:" + (username or "?").lower()[:40]
+    record_attempt(db, ident)
+    window = int(setting(db, "lockout_minutes")) * 60
+    n = db.execute("SELECT COUNT(*) c FROM login_attempts WHERE key=? AND ts>=?",
+                   (ident, time.time() - window)).fetchone()["c"]
+    if n and n % INTENTOS_POR_IDENTIDAD == 0:
+        audit(db, "sistema", "seguridad",
+              f"{n} intentos fallidos contra la cuenta «{username}» en "
+              f"{window // 60} minutos. Si no fuiste tú, cambia la contraseña.")
+
 
 def record_attempt(db, key):
     db.execute("INSERT INTO login_attempts(key, ts) VALUES(?,?)", (key, time.time()))
@@ -1694,7 +1755,8 @@ def login_code():
     db = get_db()
     ip = client_ip()
     key = f"code:{ip}"
-    espera = rate_limited(db, key)
+    _code_crudo = str((request.json or {}).get("code", "")).strip()[:12]
+    espera = rate_limited(db, key) or rate_limited_id(db, "code:" + _code_crudo)
     if espera:
         return jsonify(error=aviso_bloqueo(espera), espera=espera), 429
     # RF-28: mensaje genérico. El código de invitados usa ESTE MISMO texto en su
@@ -1704,12 +1766,12 @@ def login_code():
     # 4 a 6 dígitos: los códigos nuevos son de 5; el de invitados (variable de
     # entorno) puede ser de 4 a 6 y no hay por qué delatarlo rechazándolo
     if not re.fullmatch(r"\d{4,6}", code):
-        record_attempt(db, key); db.commit()
+        record_attempt(db, key); record_attempt(db, "id:code:" + _code_crudo); db.commit()
         return jsonify(error=BAD), 401
     seller = db.execute(
         "SELECT * FROM sellers WHERE code=? AND active=1 AND deleted=0", (code,)).fetchone()
     if not seller:
-        record_attempt(db, key); db.commit()
+        record_attempt(db, key); record_attempt(db, "id:code:" + _code_crudo); db.commit()
         return jsonify(error=BAD), 401
     if grupo_congelado(db, seller):
         # Su código es bueno; el que está apagado es su grupo. No se le acusa de
@@ -1722,6 +1784,7 @@ def login_code():
     # pueden anular uno por uno — el problema se ve y se corrige, así que la molestia de
     # teclearlo dos veces cada vez ya no compra nada.
     clear_attempts(db, key)
+    clear_attempts(db, "id:code:" + _code_crudo)
     token = create_session(db, "seller", seller["id"])
     # Se marca cada entrada. Sirve para lo que no se puede saber de otro modo: quién
     # de verdad está trabajando y quién nada más quería el boleto. Sin vender no se
@@ -1751,7 +1814,14 @@ def admin_login():
     admin = db.execute("SELECT * FROM admins WHERE LOWER(username)=LOWER(?)",
                        (username,)).fetchone()
     if not admin or not check_password(str(body.get("password", "")), admin["pass_hash"]):
-        record_attempt(db, key); db.commit()
+        record_attempt(db, key)
+        # A la cuenta del organizador NO se le pone candado por nombre: cualquiera
+        # que sepa su usuario la dejaría fuera de su propio panel la noche del
+        # evento, y eso es peor que el ataque. En vez de cerrarle la puerta, se le
+        # AVISA: un aporreo contra su usuario aparece en Movimientos, donde ella lo
+        # puede ver y cambiar la contraseña.
+        _avisar_aporreo(db, username)
+        db.commit()
         return jsonify(error="Usuario o contraseña incorrectos"), 401
     if not admin["active"]:
         # Se le dice claro: la clave está bien, la cuenta está apagada. Si dijera
@@ -2449,17 +2519,19 @@ def scan_login():
     genera el día del evento. Con el mismo candado de intentos que los demás logins."""
     db = get_db()
     ip = client_ip()
-    espera = rate_limited(db, "door:" + ip)
+    codigo = str((request.json or {}).get("code", "")).strip()[:12]
+    espera = rate_limited(db, "door:" + ip) or rate_limited_id(db, "door:" + codigo)
     if espera:
         return jsonify(error=aviso_bloqueo(espera), espera=espera), 429
-    codigo = str((request.json or {}).get("code", "")).strip()
     fila = db.execute("SELECT * FROM door_keys WHERE code=? AND active=1",
                       (codigo,)).fetchone() if codigo else None
     if not fila:
-        db.execute("INSERT INTO login_attempts(key, ts) VALUES(?,?)", ("door:" + ip, time.time()))
+        record_attempt(db, "door:" + ip)
+        record_attempt(db, "id:door:" + codigo)
         db.commit()
         return jsonify(error="Clave incorrecta"), 401
     clear_attempts(db, "door:" + ip)
+    clear_attempts(db, "id:door:" + codigo)
     token = create_session(db, "scanner", fila["id"])
     db.execute("UPDATE door_keys SET last_used=? WHERE id=?", (now_iso(), fila["id"]))
     db.commit()
@@ -4632,6 +4704,69 @@ def list_admins():
                    AND v.deleted=0 AND v.hidden=0 AND v.es_lider=0) AS vendedores
               FROM admins a ORDER BY a.id""").fetchall()
     return jsonify(admins=[dict(r) for r in rows], me=s["admin"]["id"])
+
+@app.post("/api/admin/password")
+def cambiar_password():
+    """Cambiar la propia contraseña, sin entrar a Railway.
+
+    Hasta ahora no existía: la contraseña se escribía al crear la cuenta y ya. Si se
+    filtraba —una captura, un teléfono prestado, alguien mirando por encima— no
+    había forma de rotarla desde el panel, que es justo cuando hace falta y rápido.
+
+    Al cambiarla se cierran TODAS las sesiones de esa cuenta, incluida la que la está
+    cambiando, y se devuelve una nueva. Si no se cerraran, el que se robó la sesión
+    seguiría adentro con la contraseña vieja: cambiarla no habría servido de nada."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    b = request.json or {}
+    actual, nueva = str(b.get("actual", "")), str(b.get("nueva", ""))
+    db = get_db()
+    fila = db.execute("SELECT * FROM admins WHERE id=?", (s["admin"]["id"],)).fetchone()
+    if not fila or not check_password(actual, fila["pass_hash"]):
+        # cuenta como intento fallido: si no, esto sería una ventana para adivinar la
+        # contraseña sin candado, con una sesión robada en la mano
+        record_attempt(db, "admin:" + client_ip())
+        db.commit()
+        return jsonify(error="Tu contraseña actual no es esa"), 403
+    if len(nueva) < 10:
+        return jsonify(error="La contraseña nueva necesita al menos 10 caracteres"), 400
+    if nueva == actual:
+        return jsonify(error="Esa es la que ya tenías"), 400
+    db.execute("UPDATE admins SET pass_hash=? WHERE id=?",
+               (hash_password(nueva), fila["id"]))
+    db.execute("DELETE FROM sessions WHERE role='admin' AND user_id=?", (fila["id"],))
+    audit(db, fila["username"], "seguridad",
+          "Cambió su contraseña y cerró todas sus sesiones")
+    # La sesión nueva se crea ANTES de guardar: create_session solo inserta, no
+    # confirma, así que hecha después del commit se perdía y el panel se quedaba con
+    # un token que ya no existía —cambiabas la contraseña y te echaba—.
+    nuevo = create_session(db, "admin", fila["id"])
+    db.commit()
+    return jsonify(ok=True, token=nuevo)
+
+
+@app.post("/api/admin/sesiones/cerrar")
+def cerrar_sesiones():
+    """Cierra todas las sesiones abiertas del panel, menos la de quien lo pide.
+
+    Para el teléfono que se perdió o el que se prestó y quedó con la sesión abierta.
+    Solo el admin principal: cerrar la sesión de los colíderes a media venta es
+    decisión del dueño del evento, no de un invitado."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    if not es_admin_principal(s["admin"]):
+        return jsonify(error="Solo el administrador principal puede cerrar todas las sesiones"), 403
+    db = get_db()
+    tok = (request.headers.get("Authorization", "")[7:] or "").strip()
+    n = db.execute("SELECT COUNT(*) c FROM sessions WHERE token!=?", (tok,)).fetchone()["c"]
+    db.execute("DELETE FROM sessions WHERE token!=?", (tok,))
+    audit(db, s["admin"]["username"], "seguridad",
+          f"Cerró {n} sesión(es) abiertas: todos vuelven a entrar con su código o su clave")
+    db.commit()
+    return jsonify(ok=True, cerradas=n)
+
 
 @app.post("/api/admin/admins")
 def create_admin():

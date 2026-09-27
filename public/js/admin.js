@@ -3720,6 +3720,42 @@ $('#btn-co-create').addEventListener('click', async () => {
   } catch (e) { if (!guard(e)) $('#co-err').textContent = e.message; }
 });
 
+/* ---------------- seguridad de la cuenta ---------------- */
+// Cambiar la contraseña cierra TODAS las sesiones de esa cuenta: si no, el que se
+// robó la sesión seguiría adentro y cambiarla no habría servido de nada. La de este
+// teléfono se repone sola con el token que devuelve el servidor.
+const _sgPass = $('#btn-sg-pass');
+if (_sgPass) _sgPass.addEventListener('click', async () => {
+  const err = $('#sg-err'); err.textContent = '';
+  const actual = $('#sg-actual').value, nueva = $('#sg-nueva').value, otra = $('#sg-nueva2').value;
+  if (nueva !== otra) { err.textContent = 'Las dos contraseñas nuevas no son iguales'; return; }
+  if (nueva.length < 10) { err.textContent = 'La nueva necesita al menos 10 caracteres'; return; }
+  _sgPass.disabled = true;
+  try {
+    const r = await API.post('/api/admin/password', { actual, nueva });
+    API.setToken(r.token);
+    ['#sg-actual', '#sg-nueva', '#sg-nueva2'].forEach(s => { $(s).value = ''; });
+    toast('Contraseña cambiada ✓ · las demás sesiones se cerraron');
+  } catch (e) { if (!guard(e)) err.textContent = e.message; }
+  finally { _sgPass.disabled = false; }
+});
+
+const _sgSes = $('#btn-sg-sesiones');
+if (_sgSes) _sgSes.addEventListener('click', async () => {
+  const ok = await confirmModal({
+    title: 'Cerrar todas las sesiones', danger: true, okLabel: 'Cerrar todas',
+    body: `Todos los que tengan el panel o el escáner abierto quedan fuera y tienen
+      que volver a entrar con <b style="color:var(--cream)">su mismo código</b>.
+      <br><br>Los códigos y las claves NO cambian: esto solo cierra lo que está
+      abierto ahora. Tu sesión de este teléfono se queda.`,
+  });
+  if (!ok) return;
+  try {
+    const r = await API.post('/api/admin/sesiones/cerrar', {});
+    toast(r.cerradas ? `${r.cerradas} sesión(es) cerradas ✓` : 'No había ninguna otra sesión abierta');
+  } catch (e) { if (!guard(e)) toast(e.message); }
+});
+
 /* ---------------- ajustes: un flyer por tipo de boleto ---------------- */
 const FLYER_META = {
   uady: { label: 'Flyer UADY',
