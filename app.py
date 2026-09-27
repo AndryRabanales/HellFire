@@ -1834,6 +1834,12 @@ def admin_login():
     # se apunta la entrada: es la única forma de saber si un colíder ya está usando
     # su cuenta o si el usuario y la contraseña siguen en un papel sin abrir
     db.execute("UPDATE admins SET last_login=? WHERE id=?", (now_iso(), admin["id"]))
+    # Y queda escrita en Movimientos, con la dirección desde donde entró. Faltaba, y
+    # es justo lo que se necesita cuando alguien pregunta "¿quién entró a mi panel?":
+    # sin esto, una cuenta prestada o adivinada no dejaba ningún rastro de la ENTRADA
+    # —solo de lo que hizo después—, y no había forma de saber desde dónde ni cuándo.
+    audit(db, admin["username"], "acceso",
+          f"Entró al panel desde {client_ip()}")
     db.commit()
     return jsonify(token=token, username=admin["username"])
 
@@ -2489,6 +2495,12 @@ def get_ticket(tid):
         return jsonify(error="no existe"), 404
     if s["role"] == "seller" and t["seller_id"] != s["seller"]["id"]:
         return jsonify(error="no existe"), 404   # RF-74: nunca boletos de otro
+    # La clave de la puerta sirve para ESCANEAR, no para leer el padrón. Los números
+    # de boleto son consecutivos, así que sin este candado quien tuviera la clave del
+    # día podía ir pidiendo 1, 2, 3… y llevarse nombres, precios y vendedores de todo
+    # el evento desde su teléfono.
+    if s["role"] == "scanner":
+        return jsonify(error="no existe"), 404
     # para un admin, los boletos de invitado no existen (los ids son consecutivos,
     # así que sin esto bastaría con irlos probando uno por uno para verlos)
     if s["role"] == "admin" and ticket_is_guest(db, t):
