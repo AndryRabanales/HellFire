@@ -1062,13 +1062,23 @@ def init_db():
     env_pass = os.environ.get("ADMIN_PASSWORD") or ""
     use_env = bool(env_user and env_pass)
     init_user = env_user if use_env else "admin"
-    init_pass = env_pass if use_env else "onfire2026"
+    # Sin ADMIN_PASSWORD ya NO hay contraseña de fábrica: se sortea una y se imprime
+    # una sola vez en el arranque. La de antes estaba escrita aquí, en el código, y
+    # este código es público: cualquiera que leyera esta línea sabía con qué entrar
+    # a una instalación que no hubiera definido su variable. Una contraseña escrita
+    # en un archivo que se publica no es una contraseña.
+    init_pass = env_pass if use_env else secrets.token_urlsafe(12)
 
     n_admins = db.execute("SELECT COUNT(*) AS c FROM admins").fetchone()["c"]
     if n_admins == 0:
         # primera vez: crear admin inicial + catálogo + 4 vendedores
         db.execute("INSERT INTO admins(username, pass_hash, created_at) VALUES(?,?,?)",
                    (init_user, hash_password(init_pass), now_iso()))
+        if not use_env:
+            print("\n" + "=" * 62)
+            print(f"[OnFire] Admin '{init_user}' · contraseña: {init_pass}")
+            print("[OnFire] Apúntala: no se vuelve a mostrar y no está en el código.")
+            print("=" * 62 + "\n", flush=True)
         # 3 precios (UADY, Externo, VIP) en 2 tipos: UADY/Externo son "General" (no VIP);
         # UADY pide facultad, Externo y VIP no. Arrancan en $0: el admin los define
         # en Catálogos antes de iniciar (no se puede vender con precio en 0).

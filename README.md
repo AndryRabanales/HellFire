@@ -59,7 +59,7 @@ pero si quieres protegerlo con un enlace secreto, se puede agregar.
 Al primer arranque se crean el administrador inicial y 4 vendedores con sus códigos.
 Todo queda escrito en **`data/CREDENCIALES_INICIALES.txt`**.
 
-- Admin inicial: `admin` / `onfire2026` (créate otro admin con contraseña propia y borra este).
+- Admin inicial: `admin` con una contraseña **sorteada al arrancar**, que se imprime UNA vez en los registros del servidor (créate otro admin con contraseña propia y borra este).
 - Los nombres "Vendedor 1..4" se editan en Administración → Vendedores.
 
 ## Todo queda en Excel
@@ -94,7 +94,7 @@ el **admin inicial con TUS credenciales** (`ADMIN_USER` / `ADMIN_PASSWORD`) y 4
 vendedores con códigos nuevos (se ven en los logs y en el panel Admin → Vendedores).
 
 - Si NO defines `ADMIN_USER`/`ADMIN_PASSWORD`, se crea uno por defecto
-  `admin` / `onfire2026` (solo conveniente en local; cámbialo en producción).
+  `admin` con una contraseña **sorteada al arrancar**, que se imprime UNA vez en los registros del servidor (solo conveniente en local; cámbialo en producción).
 - `ADMIN_USER` acepta un **correo** como nombre de usuario.
 - Puedes agregar esas variables incluso después del primer despliegue: en el
   siguiente reinicio, la app crea ese administrador sin borrar nada.
