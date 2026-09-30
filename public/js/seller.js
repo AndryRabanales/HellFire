@@ -136,16 +136,25 @@ function aplicarPromos() {
   // lo prende. Si no se dijera en el botón, el vendedor ofrecería el precio de
   // ayer.
   const pct10 = CATALOG.grupo10_desc ? Number(CATALOG.grupo10_pct || 0) : 0;
+  const bot10 = !!CATALOG.grupo10_botella;
   const l10 = $('#g10-largo'), c10 = $('#g10-corto');
-  if (l10) l10.textContent = pct10 > 0
+  if (l10) l10.textContent = bot10 && pct10 > 0
     ? ('Botella gratis + ' + pct10 + '% menos para los diez')
-    : 'El representante se lleva botella gratis';
-  if (c10) c10.textContent = pct10 > 0 ? ('Botella + ' + pct10 + '%') : 'Botella gratis';
+    : bot10 ? 'El representante se lleva botella gratis'
+    : pct10 > 0 ? ('Los diez pagan ' + pct10 + '% menos') : 'Los diez juntos';
+  if (c10) c10.textContent = bot10 && pct10 > 0 ? ('Botella + ' + pct10 + '%')
+    : bot10 ? 'Botella gratis' : pct10 > 0 ? (pct10 + '% menos') : 'Grupo';
+  // El de 5 ya puede llevar botella, descuento, o las dos cosas: el botón dice lo
+  // que de verdad está prendido, porque es lo que el vendedor va a prometer.
   const pct5 = Number(CATALOG.grupo5_pct || 0);
-  const texto5 = pct5 > 0 ? (pct5 + '% menos') : 'precio de grupo';
+  const bot5 = !!CATALOG.grupo5_botella;
   const sub = $('#g5-sub'), corto = $('#g5-corto');
-  if (sub) sub.textContent = texto5;
-  if (corto) corto.textContent = pct5 > 0 ? texto5 : 'Precio de grupo';
+  const largo5 = bot5 && pct5 > 0 ? 'botella gratis + ' + pct5 + '% menos'
+    : bot5 ? 'y uno se lleva botella gratis'
+    : pct5 > 0 ? pct5 + '% menos' : 'precio de grupo';
+  if (sub) sub.textContent = largo5;
+  if (corto) corto.textContent = bot5 && pct5 > 0 ? 'Botella + ' + pct5 + '%'
+    : bot5 ? 'Botella gratis' : pct5 > 0 ? pct5 + '% menos' : 'Precio de grupo';
   // Con los dos abiertos se ponen lado a lado y se acortan los textos; con uno
   // solo, ese botón se queda con el ancho entero y el renglón largo de siempre.
   const caja = $('#group-row');
@@ -569,6 +578,17 @@ function pctGrupo() {
 /* Cu\u00e1ntos de los boletos del grupo SE COBRAN. En el 3+1 son tres de cuatro: el
    total tiene que salir de aqu\u00ed y no del n\u00famero de integrantes, o la barra
    prometer\u00eda un cobro de m\u00e1s parado frente a cuatro personas. */
+/* ¿Este grupo lleva botella? Ya no es "el de 10 sí y el de 5 no": es del grupo que
+   el organizador haya abierto con ella. De aquí salen la estrella en los renglones,
+   el aviso de la barra y lo que se le manda al servidor: si cada uno lo dedujera por
+   su cuenta, el vendedor marcaría una estrella que el boleto no va a imprimir. */
+function grupoConBotella() {
+  if (!CATALOG || GROUP_PROMO) return false;
+  if (GROUP_SIZE === 10) return !!CATALOG.grupo10_botella;
+  if (GROUP_SIZE === 5) return !!CATALOG.grupo5_botella;
+  return false;
+}
+
 function boletosCobrados() { return GROUP_PROMO ? GROUP_PROMO.pagan : GROUP_SIZE; }
 
 /* Lo que va a costar CADA boleto que se cobra, para ESTA categoría.
@@ -660,11 +680,13 @@ function renderGroupPriceBar() {
         ? `<span class="f-antes">${fmtMoney(sinDesc / 100)}</span> ` : ''}${fmtMoney(total / 100)} <span class="gp-cu">total</span></div>
     <div class="gp-save">${GROUP_MIXTO ? esc(reparto) + ' \u00b7 ' : ''}${GROUP_PROMO
         ? GROUP_SIZE + ' boletos \u00b7 pagan ' + GROUP_PROMO.pagan
-        : GROUP_SIZE === 5
+        : grupoConBotella()
         ? (total < sinDesc
-            ? pctGrupo() + '% menos para los cinco \u00b7 este grupo no lleva botella'
-            : 'los cinco juntos \u00b7 este grupo no lleva botella')
-        : 'marca con ★ quién recoge la botella'}</div>`;
+            ? pctGrupo() + '% menos \u00b7 marca con ★ quién recoge la botella'
+            : 'marca con ★ quién recoge la botella')
+        : (total < sinDesc
+            ? pctGrupo() + '% menos \u00b7 este grupo no lleva botella'
+            : 'los ' + GROUP_SIZE + ' juntos \u00b7 este grupo no lleva botella')}</div>`;
   const c = $('#gt-cambiar');
   if (c) c.onclick = () => { GROUP_TYPE = null; GROUP_TYPES = []; GROUP_MIXTO = false;
     renderGroupPriceBar(); renderGroupNames(); aplicarCierre(); };
@@ -731,11 +753,14 @@ function renderGroupNames() {
       chip.textContent = 'GRATIS';
       row.appendChild(chip);
     }
-    if (GROUP_SIZE === 10) {
+    // La estrella va en el grupo que lleva botella, sea de 5 o de 10: ya no es "el
+    // de 10 sí y el de 5 no", es el que el organizador haya abierto con ella.
+    if (grupoConBotella()) {
       const rep = document.createElement('button');
       rep.className = 'repbtn'; rep.type = 'button';
       rep.title = 'Este recoge la botella en la barra';
       rep.textContent = '★';
+      rep.classList.toggle('sel', GROUP_REP_IDX === i);
       rep.addEventListener('click', () => {
         GROUP_REP_IDX = (GROUP_REP_IDX === i) ? null : i;
         $$('#group-names .repbtn').forEach((b, bi) => b.classList.toggle('sel', bi === GROUP_REP_IDX));
@@ -808,9 +833,9 @@ function showGroupResult(r) {
     <div class="gp-price">${fmtMoney(totalFinal)} <span style="font-size:12px;color:var(--cream-45);font-weight:600">monto final</span></div>
     <div class="gp-save">${GROUP_PROMO
       ? 'Entrega un boleto a cada quien: son ' + r.size + ' QR distintos y en la puerta se escanean por separado'
-      : r.size === 5
-      ? 'Los cinco ya salieron con su descuento \u00b7 este grupo no lleva botella'
-      : `El boleto de ${esc(r.representative || 'el representante')} lleva la ★: con ese recoge la botella en la barra`}</div>`;
+      : r.representative
+      ? `El boleto de ${esc(r.representative)} lleva la ★: con ese recoge la botella en la barra`
+      : 'Los ' + r.size + ' ya salieron \u00b7 este grupo no lleva botella'}</div>`;
   $('#f-hint').textContent = 'Descarga cada boleto abajo';
   $('#btn-generate-group').classList.add('hidden');
   $('#btn-group-back').classList.add('hidden');
@@ -827,7 +852,7 @@ async function generateGroup() {
     $('#f-err').textContent = `Escribe el nombre completo del integrante ${emptyIdx + 1}`;
     return;
   }
-  if (GROUP_SIZE === 10 && GROUP_REP_IDX === null) {
+  if (grupoConBotella() && GROUP_REP_IDX === null) {
     $('#f-err').textContent = 'Marca quién es el representante del grupo (★, recibe la botella)';
     return;
   }
@@ -841,7 +866,7 @@ async function generateGroup() {
       // uno por integrante: el grupo puede ir mezclado
       types: Array.from({ length: GROUP_SIZE },
                         (_, i) => (GROUP_TYPES[i] || GROUP_TYPE || {}).id || null),
-      representative_index: GROUP_SIZE === 10 ? GROUP_REP_IDX : null,
+      representative_index: grupoConBotella() ? GROUP_REP_IDX : null,
     });
     showGroupResult(r);
   } catch (e) {

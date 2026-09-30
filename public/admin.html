@@ -451,20 +451,23 @@
       <div class="vent-bloque">
         <div class="muted" style="margin-bottom:10px">Los de siempre: el de 10 da botella y el de 5 da descuento. Cada uno con su propio interruptor.</div>
         <div class="promo">
-          <div class="promo-t"><b>Grupo de 10</b><span>botella al representante</span></div>
-          <div class="muted promo-d">La botella no se quita nunca. Si además le prendes el descuento, los diez se llevan las dos cosas.</div>
+          <div class="promo-t"><b>Grupo de 10</b><span>diez juntos</span></div>
+          <div class="muted promo-d">La botella y el descuento son aparte: puedes abrirlo solo con botella, solo con descuento, o con los dos.</div>
           <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
             <label class="sw"><input type="checkbox" id="pr-g10"><span></span><i>Abierto</i></label>
+            <label class="sw"><input type="checkbox" id="pr-g10b"><span></span><i>Con botella</i></label>
             <label class="sw"><input type="checkbox" id="pr-g10d"><span></span><i>Con descuento</i></label>
             <input class="input" id="pr-g10-pct" type="number" min="0" max="90" step="1"
                    style="width:78px;padding:8px;font-size:14px"><span class="muted">%</span>
           </div>
         </div>
         <div class="promo">
-          <div class="promo-t"><b>Grupo de 5</b><span>descuento a los cinco</span></div>
-          <div class="muted promo-d">Sin botella: el beneficio es el precio.</div>
+          <div class="promo-t"><b>Grupo de 5</b><span>cinco juntos</span></div>
+          <div class="muted promo-d">Igual que el de 10: la botella y el descuento van por separado. Con botella, el vendedor marca con ★ a quién de los cinco le toca.</div>
           <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
             <label class="sw"><input type="checkbox" id="pr-g5"><span></span><i>Abierto</i></label>
+            <label class="sw"><input type="checkbox" id="pr-g5b"><span></span><i>Con botella</i></label>
+            <label class="sw"><input type="checkbox" id="pr-g5d"><span></span><i>Con descuento</i></label>
             <input class="input" id="pr-g5-pct" type="number" min="0" max="90" step="1"
                    style="width:78px;padding:8px;font-size:14px"><span class="muted">% de descuento</span>
           </div>

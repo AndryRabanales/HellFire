@@ -470,6 +470,12 @@ DEFAULT_SETTINGS = {
     "grupo10_pct": "10",
     "grupo5_activo": "0",
     "grupo5_pct": "10",
+    # La BOTELLA ya no está amarrada al grupo de 10: es de quien esté abierto. Y el
+    # descuento del de 5 también tiene su interruptor, para poder abrirlo con botella
+    # y sin rebaja. El de 10 arranca con botella, que es como venía funcionando.
+    "grupo10_botella": "1",
+    "grupo5_botella": "0",
+    "grupo5_desc": "1",
     # 2x1: una promoción temporal, con su propio interruptor y su propio precio.
     # Nace apagada a propósito: se prende el día que se anuncia y se apaga sola en
     # cuanto el organizador la quita, sin tener que tocar ningún precio de fase.
@@ -607,6 +613,10 @@ def descuento_de(db, sel, group_size=None):
     Con la venta flash SÍ se suma, y es a propósito: el descuento se calcula sobre el
     precio que esté vigente, sea el de la fase o el de flash."""
     if group_size == 5 and setting(db, "grupo5_activo") == "1":
+        # con su propio interruptor: un grupo de 5 puede abrirse SOLO por la botella,
+        # sin bajarle un peso al precio
+        if setting(db, "grupo5_desc") != "1":
+            return 0.0
         try:
             return max(0.0, min(90.0, float(setting(db, "grupo5_pct") or 0)))
         except (TypeError, ValueError):
@@ -1957,6 +1967,9 @@ def estado_venta():
                        setting(db, "grupo10_pct") or "0",
                        setting(db, "grupo5_activo") or "0",
                        setting(db, "grupo5_pct") or "0",
+                       setting(db, "grupo5_desc") or "0",
+                       setting(db, "grupo5_botella") or "0",
+                       setting(db, "grupo10_botella") or "0",
                        str(_mi_descuento(s)),
                        setting(db, "promo_cant_activo") or "0",
                        setting(db, "promo_cant_boletos") or "",
@@ -2099,7 +2112,10 @@ def catalog():
                    grupo10_desc=setting(db, "grupo10_desc") == "1",
                    grupo10_pct=float(setting(db, "grupo10_pct") or 0),
                    grupo5_activo=setting(db, "grupo5_activo") == "1",
-                   grupo5_pct=float(setting(db, "grupo5_pct") or 0),
+                   grupo5_pct=(float(setting(db, "grupo5_pct") or 0)
+                               if setting(db, "grupo5_desc") == "1" else 0.0),
+                   grupo5_botella=setting(db, "grupo5_botella") == "1",
+                   grupo10_botella=setting(db, "grupo10_botella") == "1",
                    # 2x1: se enseña solo si además queda lugar en ese tipo. Un botón
                    # que existe y luego rebota es el vendedor callándose después de
                    # haberle prometido el precio a dos personas.
@@ -2340,10 +2356,15 @@ def create_group():
     for n in names:
         if len(n) < 3:
             return jsonify(error="Cada integrante necesita su nombre completo"), 400
-    representative = None
-    if size == 10:
+    # La botella es del grupo que la tenga prendida, no del de 10 por ser el de 10.
+    # Se pide representante solo entonces: en un grupo sin botella, marcar a alguien
+    # con la estrella sería prometer en el boleto algo que en la barra no existe.
+    con_botella = (not es_promo) and size in (5, 10) and \
+        setting(db, f"grupo{size}_botella") == "1"
+    representative, idx = None, None
+    if con_botella:
         idx = b.get("representative_index")
-        if not isinstance(idx, int) or idx < 0 or idx >= 10:
+        if not isinstance(idx, int) or idx < 0 or idx >= size:
             return jsonify(error="Marca quién es el representante del grupo (recibe la botella)"), 400
         representative = names[idx]
     # Un tipo por integrante. Se sigue aceptando el type_id suelto —es lo que manda
@@ -2434,9 +2455,9 @@ def create_group():
                                phase_name=fase, group_size=size,
                                # en venta flash el grupo también saca su tachado
                                normal_price_cents=normal,
-                               # el de 5 no lleva botella: su beneficio es el
-                               # descuento, y ahí idx ni existe
-                               representante=(size == 10 and i == idx))
+                               # la estrella va en el boleto del que recoge la
+                               # botella, sea un grupo de 5 o de 10
+                               representante=(con_botella and i == idx))
         if not t:
             return jsonify(error="No se pudo generar uno de los folios, intenta de nuevo"), 500
         tickets_out.append(ticket_public(t))
@@ -5527,6 +5548,9 @@ def save_settings():
     # mueve el precio de todos los boletos que se vendan a partir de ese momento.
     for clave, etq in (("grupo10_activo", "grupos de 10"), ("grupo5_activo", "grupos de 5"),
                        ("grupo10_desc", "el descuento del grupo de 10"),
+                       ("grupo10_botella", "la botella del grupo de 10"),
+                       ("grupo5_botella", "la botella del grupo de 5"),
+                       ("grupo5_desc", "el descuento del grupo de 5"),
                        ("promo_cant_activo", "la promoción por cantidad"),
                        ("promo_precio_activo", "la promoción de precio")):
         if clave in b:

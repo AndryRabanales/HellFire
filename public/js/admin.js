@@ -3396,6 +3396,14 @@ async function loadCatalogs() {
       pct10.value = cat.grupo10_pct != null ? cat.grupo10_pct : 10;
       g5.checked = !!cat.grupo5_activo;
       pct.value = cat.grupo5_pct != null ? cat.grupo5_pct : 10;
+      // La botella ya no es del de 10 por ser el de 10: cada grupo tiene la suya.
+      const g10b = $('#pr-g10b'), g5b = $('#pr-g5b'), g5d = $('#pr-g5d');
+      if (g10b) { g10b.checked = !!cat.grupo10_botella;
+        g10b.onchange = () => guarda({ grupo10_botella: g10b.checked ? '1' : '0' }); }
+      if (g5b) { g5b.checked = !!cat.grupo5_botella;
+        g5b.onchange = () => guarda({ grupo5_botella: g5b.checked ? '1' : '0' }); }
+      if (g5d) { g5d.checked = Number(cat.grupo5_pct || 0) > 0;
+        g5d.onchange = () => guarda({ grupo5_desc: g5d.checked ? '1' : '0' }); }
       // El error va TAMBIÉN al aviso flotante: las promociones viven repartidas en
       // dos ventanillas y el renglón rojo de una puede quedar dentro de la que está
       // cerrada. Un cambio que no se guardó y no avisa es peor que el error.
