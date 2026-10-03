@@ -527,6 +527,41 @@ select.input option:disabled{color:rgba(246,241,231,.45)}
 .vent-bloque{padding:14px 16px}
 .vent-bloque + .vent-bloque{border-top:1px solid rgba(255,120,40,.14)}
 
+/* La ficha de una cuenta: una acción por renglón, con su línea de qué hace. Tres
+   botones sueltos en la fila convertían la lista en una pared, con el de borrar
+   siempre a un dedo de distancia. */
+.ad-acc{display:flex;flex-direction:column;gap:9px}
+.ad-acc-b{width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+  text-align:left;padding:13px 15px}
+.ad-acc-b .ad-acc-p{font:500 11px Manrope;opacity:.72;font-weight:500}
+
+.lid-chip{display:inline-block;font:800 9px "Space Grotesk";letter-spacing:.12em;
+  padding:3px 7px;border-radius:6px;margin-left:6px;vertical-align:1px;
+  background:linear-gradient(160deg,#f7dc93,#d9ae4a);color:#2a1c04}
+.btn.oro{background:linear-gradient(180deg,#f7dc93,#e0bb5c);color:#2a1c04;
+  border-color:#f3d27a}
+
+/* ---- el panel del LÍDER: amarillo y naranja ----
+   Un líder entra al mismo panel que un colíder y nada le dice que ya no es lo mismo.
+   El oro lo dice sin letreros: su bienvenida, su pestaña y sus botones de rama van en
+   amarillo sobre el naranja de siempre, que es el color del evento. */
+.lid-hola{border:1px solid rgba(243,210,122,.55);border-radius:16px;padding:18px 20px;
+  margin-bottom:12px;
+  background:linear-gradient(135deg,rgba(243,210,122,.16),rgba(255,122,46,.06))}
+.lid-hola .lid-t{font:800 17px Manrope;color:#f7dc93;margin-bottom:6px}
+.lid-hola .lid-x{font:500 13px Manrope;color:var(--cream-60);line-height:1.55;margin-bottom:12px}
+.lid-hola .lid-x b{color:var(--cream)}
+.lid-hola.compacta{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 16px}
+.lid-hola.compacta .lid-t{margin:0;font-size:14px}
+.lid-hola .btn{background:linear-gradient(180deg,#f7dc93,#e0bb5c);color:#2a1c04;
+  border-color:#f3d27a}
+.lid-hola .btn.ghost{background:transparent;color:#f3d27a;border-color:rgba(243,210,122,.5)}
+/* la pestaña de su rama, marcada en oro */
+body.es-lider #tabs .tab[data-tab="colideres"]{border-color:rgba(243,210,122,.6);color:#f3d27a}
+body.es-lider #tabs .tab[data-tab="colideres"].sel{
+  background:linear-gradient(180deg,rgba(243,210,122,.22),rgba(243,210,122,.08))}
+
 /* La imagen de cada promoción: vive pegada a su interruptor porque es de esa
    promoción, no del evento. Se ve chica —es una referencia, no una galería—. */
 .promo-img{display:flex;align-items:center;gap:10px;flex-wrap:wrap}

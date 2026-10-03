@@ -201,10 +201,13 @@ async function loadSummary(silent) {
   const sig = JSON.stringify(s);
   if (silent && sig === _sigSummary) return;   // nada cambió → no re-dibujar
   _sigSummary = sig;
-  aplicarColider(s.soy_colider);
+  window._YO_NOMBRE = s.yo || '';
+  aplicarColider(s.soy_colider, s.soy_lider, s.mis_colideres);
   // la guía del colíder, una sola vez: se la pone el servidor, así que cambiar de
   // teléfono no se la repite y cerrar el panel a medias sí
-  if (s.soy_colider && s.tutorial_pendiente && !$('#tour')) setTimeout(tourColider, 700);
+  if (s.soy_colider && !s.soy_lider && s.tutorial_pendiente && !$('#tour')) setTimeout(tourColider, 700);
+  // La del líder, igual: sola, una vez, la primera que entra con el nivel nuevo.
+  if (s.soy_lider && s.tour_lider_pendiente && !$('#tour')) setTimeout(tourLider, 700);
   // los precios y la fase que viene salen del catálogo: se pide una vez, para que el
   // "?" pueda decir cuándo suben en vez de mandarlo a preguntar
   if (s.soy_colider && !GUIA_CAT) API.get('/api/catalog').then(c => { GUIA_CAT = c; }).catch(() => {});
@@ -411,10 +414,15 @@ function barraStat(hecho, total, pie) {
          (pie ? `<div class="stpie">${esc(pie)}</div>` : '');
 }
 
-function aplicarColider(esCo) {
-  if (_coliderAplicado === !!esCo) return;
-  _coliderAplicado = !!esCo;
+function aplicarColider(esCo, esLider, misColideres) {
+  // El líder también tiene rama, así que se le esconde lo mismo que al colíder: nada
+  // del evento, solo lo suyo. La diferencia es hacia ABAJO: él sí da de alta
+  // colíderes, y por eso su caja de "Dar de alta" se queda y la del colíder no.
+  const clave = (esCo ? '1' : '0') + (esLider ? 'L' : '');
+  if (_coliderAplicado === clave) return;
+  _coliderAplicado = clave;
   document.body.classList.toggle('es-colider', !!esCo);
+  document.body.classList.toggle('es-lider', !!esLider);
   // Se ESCONDE, no se borra: si en la misma pestaña entra después un admin, tiene que
   // recuperar su panel completo sin recargar. Borrar nodos deja el panel mutilado.
   const VEDADAS = ['grupos', 'gastos', 'catalogos', 'ajustes', 'cortesias'];
@@ -423,7 +431,7 @@ function aplicarColider(esCo) {
     if (b) b.classList.toggle('hidden', esCo);
   });
   const mio = document.querySelector('#tabs .tab[data-tab="colideres"]');
-  if (mio) mio.textContent = esCo ? 'Mi grupo' : 'Colíderes';
+  if (mio) mio.textContent = (esCo && !esLider) ? 'Mi grupo' : 'Colíderes';
   const scan = document.querySelector('a[href="/scan"]');   // escanear quema boletos
   if (scan) scan.classList.toggle('hidden', esCo);
   const card = $('#sum-by-admin');
@@ -438,10 +446,14 @@ function aplicarColider(esCo) {
   if (ay) ay.classList.toggle('hidden', !esCo);
   // "Mi grupo" es la misma pestaña que Colíderes. Arriba están sus números, que sí son
   // suyos; abajo, dar de alta y dar de baja colíderes, que no lo son ni por asomo.
+  // "Dar de alta un colíder": al colíder se le quita, al líder NO — es justo para lo
+  // que subió de nivel.
   ['#co-box', '#co-cuentas'].forEach(sel => {
     const el = $(sel);
-    if (el) { el.classList.toggle('hidden', esCo); if (esCo) el.open = false; }
+    const fuera = esCo && !esLider;
+    if (el) { el.classList.toggle('hidden', fuera); if (fuera) el.open = false; }
   });
+  pintaBienvenidaLider(esLider, misColideres);
   // El colíder ve SOLO sus propios movimientos; decirle "todo lo que pasa en el
   // sistema" lo dejaría creyendo que el registro está incompleto o roto.
   MV_QUIEN = 'todos'; _sigMoves = '';   // si cambia quién entra, el filtro arranca limpio
@@ -450,6 +462,30 @@ function aplicarColider(esCo) {
     ? 'Lo que tú has hecho: anulaciones, cobros, altas y bajas de tu grupo. El organizador también lo ve.'
     : 'Todo lo que pasa en el sistema. Lo ven todos los administradores.';
   if (esCo && VEDADAS.includes(currentTab)) openTab('resumen');
+}
+
+/* La bienvenida del líder. No es decoración: el día que sube de nivel abre el mismo
+   panel de siempre y nada le dice qué cambió. Esto se lo dice en tres renglones, con
+   su nombre, y se queda arriba mientras tenga la rama vacía: en cuanto da de alta a
+   su primer colíder, el aviso se achica y deja de estorbar. */
+function pintaBienvenidaLider(esLider, cuantos) {
+  const vieja = $('#lider-bienvenida');
+  if (vieja) vieja.remove();
+  if (!esLider) return;
+  const sec = $('#tab-colideres');
+  if (!sec) return;
+  const yo = (window._YO_NOMBRE || '').trim();
+  const caja = document.createElement('div');
+  caja.id = 'lider-bienvenida';
+  caja.className = 'lid-hola' + (cuantos ? ' compacta' : '');
+  // Sin botón: la guía ya salió sola la primera vez. Para repetirla está el "?" de
+  // arriba, que es donde ya vive la ayuda en este panel.
+  caja.innerHTML = cuantos
+    ? `<div class="lid-t">Tu rama · ${cuantos} colíder${cuantos === 1 ? '' : 'es'}</div>`
+    : `<div class="lid-t">Bienvenido a tu Panel de Líder${yo ? ', ' + esc(yo) : ''}</div>
+       <div class="lid-x">Ahora puedes armar tu propio equipo de <b>colíderes</b>, y cada uno
+         con sus vendedores. Lo que vendan ellos cuenta en tu rama.</div>`;
+  sec.insertBefore(caja, sec.firstChild);
 }
 
 /* ---------------- la guía del colíder, en el "?" ----------------
@@ -579,7 +615,12 @@ function pintaGuiaCL(sel) {
 }
 
 document.addEventListener('click', e => {
-  if (e.target && e.target.id === 'btn-ayuda-cl') mostrarAyudaCL();
+  // El "?" del líder repite SU guía, no la del colíder: la de colíder habla de un
+  // grupo de vendedores y él ya maneja colíderes.
+  if (e.target && e.target.id === 'btn-ayuda-cl') {
+    if (document.body.classList.contains('es-lider')) tourLider();
+    else mostrarAyudaCL();
+  }
 });
 
 /* "hace 2 días" se lee de un vistazo; una fecha hay que restarla mentalmente. */
@@ -619,28 +660,51 @@ const TOUR_CL = [
        + 'no cuando ellos venden. De ah\u00ed sale lo que les pagues.' },
 ];
 
+/* El mini tutorial del líder. Lo mismo que el del colíder —se oscurece la pantalla y
+   se ilumina de lo que se habla—, porque es como ya se explica todo aquí: un muro de
+   texto en una ventana se cierra sin leer. Cinco pasos y a vender.
+   No marca el tutorial como visto: el del colíder ya lo vio en su momento, y este se
+   puede volver a abrir desde su botón cuantas veces quiera. */
+const TOUR_LID = [
+  { sel: '#tabs .tab[data-tab="colideres"]',
+    txt: 'Aquí vive tu <b>rama</b>: tus colíderes y lo que junta cada uno.' },
+  { sel: '#co-box', tab: 'colideres',
+    txt: 'Con esto das de alta a un <b>colíder tuyo</b>: usuario y contraseña. Él arma su propio grupo de vendedores.' },
+  { sel: '#tabs .tab[data-tab="vendedores"]',
+    txt: 'Tus vendedores <b>directos</b> siguen aquí, igual que siempre.' },
+  { sel: '#sl-body', tab: 'vendedores',
+    txt: 'En <b>Cuenta</b> le cobras a cada quien. A tus colíderes les cobras igual, desde su ficha.' },
+  { sel: '#tabs .tab[data-tab="resumen"]',
+    txt: 'Tu total ya suma <b>lo tuyo y lo de tus colíderes</b>. Lo de otras ramas no lo ves, y ellos no te ven a ti.' },
+];
+
+function tourLider() { tourColider(0, TOUR_LID, 'lider'); }
+
 function cerrarTourCL(marcar) {
   const c = $('#tour');
   if (c) c.remove();
   document.body.style.overflow = '';
   startLive();                       // se reanuda el refresco que se pausó
-  if (marcar) API.post('/api/admin/tutorial-visto').catch(() => {});
+  // cada guía marca la SUYA: el que sube a líder ya vio la de colíder, y volver a
+  // marcarla no significaría nada
+  if (marcar === 'lider') API.post('/api/admin/tutorial-lider-visto').catch(() => {});
+  else if (marcar) API.post('/api/admin/tutorial-visto').catch(() => {});
 }
 
-async function tourColider(i = 0) {
-  if (i >= TOUR_CL.length) return cerrarTourCL(true);
+async function tourColider(i = 0, pasos = TOUR_CL, marcar = true) {
+  if (i >= pasos.length) return cerrarTourCL(marcar);
   // El panel se refresca solo cada 4 s. Con la guía encima, ese refresco volvía a
   // dibujar la lista de abajo y el recuadro iluminado quedaba señalando un elemento
   // que ya no existía: la pantalla se veía trabada. Se pausa mientras dure la guía.
   stopLive();
-  const paso = TOUR_CL[i];
+  const paso = pasos[i];
   // el paso puede vivir en otra pestaña: se abre y se espera a que pinte
   if (paso.tab && currentTab !== paso.tab) {
     openTab(paso.tab);
     await new Promise(r => setTimeout(r, 900));
   }
   const el = $(paso.sel);
-  if (!el || el.offsetParent === null) return tourColider(i + 1);
+  if (!el || el.offsetParent === null) return tourColider(i + 1, pasos, marcar);
   el.scrollIntoView({ block: 'center', behavior: 'instant' });
 
   let c = $('#tour');
@@ -655,12 +719,12 @@ async function tourColider(i = 0) {
   c.querySelector('.tr-foco').style.cssText =
     `top:${r.top - pad}px;left:${r.left - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px`;
 
-  const ultimo = i === TOUR_CL.length - 1;
+  const ultimo = i === pasos.length - 1;
   const globo = c.querySelector('.tr-globo');
-  globo.innerHTML = `<div class="tr-num">${i + 1} de ${TOUR_CL.length}</div>
+  globo.innerHTML = `<div class="tr-num">${i + 1} de ${pasos.length}</div>
     <div class="tr-txt">${paso.txt}</div>
     <div class="tr-pie">
-      <div class="tr-dots">${TOUR_CL.map((_, k) =>
+      <div class="tr-dots">${pasos.map((_, k) =>
         `<span class="tr-dot${k <= i ? ' on' : ''}"></span>`).join('')}</div>
       <button class="btn sm" id="tr-next" style="width:auto;padding:11px 20px">
         ${ultimo ? 'Listo' : 'Siguiente \u203a'}</button>
@@ -668,7 +732,7 @@ async function tourColider(i = 0) {
     ${ultimo ? '' : '<button class="tr-skip" id="tr-skip">Saltar gu\u00eda</button>'}`;
   // una salida siempre a la vista: si algo se atora, nadie se queda encerrado
   const sk = $('#tr-skip');
-  if (sk) sk.onclick = () => cerrarTourCL(true);
+  if (sk) sk.onclick = () => cerrarTourCL(marcar);
   const alto = globo.offsetHeight || 150;
   const cabeAbajo = r.bottom + 16 + alto < window.innerHeight;
   globo.className = 'tr-globo ' + (cabeAbajo ? 'abajo' : 'arriba');
@@ -677,7 +741,7 @@ async function tourColider(i = 0) {
   const g = globo.getBoundingClientRect();
   const cx = Math.min(Math.max(r.left + r.width / 2, g.left + 22), g.right - 22);
   globo.style.setProperty('--pico', (cx - g.left) + 'px');
-  $('#tr-next').onclick = () => ultimo ? cerrarTourCL(true) : tourColider(i + 1);
+  $('#tr-next').onclick = () => ultimo ? cerrarTourCL(marcar) : tourColider(i + 1, pasos, marcar);
 }
 
 /* ---------------- colíderes: el grupo, partido en dos ----------------
@@ -1864,7 +1928,7 @@ function pintaCuenta(s, c) {
       </div>`}
       <!-- Los porcentajes de un toque, plegados: se abren solo cuando se van a usar. -->
       <div id="cta-com-box" class="row" style="display:none;gap:5px;flex-wrap:wrap;margin-top:9px">
-        ${[0, 10, 15, 20, 25, 30].filter(n => n >= (c.commission_min || 0)).map(n =>
+        ${[0, 10, 20, 30, 40, 50].map(n =>
           `<button class="btn sm ghost cta-pct${n === c.commission_pct ? ' sel' : ''}" data-pct="${n}"
           style="width:auto;flex:none;padding:7px 11px;font-size:11.5px">${n}%</button>`).join('')}
         ${c.es_lider ? '' : `<button class="btn sm ghost cta-pct" data-pct="" style="width:auto;flex:none;padding:7px 11px;font-size:11.5px"
@@ -1953,6 +2017,13 @@ function pintaCuenta(s, c) {
          y no la de los demás contaba a medias algo que ya no es del sistema. Lo
          que se registró en su momento sigue guardado. -->
 
+    ${c.puede_subir ? `
+    <div class="card mt12" style="border-color:rgba(243,210,122,.4)">
+      <div class="label">Subirlo de nivel</div>
+      <div class="muted" style="margin-bottom:9px;font-size:11px">Como <b style="color:#f3d27a">colíder</b> podría dar de alta a sus propios vendedores y cobrarles. <b style="color:var(--cream)">Conserva su código ${esc(s.code || '')}, su historial y lo que debe.</b></div>
+      <button class="btn sm oro" id="cta-subir" style="width:auto">Subir a colíder</button>
+    </div>` : ''}
+
     ${c.can_edit && c.balance > 0.005 ? `
     <div class="card mt12">
       <div class="label">Registrar una entrega</div>
@@ -2031,6 +2102,33 @@ function pintaCuenta(s, c) {
       if (box.style.display === 'none') $('#cta-otro-box').style.display = 'none';
     };
     $$('.cta-pct').forEach(b => b.onclick = () => aplicaPct(b.dataset.pct));
+    // Subir un vendedor a colíder: se le abre cuenta de panel REUSANDO su ficha, así
+    // que no pierde su código ni su historial. Antes había que ir a Colíderes y
+    // teclear su código de memoria.
+    const sub = $('#cta-subir');
+    if (sub) sub.onclick = async () => {
+      const ok = await confirmModal({
+        title: `Subir a ${s.name} a colíder`, okLabel: 'Crear su cuenta',
+        body: `Escribe el usuario y la contraseña con los que va a entrar al panel.
+          <br><br><b style="color:var(--ok)">Conserva todo</b>: su código <b style="color:var(--cream)">${esc(s.code || '')}</b>,
+          sus boletos vendidos y lo que te debe. Lo que gana es poder dar de alta a sus
+          propios vendedores y cobrarles.
+          <div class="label mt16" style="font-size:11px">Usuario</div>
+          <input class="input" id="sub-user" placeholder="ej. ${esc((s.name || '').split(' ')[0].toLowerCase())}" autocomplete="off">
+          <div class="label mt8" style="font-size:11px">Contraseña (mín. 8)</div>
+          <input class="input" id="sub-pass" type="password" autocomplete="new-password">`,
+      });
+      if (!ok) return;
+      const u = ($('#sub-user') || {}).value, pw = ($('#sub-pass') || {}).value;
+      try {
+        const r = await API.post('/api/admin/admins', {
+          username: (u || '').trim(), password: pw || '', role: 'colider', seller_code: s.code,
+        });
+        toast(`${s.name} ya es colíder ✓`);
+        closeModal();
+        refrescarPantalla();
+      } catch (e) { if (!guard(e)) toast(e.message); }
+    };
     $('#cta-otro').onclick = () => {
       const caja = $('#cta-otro-box');
       caja.style.display = caja.style.display === 'none' ? 'flex' : 'none';
@@ -2056,15 +2154,24 @@ function pintaCuenta(s, c) {
   };
   const amt = $('#pg-amount');
   if (amt) {
+    // El porcentaje de ESTE corte. Vive aquí y no en la ficha: lo que se acordó con
+    // la persona es una cosa, y lo que se le da hoy es otra.
+    let PG_PCT = 0;
     const recalcular = () => {
       const v = parseFloat(amt.value || '0');
       if (!v || v <= 0) { $('#pg-calc').innerHTML = ''; return; }
-      const com = Math.round(v * c.commission_pct) / 100;
-      $('#pg-calc').innerHTML =
-        `Se queda <b style="color:#f3d27a">${fmtMoney(com)}</b> de comisi\u00f3n<br>` +
-        `<b style="color:var(--ember)">Debe darte ${fmtMoney(v - com)}</b> en efectivo<br>` +
+      const com = Math.round(v * PG_PCT) / 100;
+      $('#pg-calc').innerHTML = (PG_PCT
+          ? `Se queda <b style="color:#f3d27a">${fmtMoney(com)}</b> (su ${PG_PCT}%)<br>`
+          : `No se queda nada de este corte<br>`) +
+        `<b style="color:var(--ember)">Te entrega ${fmtMoney(v - com)}</b> en efectivo<br>` +
         `Le quedar\u00eda debiendo <b style="color:var(--cream)">${fmtMoney(c.balance - v)}</b> de su cuenta`;
     };
+    $$('.pg-pct').forEach(b => b.onclick = () => {
+      PG_PCT = Number(b.dataset.p) || 0;
+      $$('.pg-pct').forEach(o => o.classList.toggle('sel', o === b));
+      recalcular();
+    });
     amt.addEventListener('input', recalcular);
     $('#pg-todo').onclick = () => { amt.value = c.balance; recalcular(); };
     // Marcar el tipo de corte sin teclear: es lo que se hace 30 veces al día.
@@ -2078,7 +2185,7 @@ function pintaCuenta(s, c) {
       if (v > c.balance) { $('#pg-err').textContent = `Se pasa: solo debe ${fmtMoney(c.balance)}`; return; }
       try {
         const r = await API.post(`/api/admin/sellers/${s.id}/payments`,
-          { amount: v, note: $('#pg-note').value.trim() });
+          { amount: v, note: $('#pg-note').value.trim(), pct: PG_PCT });
         toast(r.balance <= 0.005 ? `${s.name}: cuenta SALDADA \u2713` : `Registrado \u00b7 le faltan ${fmtMoney(r.balance)}`);
         pintaCuenta(s, r);
         refrescarPantalla();
@@ -2137,9 +2244,15 @@ function pintaCuenta(s, c) {
    depende de que sepan abrir un Excel. */
 async function descargarEstadoCuenta(s, c) {
   await document.fonts.ready;
+  // El recibo del corte, como IMAGEN para mandarlo por WhatsApp. Se rehízo entero:
+  // antes mezclaba la temporada, el saldo, la comisión vieja y un historial con tres
+  // cifras por renglón, y quien lo recibía no sabía cuál de todos los números era el
+  // suyo. Ahora contesta tres preguntas en este orden: qué se cortó hoy, en cuánto
+  // queda su cuenta, y cuánto lleva pagado. Lo demás es letra chica al pie.
+  const ult = c.payments && c.payments.length ? c.payments[0] : null;
+  const pagos = (c.payments || []).slice(0, 6);
   const W = 900, pad = 46;
-  const filas = c.payments.length || 1;
-  const H = 506 + filas * 96;   // 470 + el renglón de "Boletos vendidos" (36)
+  const H = 470 + (ult ? 150 : 0) + pagos.length * 62;
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const x = cv.getContext('2d');
@@ -2147,164 +2260,120 @@ async function descargarEstadoCuenta(s, c) {
   x.fillStyle = '#0b0503'; x.fillRect(0, 0, W, H);
   const g = x.createRadialGradient(W / 2, -60, 30, W / 2, 260, W);
   g.addColorStop(0, 'rgba(255,110,30,.20)'); g.addColorStop(1, 'rgba(255,110,30,0)');
-  x.fillStyle = g; x.fillRect(0, 0, W, 360);
+  x.fillStyle = g; x.fillRect(0, 0, W, 330);
+
+  const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fechaCorta = iso => {
+    const d = new Date(String(iso).replace(' ', 'T'));
+    return isNaN(d) ? String(iso).slice(0, 10)
+                    : `${d.getDate()} ${MESES[d.getMonth()].toUpperCase()}`;
+  };
+  const hoy = new Date();
+  const largo = `${hoy.getDate()} de ${['enero','febrero','marzo','abril','mayo','junio','julio',
+    'agosto','septiembre','octubre','noviembre','diciembre'][hoy.getMonth()]} de ${hoy.getFullYear()}`;
 
   x.textAlign = 'left';
   x.fillStyle = '#ff7a2e'; x.font = '800 30px Cinzel, serif';
   x.fillText(EV && EV.event_name ? EV.event_name : 'HELLFIRE', pad, 62);
   x.fillStyle = 'rgba(255,150,80,.65)'; x.font = '600 13px "Space Grotesk", monospace';
-  x.fillText('ESTADO DE CUENTA DEL VENDEDOR', pad, 86);
+  x.fillText(c.es_lider ? 'CORTE DE COL\u00cdDER' : 'CORTE DEL VENDEDOR', pad, 86);
   x.fillStyle = '#f6f1e7'; x.font = '800 34px Manrope, sans-serif';
   x.fillText(s.name, pad, 134);
+  x.fillStyle = 'rgba(246,241,231,.5)'; x.font = '600 14px "Space Grotesk", monospace';
+  x.fillText(largo, pad, 162);
 
-  // mismo criterio que la pantalla: lo ya cobrado no se recalcula (ver pintaCuenta)
-  const comisionTotal = c.commission_total;   // solo lo de los cortes VIEJOS
-  const falta = c.balance * (1 - c.commission_pct / 100);
-
-  let y = 186;
+  let y = 206;
   const linea = (etq, val, color, grande) => {
-    x.fillStyle = 'rgba(246,241,231,.6)'; x.font = '600 15px Manrope, sans-serif';
+    x.textAlign = 'left';
+    x.fillStyle = grande ? '#f6f1e7' : 'rgba(246,241,231,.6)';
+    x.font = `600 ${grande ? 16 : 15}px Manrope, sans-serif`;
     x.fillText(etq, pad, y);
     x.textAlign = 'right';
-    x.fillStyle = color; x.font = `800 ${grande ? 26 : 20}px "Space Grotesk", monospace`;
+    x.fillStyle = color; x.font = `800 ${grande ? 27 : 19}px "Space Grotesk", monospace`;
     x.fillText(val, W - pad, y + (grande ? 3 : 0));
     x.textAlign = 'left';
-    y += grande ? 46 : 36;
+    y += grande ? 50 : 36;
   };
-  // Su propio renglón, antes del dinero: es el número que el vendedor lleva en la
-  // cabeza, y si el monto no le cuadra es lo primero contra lo que compara.
-  linea('Boletos vendidos', String(c.sold_tickets || 0), '#f6f1e7');
-  // El corte que se esta cobrando AHORA va primero: lo de la temporada es historia.
-  linea('Vendió desde el último corte', fmtMoney(c.balance), '#f6f1e7');
-  linea('Vendido en toda la temporada', fmtMoney(c.sold), 'rgba(246,241,231,.55)');
-  // En un grupo la comisión no es de cada vendedor: es del colíder sobre el total.
-  // Sin decirlo, un 0% en la ficha se lee como un error o como un castigo.
-  // Solo si de verdad se llevó algo en su día: la comisión ya no se descuenta al
-  // entregar, así que en las cuentas nuevas este renglón no tiene nada que decir.
-  if (comisionTotal > 0.005)
-    linea('Comisión de sus cortes anteriores', '− ' + fmtMoney(comisionTotal), '#f3d27a');
-  x.strokeStyle = 'rgba(255,120,40,.3)'; x.lineWidth = 1;
-  x.beginPath(); x.moveTo(pad, y - 22); x.lineTo(W - pad, y - 22); x.stroke();
-  linea('Ya entregó' + (c.payments.length ? ` en ${c.payments.length} corte` + (c.payments.length > 1 ? 's' : '') : ''), fmtMoney(c.cash_total), '#f6f1e7');
-  linea(falta > 0.005 ? 'Te entrega hoy' : 'Al corriente',
-        fmtMoney(Math.max(0, falta)), falta > 0.005 ? '#e8706a' : '#7ee2a8', true);
+  const raya = () => {
+    x.strokeStyle = 'rgba(255,120,40,.3)'; x.lineWidth = 1;
+    x.beginPath(); x.moveTo(pad, y - 20); x.lineTo(W - pad, y - 20); x.stroke();
+  };
 
-  y += 12;
-  x.fillStyle = 'rgba(255,150,80,.65)'; x.font = '600 13px "Space Grotesk", monospace';
-  x.fillText('CÓMO FUE PAGANDO', pad, y); y += 30;
-
-  if (!c.payments.length) {
-    x.fillStyle = 'rgba(246,241,231,.45)'; x.font = '500 16px Manrope, sans-serif';
-    x.fillText('Todavía no ha entregado nada.', pad, y);
+  // 1 · EL CORTE DE HOY. Si acaba de registrarse uno, ese manda; si no, lo que debe.
+  if (ult) {
+    x.fillStyle = 'rgba(255,150,80,.65)'; x.font = '600 12px "Space Grotesk", monospace';
+    x.fillText('SU \u00daLTIMO CORTE \u00b7 ' + fechaCorta(ult.created_at), pad, y); y += 30;
+    linea('Cubri\u00f3 de su cuenta', fmtMoney(ult.amount), '#f6f1e7');
+    // El renglón de la comisión SOLO si de verdad se llevó algo: un "$0" al lado de
+    // la palabra comisión hace dudar a quien lo recibe de si se le quedó a deber.
+    if (ult.commission > 0.005)
+      linea(`Se qued\u00f3 \u00e9l (${ult.commission_pct || 0}%)`, '\u2212 ' + fmtMoney(ult.commission), '#f3d27a');
+    linea('Te entreg\u00f3', fmtMoney(ult.cash), '#7ee2a8');
+    y += 10; raya(); y += 8;
   }
-  // del más viejo al más nuevo: se lee como una historia
-  [...c.payments].reverse().forEach((p, i) => {
-    x.fillStyle = i % 2 ? 'rgba(255,255,255,.028)' : 'rgba(255,255,255,.05)';
-    roundRect(x, pad, y - 4, W - pad * 2, 84, 14); x.fill();
-    // El número de pago va primero: es la referencia con la que el vendedor
-    // reclama ("el pago 3 no me lo contaste").
-    x.fillStyle = 'rgba(255,150,80,.8)'; x.font = '700 12px "Space Grotesk", monospace';
-    x.fillText(`PAGO ${p.n}`, pad + 18, y + 30);
-    const wn = x.measureText(`PAGO ${p.n}`).width;
-    x.fillStyle = '#f6f1e7'; x.font = '800 22px "Space Grotesk", monospace';
-    x.fillText(fmtMoney(p.cash), pad + 28 + wn, y + 30);
-    const w = pad + 28 + wn + x.measureText(fmtMoney(p.cash)).width;
-    x.fillStyle = 'rgba(246,241,231,.5)'; x.font = '600 13px Manrope, sans-serif';
-    x.fillText('en efectivo', w + 8, y + 30);
-    x.textAlign = 'right';
-    x.fillStyle = 'rgba(246,241,231,.55)'; x.font = '600 13px Manrope, sans-serif';
-    x.fillText(p.created_at.slice(0, 16).replace('T', ' '), W - pad - 18, y + 28);
+
+  // 2 · EN CUÁNTO QUEDA. Es la pregunta que de verdad trae quien lee esto, y va UNA
+  // sola vez: "vendió desde el corte" y "le falta entregar" son el mismo número
+  // —lo que vendió y aún no entrega—, y ponerlo dos veces hace dudar de si son dos
+  // deudas distintas.
+  const saldado = c.balance <= 0.005;
+  if (saldado) {
+    const bh = 86;
+    x.strokeStyle = 'rgba(126,226,168,.45)'; x.lineWidth = 1.5;
+    x.fillStyle = 'rgba(126,226,168,.08)';
+    if (x.roundRect) { x.beginPath(); x.roundRect(pad, y - 6, W - pad * 2, bh, 14); x.fill(); x.stroke(); }
+    x.textAlign = 'center';
+    x.fillStyle = 'rgba(126,226,168,.8)'; x.font = '600 12px "Space Grotesk", monospace';
+    x.fillText('SU CUENTA QUEDA EN', W / 2, y + 26);
+    x.fillStyle = '#7ee2a8'; x.font = '800 32px Manrope, sans-serif';
+    x.fillText('$0', W / 2, y + 64);
     x.textAlign = 'left';
-    x.fillStyle = 'rgba(246,241,231,.6)'; x.font = '500 13.5px Manrope, sans-serif';
-    x.fillText(`Cubrió ${fmtMoney(p.amount)} de su cuenta · comisión ${fmtMoney(p.commission)}` +
-               `  ·  quedó debiendo ${fmtMoney(p.balance_after)}` +
-               (p.note ? `  ·  ${p.note}` : ''), pad + 18, y + 58);
-    y += 96;
+    y += bh + 26;
+  } else {
+    linea('Le falta entregar', fmtMoney(c.balance), '#e8706a', true);
+  }
+
+  // 3 · LO QUE LLEVA PAGADO. Sin cuentas: fecha y cuánto, nada más.
+  x.fillStyle = 'rgba(255,150,80,.65)'; x.font = '600 12px "Space Grotesk", monospace';
+  x.fillText('LO QUE TE HA PAGADO', pad, y); y += 26;
+  if (!pagos.length) {
+    x.fillStyle = 'rgba(246,241,231,.45)'; x.font = '500 16px Manrope, sans-serif';
+    x.fillText('Todav\u00eda no ha entregado nada.', pad, y + 8);
+    y += 40;
+  }
+  pagos.forEach((p, i) => {
+    x.fillStyle = i % 2 ? 'rgba(255,255,255,.028)' : 'rgba(255,255,255,.05)';
+    if (x.roundRect) { x.beginPath(); x.roundRect(pad, y, W - pad * 2, 50, 10); x.fill(); }
+    x.fillStyle = 'rgba(255,150,80,.75)'; x.font = '700 13px "Space Grotesk", monospace';
+    x.fillText(fechaCorta(p.created_at), pad + 16, y + 31);
+    x.fillStyle = '#f6f1e7'; x.font = '800 19px "Space Grotesk", monospace';
+    x.fillText(fmtMoney(p.cash), pad + 110, y + 32);
+    x.textAlign = 'right';
+    x.fillStyle = 'rgba(246,241,231,.45)'; x.font = '500 13px Manrope, sans-serif';
+    x.fillText(p.commission > 0.005 ? `se qued\u00f3 ${fmtMoney(p.commission)}` : 'en efectivo',
+               W - pad - 16, y + 31);
+    x.textAlign = 'left';
+    y += 62;
   });
+  if ((c.payments || []).length > pagos.length) {
+    x.fillStyle = 'rgba(246,241,231,.4)'; x.font = '500 13px Manrope, sans-serif';
+    x.fillText(`y ${c.payments.length - pagos.length} corte(s) m\u00e1s antes de estos`, pad, y + 6);
+    y += 26;
+  }
+  y += 16;
+  linea('Lleva pagado en total', fmtMoney(c.cash_total), '#f6f1e7');
 
-  x.fillStyle = 'rgba(246,241,231,.32)'; x.font = '500 12px Manrope, sans-serif';
-  x.fillText('Generado el ' + new Date().toLocaleString('es-MX'), pad, H - 20);
+  // 4 · la letra chica: la temporada completa, para quien quiera cuadrarla
+  x.fillStyle = 'rgba(246,241,231,.38)'; x.font = '500 14px Manrope, sans-serif';
+  x.fillText(`${c.sold_tickets || 0} boletos \u00b7 ${fmtMoney(c.sold)} vendidos en toda la temporada`,
+             pad, y + 4);
 
-  cv.toBlob(blob => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    const slug = s.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^\w]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'vendedor';
-    a.download = 'cuenta_' + slug + '.png';
-    document.body.appendChild(a); a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 400);
-  }, 'image/png');
-  toast('Estado de cuenta descargado');
+  const a = document.createElement('a');
+  a.href = cv.toDataURL('image/png');
+  a.download = `corte_${(s.name || 'vendedor').replace(/[^\w]+/g, '_').slice(0, 40)}.png`;
+  a.click();
 }
 
-$('#sl-filter-admin').addEventListener('change', () => { _sigSellers = ''; loadSellers(); });
-$('#sl-q').addEventListener('input', () => { _sigSellers = ''; loadSellers(); });
-$('#sl-orden').addEventListener('change', () => { _sigSellers = ''; loadSellers(); });
-
-$('#btn-sl-create').addEventListener('click', async () => {
-  const btn = $('#btn-sl-create');
-  if (btn.disabled) return;   // evita doble-clic → vendedor duplicado
-  $('#sl-err').textContent = '';
-  const name = $('#sl-name').value.trim();
-  if (!name) { $('#sl-err').textContent = 'Escribe el nombre'; return; }
-  btn.disabled = true;
-  try {
-    let r;
-    try {
-      r = await API.post('/api/admin/sellers', { name });   // código siempre automático
-    } catch (e) {
-      // Nombre repetido: se avisa y se deja decidir, no se crea a ciegas. Con 30
-      // vendedores, dos "Luis" hacen que al cobrar se abra la cuenta equivocada.
-      if (!e.data || !e.data.duplicate) throw e;
-      btn.disabled = false;
-      const ok = await confirmModal({
-        title: 'Ese nombre ya existe',
-        body: `${esc(e.message)}<br><br>Si son dos personas distintas, ponles algo que
-               las distinga (apellido, apodo). Si no, al cobrar vas a abrir la cuenta equivocada.`,
-        okLabel: 'Crearlo de todos modos',
-      });
-      if (!ok) { $('#sl-err').textContent = ''; return; }
-      btn.disabled = true;
-      r = await API.post('/api/admin/sellers', { name, force: true });
-    }
-    $('#sl-name').value = '';
-    modal(`<div class="h1" style="font-size:18px">Vendedor creado</div>
-      <div class="muted mt8">Comparte su código de acceso. Es su identidad en el sistema:</div>
-      <div style="text-align:center;margin:18px 0"><span class="codechip" style="font-size:30px;padding:12px 22px">${esc(r.code)}</span></div>
-      <button class="btn" onclick="closeModal()">Listo</button>`);
-    refrescarPantalla();
-  } catch (e) { if (!guard(e)) $('#sl-err').textContent = e.message; }
-  finally { btn.disabled = false; }
-});
-
-/* Alta masiva: se pegan los nombres y salen todos con su código. Con 50 vendedores,
-   capturarlos de uno en uno son 50 formularios y 50 códigos copiados a mano. */
-$('#btn-sl-bulk').addEventListener('click', () => {
-  modal(`<div class="h1" style="font-size:18px">Cargar varios vendedores</div>
-    <div class="muted mt8" style="font-size:12px">Un nombre por línea. A cada uno se le asigna
-      su código de 5 dígitos.</div>
-    <textarea class="input mt12" id="bk-names" rows="8" placeholder="Ana Pérez
-Luis Canul
-María Chi" style="resize:vertical;line-height:1.6"></textarea>
-    <div class="err mt8" id="bk-err"></div>
-    <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
-    <button class="btn grow" id="bk-go">Crear todos</button></div>`);
-  $('#bk-go').onclick = async () => {
-    const names = $('#bk-names').value;
-    if (!names.trim()) { $('#bk-err').textContent = 'Pega al menos un nombre'; return; }
-    $('#bk-go').disabled = true;
-    try {
-      const r = await API.post('/api/admin/sellers/bulk', { names });
-      mostrarCodigos(r.creados, r.repetidos);
-      refrescarPantalla();
-    } catch (e) { if (!guard(e)) $('#bk-err').textContent = e.message; }
-    finally { $('#bk-go').disabled = false; }
-  };
-});
-
-/* El resultado sirve para REPARTIR: nombre y código en una lista que se copia de un
-   toque y se pega en WhatsApp. Sin esto habría que ir vendedor por vendedor
-   apuntando su código a mano, que es justo lo que se quería evitar. */
 function mostrarCodigos(creados, repetidos) {
   const texto = creados.map(c => `${c.name}: ${c.code}`).join('\n');
   modal(`<div class="h1" style="font-size:18px">${creados.length} vendedor(es) creados</div>
@@ -3592,23 +3661,71 @@ $('#btn-fc-create').addEventListener('click', async () => {
 function filaCuenta(a, esYo) {
   const row = document.createElement('div');
   row.className = 'trow';
-  const esCo = (a.role || 'admin') === 'colider';
-  const quees = esCo ? 'colíder' : 'administrador';
+  const rol = a.role || 'admin';
+  const esCo = rol === 'colider', esLi = rol === 'lider';
+  const quees = esLi ? 'líder' : esCo ? 'colíder' : 'administrador';
   const n = a.vendedores || 0;
+  const nc = a.colideres || 0;
   const gente = n === 1 ? '1 vendedor' : n + ' vendedores';
   const apagado = !a.active;
   if (apagado) row.style.opacity = '.55';
-  row.innerHTML = `<div class="tmain"><div class="tbuyer">${esc(a.username)}${esYo ? ' <span class="muted">(tú)</span>' : ''}${apagado ? ' <span class="badge void">en pausa</span>' : ''}</div>
-    <div class="tmeta">${n ? gente : 'sin vendedores'} · desde ${esc(String(a.created_at).slice(0, 10))}</div></div>`;
+  const sello = esLi ? ' <span class="lid-chip">LÍDER</span>' : '';
+  const rama = esLi && nc ? ` · ${nc} colíder${nc === 1 ? '' : 'es'}` : '';
+  const cuelga = a.parent_name && esCo ? ` · de ${esc(a.parent_name)}` : '';
+  row.innerHTML = `<div class="tmain"><div class="tbuyer">${esc(a.username)}${sello}${esYo ? ' <span class="muted">(tú)</span>' : ''}${apagado ? ' <span class="badge void">en pausa</span>' : ''}</div>
+    <div class="tmeta">${n ? gente : 'sin vendedores'}${rama}${cuelga} · desde ${esc(String(a.created_at).slice(0, 10))}</div></div>`;
   if (esYo) return row;
   // Dos botones y en este orden: el reversible primero. Eliminar es el último
   // recurso, no el único —hasta ahora era el único, y por eso daba miedo tocarlo.
   const caja = document.createElement('div');
   caja.className = 'ad-btns';
-  const t = document.createElement('button');
-  t.className = 'btn sm ghost'; t.style.width = 'auto';
-  t.textContent = apagado ? 'Reactivar' : 'Desactivar';
-  t.onclick = async () => {
+  // UN SOLO botón por renglón. Antes eran tres —subir, desactivar, eliminar— y con
+  // cuatro colíderes la pantalla era una pared de botones, con el de borrar siempre
+  // a un dedo de distancia. Ahora se abre la ficha y ahí está cada acción con una
+  // línea que dice qué hace.
+  const abrir = document.createElement('button');
+  abrir.className = 'btn sm ghost'; abrir.style.width = 'auto';
+  abrir.textContent = 'Opciones';
+  const acciones = [];
+  if (esCo || esLi) {
+    acciones.push({
+      id: 'nivel', clase: esLi ? 'ghost' : 'oro',
+      txt: esLi ? 'Bajar a colíder' : 'Subir a líder',
+      pie: esLi ? 'Deja de poder dar de alta colíderes. No se pierde nada.'
+                : 'Podrá dar de alta sus propios colíderes. Reversible.',
+      fn: async () => {
+      const ok = await confirmModal({
+        title: esLi ? `Bajar a ${a.username} a colíder` : `Subir a ${a.username} a líder`,
+        okLabel: esLi ? 'Bajarlo' : 'Subirlo a líder', danger: esLi,
+        body: esLi
+          ? `Vuelve a ser colíder: seguirá con sus ${gente} y con su grupo, pero
+             <b style="color:var(--cream)">ya no podrá dar de alta colíderes</b> ni ver
+             la rama de nadie más.
+             <br><br><b style="color:var(--ok)">No se borra ni se mueve nada.</b>`
+          : `Como líder podrá <b style="color:var(--cream)">dar de alta sus propios
+             colíderes</b>, y cada uno con sus vendedores. Lo que venda su rama completa
+             contará para él.
+             <br><br>Seguirá SIN ver tus ventas, tus precios, tus cortesías ni a los
+             colíderes de nadie más.
+             <br><br><b style="color:var(--ok)">No se pierde nada:</b> conserva su cuenta,
+             su código, su historial, sus ${gente} y lo que le deben.
+             <br><br>Lo puedes bajar de nivel cuando quieras.`,
+      });
+      if (!ok) return;
+      try {
+        await API.post('/api/admin/admins/' + a.id + '/nivel', { nivel: esLi ? 'colider' : 'lider' });
+        toast(esLi ? 'Volvió a colíder' : `${a.username} ya es líder ✓`);
+        refrescarPantalla();
+      } catch (e) { if (!guard(e)) toast(e.message); }
+      },
+    });
+  }
+  acciones.push({
+    id: 'pausa', clase: 'ghost',
+    txt: apagado ? 'Reactivar' : 'Desactivar',
+    pie: apagado ? 'Vuelve a entrar al panel, tal como estaba.'
+                 : 'Queda en pausa, sin borrar nada. Se deshace cuando quieras.',
+    fn: async () => {
     const ok = await confirmModal({
       title: apagado ? `Reactivar a ${a.username}` : `Desactivar a ${a.username}`,
       okLabel: apagado ? 'Reactivar' : 'Desactivar', danger: !apagado,
@@ -3626,11 +3743,12 @@ function filaCuenta(a, esYo) {
       toast(res.active ? 'Cuenta reactivada' : 'Cuenta en pausa');
       refrescarPantalla();
     } catch (e) { if (!guard(e)) toast(e.message); }
-  };
-  caja.appendChild(t);
-  const b = document.createElement('button');
-  b.className = 'btn sm danger'; b.style.width = 'auto'; b.textContent = 'Eliminar';
-  b.onclick = async () => {
+    },
+  });
+  acciones.push({
+    id: 'borrar', clase: 'danger', txt: 'Eliminar',
+    pie: n ? `Sus ${gente} pasan a ser tuyos. No se deshace.` : 'No se deshace.',
+    fn: async () => {
     const ok = await confirmModal({
       title: `Eliminar ${quees}`, danger: true, okLabel: 'Sí, eliminar',
       // Antes solo decía "se eliminará la cuenta". Sus vendedores cambiaban de
@@ -3646,8 +3764,25 @@ function filaCuenta(a, esYo) {
     if (!ok) return;
     try { await API.del('/api/admin/admins/' + a.id); toast(quees[0].toUpperCase() + quees.slice(1) + ' eliminado'); refrescarPantalla(); }
     catch (e) { if (!guard(e)) toast(e.message); }
+    },
+  });
+  // La ficha: el nombre arriba y cada acción con su renglón de qué hace. Lo
+  // peligroso hasta abajo y en rojo, como en el resto del panel.
+  abrir.onclick = () => {
+    modal(`<div class="h1" style="font-size:18px">${esc(a.username)}${
+        esLi ? ' <span class="lid-chip">LÍDER</span>' : ''}</div>
+      <div class="muted mt8" style="font-size:12px">${n ? gente : 'sin vendedores'}${
+        nc ? ` · ${nc} colíder${nc === 1 ? '' : 'es'}` : ''}</div>
+      <div class="ad-acc mt16">${acciones.map(x => `
+        <button class="btn ${x.clase} ad-acc-b" data-ac="${x.id}">
+          <span>${x.txt}</span><span class="ad-acc-p">${x.pie}</span></button>`).join('')}</div>`);
+    $$('.ad-acc-b').forEach(bt => bt.onclick = () => {
+      closeModal();
+      const ac = acciones.find(x => x.id === bt.dataset.ac);
+      if (ac) setTimeout(ac.fn, 120);
+    });
   };
-  caja.appendChild(b);
+  caja.appendChild(abrir);
   row.appendChild(caja);
   return row;
 }
@@ -3663,10 +3798,13 @@ async function loadAdmins(silent) {
   if (co) co.innerHTML = '';
   let nCo = 0;
   r.admins.forEach(a => {
-    const esCo = (a.role || 'admin') === 'colider';
-    const destino = esCo ? co : ad;
+    // los líderes viven con los colíderes: son la misma lista de gente que maneja
+    // equipo, solo que uno está una grada más arriba
+    const rol = a.role || 'admin';
+    const deRama = rol === 'colider' || rol === 'lider';
+    const destino = deRama ? co : ad;
     if (!destino) return;
-    if (esCo) nCo++;
+    if (deRama) nCo++;
     destino.appendChild(filaCuenta(a, a.id === r.me));
   });
   if (co && !nCo) co.innerHTML = '<div class="muted">Todavía no has dado de alta a ningún colíder.</div>';

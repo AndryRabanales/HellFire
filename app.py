@@ -209,13 +209,24 @@ CREATE TABLE IF NOT EXISTS admins (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE,
   pass_hash TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'admin',   -- admin | colider (el colíder ve solo su grupo)
+  role TEXT NOT NULL DEFAULT 'admin',   -- admin | lider | colider
+                                        --   admin  = dueña del evento, ve todo
+                                        --   lider  = manda en SU rama: crea colíderes
+                                        --            y vendedores, cobra y anula ahí
+                                        --            dentro, y del resto no ve nada
+                                        --   colider = ve solo su grupo de vendedores
+  parent_admin_id INTEGER,              -- de quién cuelga. NULL = la dueña del evento.
+                                        -- Un colíder de un líder cuelga de ÉL, y por eso
+                                        -- su gente entra en la rama del líder y no en la
+                                        -- de nadie más.
   active INTEGER NOT NULL DEFAULT 1,    -- 0 = congelado: ni él ni su grupo entran, pero
                                         -- no se borra ni se mueve nada. Se revierte.
   created_at TEXT NOT NULL,
   last_login TEXT,                      -- la última vez que entró: sirve para saber
                                         -- si un colíder ya está usando su cuenta
-  tutorial_seen INTEGER NOT NULL DEFAULT 0
+  tutorial_seen INTEGER NOT NULL DEFAULT 0,
+  tour_lider_seen INTEGER NOT NULL DEFAULT 0   -- la guía de líder, aparte de la de
+                                               -- colíder: el que sube ya vio la suya
 );
 CREATE TABLE IF NOT EXISTS sellers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -941,6 +952,9 @@ def init_db():
         db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
                    "active INTEGER NOT NULL DEFAULT 1")
         db.execute("ALTER TABLE seller_payments ADD COLUMN IF NOT EXISTS owner_admin_id INTEGER")
+        db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS parent_admin_id INTEGER")
+        db.execute("ALTER TABLE admins ADD COLUMN IF NOT EXISTS "
+                   "tour_lider_seen INTEGER NOT NULL DEFAULT 0")
     else:
         cols = [r["name"] for r in db.execute("PRAGMA table_info(tickets)").fetchall()]
         if "qr_payload" not in cols:
@@ -1016,6 +1030,11 @@ def init_db():
             db.execute("ALTER TABLE audit_log ADD COLUMN actor_role TEXT")
         if "active" not in acols:
             db.execute("ALTER TABLE admins ADD COLUMN active INTEGER NOT NULL DEFAULT 1")
+        if "parent_admin_id" not in acols:
+            db.execute("ALTER TABLE admins ADD COLUMN parent_admin_id INTEGER")
+        if "tour_lider_seen" not in acols:
+            db.execute("ALTER TABLE admins ADD COLUMN tour_lider_seen "
+                       "INTEGER NOT NULL DEFAULT 0")
         ycols = [r["name"] for r in db.execute("PRAGMA table_info(seller_payments)").fetchall()]
         if "owner_admin_id" not in ycols:
             db.execute("ALTER TABLE seller_payments ADD COLUMN owner_admin_id INTEGER")
@@ -1522,9 +1541,21 @@ def grupo_congelado(db, seller):
     y no tiene nada que ver con el pleito."""
     if not seller or seller["owner_admin_id"] is None:
         return False
-    r = db.execute("SELECT active FROM admins WHERE id=?",
-                   (seller["owner_admin_id"],)).fetchone()
-    return bool(r) and not r["active"]
+    # Se mira la cadena entera hacia arriba: si se congela un LÍDER, también se
+    # apagan los vendedores de sus colíderes. Si solo se mirara al dueño directo, el
+    # líder quedaría fuera y su rama entera seguiría vendiendo como si nada.
+    aid = seller["owner_admin_id"]
+    for _ in range(6):
+        r = db.execute("SELECT active, parent_admin_id FROM admins WHERE id=?",
+                       (aid,)).fetchone()
+        if not r:
+            return False
+        if not r["active"]:
+            return True
+        aid = r["parent_admin_id"]
+        if not aid:
+            return False
+    return False
 
 def current_session():
     token = (request.headers.get("Authorization") or "").replace("Bearer ", "").strip()
@@ -1570,6 +1601,38 @@ def require_seller():
 def es_colider(s):
     return bool(s) and s["role"] == "admin" and (s["admin"]["role"] or "admin") == "colider"
 
+
+def es_lider(s):
+    """El jefe de una rama: crea colíderes y vendedores dentro de ella, cobra y anula
+    ahí adentro, y del resto del evento no ve nada."""
+    return bool(s) and s["role"] == "admin" and (s["admin"]["role"] or "admin") == "lider"
+
+
+def tiene_rama(s):
+    """¿Esta sesión está acotada a una rama? Colíder y líder sí; la dueña no."""
+    return es_colider(s) or es_lider(s)
+
+
+def subarbol(db, admin_id):
+    """Todos los ids de cuentas que cuelgan de esta, ella incluida.
+
+    Un colíder es solo él. Un líder es él MÁS sus colíderes, porque la gente de sus
+    colíderes es gente de su rama: si no se contara, su total diría una cosa y la
+    suma de sus colíderes otra, y el día del corte no cuadraría con nadie.
+
+    Se baja nivel por nivel y con tope: un árbol con un ciclo —alguien colgando de su
+    propio hijo por un dedazo en la base— colgaría el servidor entero."""
+    vistos, frente = {admin_id}, [admin_id]
+    for _ in range(6):
+        if not frente:
+            break
+        marcas = ",".join("?" * len(frente))
+        hijos = [r["id"] for r in db.execute(
+            f"SELECT id FROM admins WHERE parent_admin_id IN ({marcas})", tuple(frente)).fetchall()]
+        frente = [h for h in hijos if h not in vistos]
+        vistos.update(frente)
+    return sorted(vistos)
+
 def require_admin():
     """SOLO administradores de verdad. El colíder entra por require_panel().
 
@@ -1579,9 +1642,25 @@ def require_admin():
     s = current_session()
     if not s or s["role"] != "admin":
         return None
-    if es_colider(s):
+    # Ni el colíder ni el líder: los dos mandan dentro de SU rama, no sobre el evento.
+    # Precios, fases, promociones, cortesías, flyers y el borrado viven detrás de
+    # esta puerta, y de este lado solo está la dueña.
+    if tiene_rama(s):
         return None
     return s
+
+
+def require_jefe():
+    """Quien puede dar de alta gente: la dueña y los líderes.
+
+    El líder llegó para repartir trabajo —crea sus colíderes y sus vendedores—, pero
+    solo dentro de su rama; quién queda colgando de quién lo decide el servidor, no
+    la pantalla."""
+    s = current_session()
+    if not s or s["role"] != "admin" or es_colider(s):
+        return None
+    return s
+
 
 def require_panel():
     """Admin o colíder. Solo para lo que el colíder SÍ puede: ver su grupo, dar de
@@ -1591,10 +1670,27 @@ def require_panel():
         return None
     return s
 
+def _en_rama(columna, ambito):
+    """Pedazo de SQL + parámetros para "esta columna cae dentro de mi rama".
+
+    Un solo lugar que arme el IN: con nueve consultas filtrando a mano, basta que una
+    se quede con el "=" viejo para que un líder vea de más o de menos, y eso no se
+    nota hasta que un número no cuadra."""
+    if not ambito:
+        return "", ()
+    return f" AND {columna} IN ({','.join('?' * len(ambito))})", tuple(ambito)
+
+
 def mi_ambito(s):
-    """El id del dueño cuyos datos puede ver quien está en sesión. None = todo el
-    sistema (admin). Un número = solo lo de ese colíder."""
-    return s["admin"]["id"] if es_colider(s) else None
+    """Qué cuentas puede ver quien está en sesión. None = todo el evento (la dueña).
+
+    Devuelve una LISTA de ids, no uno solo: un líder ve su rama entera —él y sus
+    colíderes—, así que el filtro dejó de ser "owner_admin_id = este" y pasó a ser
+    "owner_admin_id está en estos". Para un colíder la lista trae un solo id, así que
+    el resultado es idéntico al de antes."""
+    if not tiene_rama(s):
+        return None
+    return subarbol(get_db(), s["admin"]["id"])
 
 # El candado por identidad es más flojo a propósito: nadie teclea mal su propio
 # código veinte veces, pero el que rocía un código desde cien direcciones sí. Si
@@ -1899,8 +1995,15 @@ def puede_gestionar(db, admin, sel):
     y la condición se cumplía igual—."""
     if owns_seller(admin, sel):
         return True
-    if (admin.get("role") if isinstance(admin, dict) else admin["role"]) == "colider":
+    rol = (admin.get("role") if isinstance(admin, dict) else admin["role"]) or "admin"
+    # El colíder nunca sale de su grupo.
+    if rol == "colider":
         return False
+    # El líder sí, pero solo hacia abajo: alcanza a la gente de SUS colíderes y a
+    # nadie más. Sin este freno llegaría al equipo de la dueña, porque la regla vieja
+    # —"el dueño del vendedor es un colíder"— se cumple también ahí.
+    if rol == "lider":
+        return sel["owner_admin_id"] in subarbol(db, admin["id"])
     return duenio_es_colider(db, sel)
 
 def puede_cobrar(db, sesion, sel):
@@ -1916,6 +2019,14 @@ def puede_cobrar(db, sesion, sel):
       abajo el admin cobra.
     """
     admin = sesion["admin"]
+    if es_lider(sesion):
+        # Cobra a toda su rama —sus vendedores y los de sus colíderes—, menos a sí
+        # mismo: su propia cuenta se la cobra quien está arriba de él.
+        if sel["owner_admin_id"] not in subarbol(get_db(), admin["id"]):
+            return False, "no es de tu rama"
+        if sel["es_lider"] and sel["owner_admin_id"] == admin["id"]:
+            return False, "Tu propia cuenta te la cobra un administrador"
+        return True, None
     if es_colider(sesion):
         if sel["owner_admin_id"] != admin["id"]:
             return False, "no es de tu grupo"
@@ -1937,7 +2048,7 @@ def duenio_es_colider(db, seller_row):
         return False
     a = db.execute("SELECT role FROM admins WHERE id=?",
                    (seller_row["owner_admin_id"],)).fetchone()
-    return bool(a) and (a["role"] or "admin") == "colider"
+    return bool(a) and (a["role"] or "admin") in ("colider", "lider")
 
 def owns_seller(admin, seller_row):
     """Un admin es dueño del vendedor si lo creó. Vendedores antiguos sin dueño
@@ -2658,17 +2769,17 @@ def admin_summary():
     # El colíder ve SOLO lo de su grupo. No es que se le oculte el total: es que para
     # él ese total no existe, porque nunca recibe una fila que no sea suya.
     duenio = mi_ambito(s)
-    filtro = (" AND seller_id IN (SELECT id FROM sellers WHERE owner_admin_id=?)"
+    _dentro, par = _en_rama("owner_admin_id", duenio)
+    filtro = (f" AND seller_id IN (SELECT id FROM sellers WHERE 1=1{_dentro})"
               if duenio else "")
-    par = (duenio,) if duenio else ()
     tot = db.execute(f"""SELECT
         SUM(CASE WHEN status!='void' THEN 1 ELSE 0 END) AS n,
         SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS cents,
         SUM(CASE WHEN status='used' THEN 1 ELSE 0 END) AS entered
         FROM tickets WHERE {NOT_GUEST}{filtro}""", par).fetchone()
     paid = db.execute(
-        "SELECT COALESCE(SUM(paid_cents),0) AS c FROM sellers WHERE hidden=0" +
-        (" AND owner_admin_id=?" if duenio else ""), par).fetchone()["c"]
+        "SELECT COALESCE(SUM(paid_cents),0) AS c FROM sellers WHERE hidden=0" + _dentro,
+        par).fetchone()["c"]
     # Las cortesías viven fuera de todo lo de arriba: las genera el vendedor oculto y
     # NOT_GUEST las deja fuera, que es lo correcto para el dinero —no pagan— pero no
     # para la puerta: esa gente sí entra y hay que contarla para saber a cuántos se
@@ -2685,7 +2796,7 @@ def admin_summary():
         FROM sellers s
         LEFT JOIN (SELECT seller_id, SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END) AS sold
                    FROM tickets GROUP BY seller_id) tk ON tk.seller_id = s.id
-        WHERE s.deleted=0 AND s.hidden=0{" AND s.owner_admin_id=?" if duenio else ""}
+        WHERE s.deleted=0 AND s.hidden=0{_en_rama("s.owner_admin_id", duenio)[0]}
         GROUP BY COALESCE(s.owner_admin_name, 'Sin asignar')
         ORDER BY sold_cents DESC""", par).fetchall()
     admins = [{"admin": r["admin_name"], "sold": money(r["sold_cents"]),
@@ -2696,13 +2807,25 @@ def admin_summary():
     # guía le taparía la pantalla cada vez que entra.
     falta_tour = False
     if duenio:
-        r = db.execute("SELECT tutorial_seen FROM admins WHERE id=?", (duenio,)).fetchone()
+        r = db.execute("SELECT tutorial_seen FROM admins WHERE id=?",
+                       (s["admin"]["id"],)).fetchone()
         falta_tour = bool(r and not r["tutorial_seen"])
     return jsonify(total_tickets=tot["n"] or 0, total=money(tot["cents"] or 0),
                    entered=tot["entered"] or 0, collected=money(paid), by_admin=admins,
                    cortesias=(cor["n"] or 0) if cor else 0,
                    cortesias_entered=(cor["entered"] or 0) if cor else 0,
-                   soy_colider=bool(duenio), yo=s["admin"]["username"],
+                   soy_colider=bool(duenio), soy_lider=es_lider(s),
+                   # ¿le falta la guía de líder? Sale sola la primera vez que entra
+                   # con el nivel nuevo, igual que la de colíder
+                   tour_lider_pendiente=bool(es_lider(s) and not (db.execute(
+                       "SELECT tour_lider_seen FROM admins WHERE id=?",
+                       (s["admin"]["id"],)).fetchone() or {"tour_lider_seen": 1})["tour_lider_seen"]),
+                   # cuántos colíderes cuelgan de él: su panel saluda distinto el día
+                   # que ya tiene equipo armado
+                   mis_colideres=(db.execute(
+                       "SELECT COUNT(*) c FROM admins WHERE parent_admin_id=? AND role='colider'",
+                       (s["admin"]["id"],)).fetchone()["c"] if es_lider(s) else 0),
+                   yo=s["admin"]["username"],
                    tutorial_pendiente=falta_tour)
 
 def ticket_filters(prefix="", con_cortesias=False):
@@ -2753,8 +2876,9 @@ def admin_tickets():
     if duenio:
         # el colíder ve boletos, pero solo los de su grupo — y las cortesías son del
         # dueño del evento, así que ni de reojo (con_cortesias ya lo dejó fuera)
-        where += (" AND " if where else " WHERE ") + "s.owner_admin_id=?"
-        params = list(params) + [duenio]
+        _dentro, _par = _en_rama("s.owner_admin_id", duenio)
+        where += (" AND " if where else " WHERE ") + _dentro.replace(" AND ", "", 1)
+        params = list(params) + list(_par)
     rows = db.execute(
         "SELECT t.*, s.owner_admin_id AS owner_admin_id, s.owner_admin_name AS owner_admin_name "
         "FROM tickets t LEFT JOIN sellers s ON s.id = t.seller_id"
@@ -2840,8 +2964,8 @@ def void_ticket(tid):
         # un colíder solo dentro de su grupo: ni los de otro grupo ni los del admin
         sel = db.execute("SELECT owner_admin_id FROM sellers WHERE id=?",
                          (t["seller_id"],)).fetchone() if t["seller_id"] else None
-        if not sel or sel["owner_admin_id"] != duenio:
-            return jsonify(error="Ese boleto no es de tu grupo"), 403
+        if not sel or sel["owner_admin_id"] not in duenio:
+            return jsonify(error="Ese boleto no es de tu rama"), 403
     else:
         ok, owner = can_void(s["admin"], db, t)
         if not ok:
@@ -3495,8 +3619,8 @@ def list_sellers():
         GROUP BY s.id ORDER BY s.deleted, s.id""").fetchall()
     duenio = mi_ambito(s)
     if duenio:
-        # el colíder solo ve a los suyos (y a sí mismo)
-        rows = [r for r in rows if r["owner_admin_id"] == duenio]
+        # cada quien ve a los suyos: el colíder a su grupo, el líder a toda su rama
+        rows = [r for r in rows if r["owner_admin_id"] in duenio]
     out = []
     for r in rows:
         d = dict(r)
@@ -3543,8 +3667,7 @@ def rendimiento():
     # se compara a su gente salen de su propio grupo, no del evento entero. Medir a
     # sus vendedores contra el total le enseñaría de rebote cuánto vende el resto.
     duenio = mi_ambito(s)
-    ambito = " AND s.owner_admin_id=?" if duenio else ""
-    par = (duenio,) if duenio else ()
+    ambito, par = _en_rama("s.owner_admin_id", duenio)
 
     filas = db.execute(f"""
         SELECT s.id, s.name,
@@ -3570,7 +3693,8 @@ def rendimiento():
 
     # Qué tipo se está vendiendo. Sirve para decidir dónde empujar: si el Ultra VIP
     # no se mueve, no es lo mismo que si no se mueve el Externo.
-    dentro = (" AND seller_id IN (SELECT id FROM sellers WHERE owner_admin_id=?)"
+    _d2, _ = _en_rama("owner_admin_id", duenio)
+    dentro = (f" AND seller_id IN (SELECT id FROM sellers WHERE 1=1{_d2})"
               if duenio else "")
     por_tipo = [dict(r) for r in db.execute(f"""
         SELECT type_name AS nombre, COUNT(*) AS boletos, SUM(price_cents) AS monto
@@ -3700,10 +3824,18 @@ def rendimiento():
     # Por colíder, partido en dos: lo que vendió ÉL y lo que vendió su equipo. Un solo
     # número esconde justo lo que se quiere saber —si trabaja o solo administra—.
     colideres = []
-    lideres_q = ("SELECT id, username FROM admins WHERE role='colider' AND id=? "
-                 if duenio else
-                 "SELECT id, username FROM admins WHERE role='colider' ORDER BY username")
-    for l in db.execute(lideres_q, par).fetchall():
+    # El colíder solo se ve a sí mismo; el líder, a él y a sus colíderes.
+    if duenio:
+        _marcas = ",".join("?" * len(duenio))
+        lideres_q = ("SELECT id, username, role FROM admins "
+                     f"WHERE role IN ('colider','lider') AND id IN ({_marcas}) "
+                     "ORDER BY username")
+        _par_l = tuple(duenio)
+    else:
+        lideres_q = ("SELECT id, username, role FROM admins "
+                     "WHERE role IN ('colider','lider') ORDER BY username")
+        _par_l = ()
+    for l in db.execute(lideres_q, _par_l).fetchall():
         filas_c = db.execute(f"""
             SELECT s.id, s.name, s.es_lider,
                    COUNT(t.id) AS boletos,
@@ -3718,14 +3850,35 @@ def rendimiento():
         equipo = [r for r in filas_c if not r["es_lider"]]
         sm = lambda rs, c: sum(r[c] or 0 for r in rs)
         activos_eq = len([r for r in equipo if (r["boletos"] or 0) > 0])
+        # LA RAMA DE UN LÍDER. Sin esto, su tarjeta contaba solo a sus vendedores
+        # directos y su total decía una cosa mientras su propio resumen decía otra —y
+        # la diferencia es justo lo que venden sus colíderes, que es por lo que cobra.
+        hijos = [r["id"] for r in db.execute(
+            "SELECT id FROM admins WHERE parent_admin_id=?", (l["id"],)).fetchall()]
+        rama = {"boletos": 0, "monto": 0, "colideres": len(hijos)}
+        if hijos:
+            ids = sorted({x for h in hijos for x in subarbol(db, h)})
+            marcas = ",".join("?" * len(ids))
+            r = db.execute(f"""
+                SELECT COUNT(t.id) AS boletos, COALESCE(SUM(t.price_cents),0) AS monto
+                FROM sellers s
+                LEFT JOIN tickets t ON t.seller_id=s.id AND t.status!='void' AND t.es_cortesia=0
+                WHERE s.hidden=0 AND s.deleted=0 AND s.owner_admin_id IN ({marcas})""",
+                tuple(ids)).fetchone()
+            rama = {"boletos": r["boletos"] or 0, "monto": money(r["monto"] or 0),
+                    "colideres": len(hijos)}
+        _tot_b = sm(filas_c, "boletos") + rama["boletos"]
+        _tot_m = money(sm(filas_c, "monto")) + rama["monto"]
         colideres.append({
             "nombre": l["username"],
+            "es_lider_rama": (l["role"] or "") == "lider",
             "propio": {"boletos": sm(propio, "boletos"), "monto": money(sm(propio, "monto"))},
             "equipo": {"boletos": sm(equipo, "boletos"), "monto": money(sm(equipo, "monto")),
                        "vendedores": len(equipo), "activos": activos_eq,
                        "sin_vender": len(equipo) - activos_eq},
-            "total": {"boletos": sm(filas_c, "boletos"), "monto": money(sm(filas_c, "monto"))},
-            "pct": (round(100.0 * money(sm(filas_c, "monto")) / money(total_monto), 1)
+            "rama": rama,
+            "total": {"boletos": _tot_b, "monto": _tot_m},
+            "pct": (round(100.0 * _tot_m / money(total_monto), 1)
                     if total_monto else 0),
             "miembros": [{"name": r["name"], "es_lider": bool(r["es_lider"]),
                           "boletos": r["boletos"] or 0, "monto": money(r["monto"] or 0),
@@ -3927,7 +4080,7 @@ def ranking_vendedores():
                  s.owner_admin_name""").fetchall()
     duenio = mi_ambito(s)
     if duenio:
-        rows = [r for r in rows if r["owner_admin_id"] == duenio]
+        rows = [r for r in rows if r["owner_admin_id"] in duenio]
     filas = [dict(r) for r in rows]
     # El orden que se pidió manda; el otro dato desempata. Dos vendedores con nueve
     # boletos no están empatados si uno vendió puros Ultra VIP.
@@ -3970,7 +4123,11 @@ def comision_general(db):
     except (TypeError, ValueError):
         return 10.0
 
-COMISION_COLIDER_MIN = 20.0   # el trato con un colíder nunca baja de aquí
+# Lo que le toca a cada quien cuando nadie escribió un número en su ficha. Son los
+# tratos de la casa: un líder maneja colíderes, un colíder maneja vendedores y un
+# vendedor vende. Si se le escribe otro, ese manda.
+COMISION_POR_NIVEL = {"lider": 30.0, "colider": 20.0}
+COMISION_COLIDER_MIN = 0.0    # ya no hay piso: el porcentaje se elige en cada corte
 
 def ocupados_de(db, tid):
     """Boletos vivos de este tipo. Cuenta las cortesías: el cupo del backstage es un
@@ -4000,12 +4157,21 @@ def lugares_libres(db, tt):
     return max(0, int(cupo) - ocupados_de(db, tt["id"]))
 
 
+def es_lider_de(db, sid):
+    """Si esta ficha de vendedor es la cuenta personal de un líder o de un colíder,
+    devuelve su nivel; si es un vendedor normal, None. Sirve para saber qué trato le
+    toca por omisión sin tener que mirar la tabla de cuentas desde cada pantalla."""
+    r = db.execute("""SELECT a.role FROM sellers s JOIN admins a ON a.id=s.owner_admin_id
+                      WHERE s.id=? AND s.es_lider=1""", (sid,)).fetchone()
+    return (r["role"] or None) if r else None
+
+
 def es_de_colider(db, sid):
     """¿Este vendedor pertenece al grupo de un colíder? (incluye la ficha del propio
     colíder, que también vende en persona)."""
     r = db.execute("""SELECT a.role FROM sellers s JOIN admins a ON a.id=s.owner_admin_id
                       WHERE s.id=?""", (sid,)).fetchone()
-    return bool(r and r["role"] == "colider")
+    return bool(r and r["role"] in ("colider", "lider"))
 
 
 def comision_pct(db, sid=None):
@@ -4035,8 +4201,10 @@ def comision_colider(db, admin_id):
                       WHERE owner_admin_id=? AND es_lider=1 AND deleted=0
                       ORDER BY id LIMIT 1""", (admin_id,)).fetchone()
     if r is not None and r["commission_pct"] is not None:
-        return max(COMISION_COLIDER_MIN, min(100.0, float(r["commission_pct"])))
-    return COMISION_COLIDER_MIN
+        return max(0.0, min(50.0, float(r["commission_pct"])))
+    # sin número escrito, el de su nivel: líder 30, colíder 20
+    a = db.execute("SELECT role FROM admins WHERE id=?", (admin_id,)).fetchone()
+    return COMISION_POR_NIVEL.get((a["role"] if a else "") or "", 20.0)
 
 def vendido_cents(db, sid):
     return db.execute("""SELECT COALESCE(SUM(CASE WHEN status!='void' THEN price_cents ELSE 0 END),0) AS c
@@ -4124,7 +4292,7 @@ def list_seller_payments(sid):
     if not sel:
         return jsonify(error="no existe"), 404
     # un colíder no puede ni ASOMARSE a la cuenta de un vendedor que no es suyo
-    if es_colider(s) and sel["owner_admin_id"] != s["admin"]["id"]:
+    if tiene_rama(s) and sel["owner_admin_id"] not in (mi_ambito(s) or []):
         return jsonify(error="no existe"), 404
     out = estado_cuenta(db, sid)
     out["seller_name"] = sel["name"]
@@ -4137,13 +4305,26 @@ def list_seller_payments(sid):
     # porcentaje es del COLÍDER, así que solo su propia ficha lo lleva. A un vendedor
     # de su equipo se le sigue diciendo que no —esas ventas pagarían dos veces—.
     out["es_lider"] = bool(sel["es_lider"])
-    # Al de un grupo también se le puede escribir su porcentaje: ya no se descuenta
-    # de nada, así que no hay doble cobro que evitar, y sin eso su ficha no podía
-    # decirle a nadie cuánto le toca. Quien NO lo mueve sigue siendo el colíder: el
-    # trato con su gente lo pone el organizador.
-    out["can_commission"] = ((not es_colider(s))
-                             and puede_gestionar(db, s["admin"], sel))
-    out["commission_min"] = COMISION_COLIDER_MIN if out["es_lider"] else 0
+    # ¿se le puede abrir cuenta de panel? Solo la dueña o un líder, solo a gente de su
+    # rama, y solo si todavía no tiene una: un vendedor que ya es colíder no se sube
+    # dos veces.
+    out["puede_subir"] = bool(
+        (not es_colider(s)) and (not sel["es_lider"])
+        and puede_gestionar(db, s["admin"], sel)
+        and not db.execute("SELECT 1 FROM sellers WHERE id=? AND es_lider=1",
+                           (sid,)).fetchone())
+    # El trato de cada quien lo pone QUIEN LO MANEJA: la dueña con los suyos, el
+    # líder con su rama y el colíder con su gente. Lo que ninguno puede es subirse el
+    # suyo —su propia ficha la mueve quien está arriba de él—, porque eso sería
+    # decidir cuánto gana uno mismo.
+    propia = (sel["owner_admin_id"] == s["admin"]["id"]) and sel["es_lider"]
+    out["can_commission"] = bool(puede_gestionar(db, s["admin"], sel) and not propia)
+    out["commission_min"] = 0
+    # lo que le toca por su nivel si nadie le escribió un número
+    out["commission_default"] = (
+        COMISION_POR_NIVEL.get("lider") if (es_lider_de(db, sid) == "lider")
+        else COMISION_POR_NIVEL.get("colider") if (es_lider_de(db, sid) == "colider")
+        else comision_general(db))
     # el descuento que vende hoy este vendedor (None = ninguno)
     try:
         out["descuento_pct"] = (sel["descuento_pct"]
@@ -4186,15 +4367,25 @@ def add_seller_payment(sid):
     if ya + abono > vendido:
         falta = (vendido - ya) / 100
         return jsonify(error=f"Se pasa de lo que debe. Su saldo pendiente es ${falta:,.2f}"), 400
-    # La comisión dejó de descontarse en el corte: el vendedor entrega el 100% y lo
-    # suyo se le paga aparte, fuera del sistema. Restarla aquí era la fuente de la
-    # confusión —tres números distintos para una sola entrega— y además obligaba a
-    # cuadrar de cabeza cuánto efectivo tenía que aparecer en la mesa.
-    # El porcentaje SÍ se sigue congelando en la fila: es la referencia de qué trato
-    # tenía ese día, y sin él un corte viejo no se puede explicar.
-    pct = comision_pct(db, sid)
-    comision = 0
-    efectivo = abono
+    # EL PORCENTAJE SE ELIGE EN CADA CORTE, no se hereda de la ficha.
+    #
+    # Antes el corte nunca descontaba nada —todos entregaban el 100% y lo suyo se
+    # pagaba por fuera—, y eso obligaba a llevar en la cabeza a quién ya se le dio su
+    # parte. Ahora, en el momento de cobrar, se dice con cuánto se queda esa persona:
+    # 0 si no se le da nada hoy, o lo que se haya acordado. Lo que entra a la caja es
+    # el abono MENOS esa parte, y las dos cifras quedan congeladas en el corte, así
+    # que un cambio de trato mañana no reescribe lo de hoy.
+    #
+    # Sin `pct` en la petición se cobra al 0%: una pantalla vieja que no sepa mandarlo
+    # no puede regalar una comisión por su cuenta.
+    try:
+        pct = float(b.get("pct", 0) or 0)
+    except (TypeError, ValueError):
+        return jsonify(error="El porcentaje debe ser un número"), 400
+    if pct < 0 or pct > 50:
+        return jsonify(error="El porcentaje del corte va de 0 a 50"), 400
+    comision = int(round(abono * pct / 100))
+    efectivo = abono - comision
     db.execute("""INSERT INTO seller_payments
         (seller_id, seller_name, amount_cents, commission_cents, cash_cents,
          commission_pct, note, created_by, owner_admin_id, created_at)
@@ -4316,7 +4507,7 @@ def pagar_a_su_gente(sid):
         return jsonify(error=f"{sel['name']} no es de ningún grupo: su comisión se "
                              f"la queda al entregar, no se le reparte aparte."), 400
     # el colíder solo reparte dentro de SU grupo
-    if es_colider(s) and sel["owner_admin_id"] != s["admin"]["id"]:
+    if tiene_rama(s) and sel["owner_admin_id"] not in (mi_ambito(s) or []):
         return jsonify(error="no existe"), 404
     b = request.json or {}
     try:
@@ -4381,7 +4572,7 @@ def export_seller_payments(sid):
         return jsonify(error="no existe"), 404
     # el mismo candado que en el estado de cuenta en pantalla: si no se pusiera aquí,
     # bastaba con pedir el Excel por número para leer las cuentas de otro grupo
-    if es_colider(s) and sel["owner_admin_id"] != s["admin"]["id"]:
+    if tiene_rama(s) and sel["owner_admin_id"] not in (mi_ambito(s) or []):
         return jsonify(error="no existe"), 404
     c = estado_cuenta(db, sid)
     # Mismo criterio que la pantalla: la comisión NO se recalcula con el % de hoy.
@@ -4407,8 +4598,9 @@ def export_seller_payments(sid):
     resumen = [
         ("Vendió en boletos", c["sold"]),
     ]
+    # igual que arriba: la palabra solo aparece si hubo algo que decir
     if comision_total > 0.005:
-        resumen.append(("Comisión de sus cortes anteriores", -comision_total))
+        resumen.append(("Se ha quedado él, en sus cortes", -comision_total))
     resumen += [
         ("Ya entregó" + (f" en {len(c['payments'])} corte(s)" if c["payments"] else ""),
          c["cash_total"]),
@@ -4422,8 +4614,13 @@ def export_seller_payments(sid):
         fila += 1
 
     fila += 1
-    encabezados = ["Corte", "Fecha", "Efectivo entregado", "Cubrió de su cuenta",
-                   "Su comisión", "Quedó debiendo", "Nota", "Registró"]
+    # La columna de comisión SOLO si en algún corte se le dio algo. Un "Su comisión:
+    # $0" renglón tras renglón hace dudar a quien lo lee de si se le quedó a deber, y
+    # este archivo se le manda a él.
+    hubo_comision = any(p["commission"] > 0.005 for p in c["payments"])
+    encabezados = (["Corte", "Fecha", "Te entregó", "Cubrió de su cuenta"]
+                   + (["Se quedó él", "%"] if hubo_comision else [])
+                   + ["Quedó debiendo", "Nota", "Registró"])
     for col, h in enumerate(encabezados, 1):
         cel = ws.cell(row=fila, column=col, value=h)
         cel.font = Font(bold=True, color="FFFFFF")
@@ -4431,15 +4628,26 @@ def export_seller_payments(sid):
     # del más viejo al más nuevo: se lee como fue pagando
     for p in reversed(c["payments"]):
         fila += 1
-        ws.cell(row=fila, column=1, value=f"Pago {p['n']}").font = etiqueta
+        ws.cell(row=fila, column=1, value=f"Corte {p['n']}").font = etiqueta
         ws.cell(row=fila, column=2, value=p["created_at"])
-        for col, val in enumerate([p["cash"], p["amount"], p["commission"],
-                                   p["balance_after"]], 3):
+        montos = [p["cash"], p["amount"]]
+        if hubo_comision:
+            montos.append(p["commission"])
+        montos.append(p["balance_after"])
+        col = 3
+        for val in montos:
             cel = ws.cell(row=fila, column=col, value=val)
             cel.number_format = dinero
-        ws.cell(row=fila, column=7, value=p["note"])
-        ws.cell(row=fila, column=8, value=p["created_by"])
-    for col, ancho in enumerate([10, 19, 19, 20, 14, 17, 26, 14], 1):
+            col += 1
+            if hubo_comision and col == 6:      # el % va entre la comisión y el saldo
+                pc = ws.cell(row=fila, column=col,
+                             value=(p["commission_pct"] or 0) / 100 if p["commission"] > 0.005 else None)
+                pc.number_format = '0%'
+                col += 1
+        ws.cell(row=fila, column=col, value=p["note"]); col += 1
+        ws.cell(row=fila, column=col, value=p["created_by"])
+    anchos = ([10, 19, 16, 20] + ([15, 7] if hubo_comision else []) + [17, 26, 14])
+    for col, ancho in enumerate(anchos, 1):
         ws.column_dimensions[get_column_letter(col)].width = ancho
 
     buf = BytesIO()
@@ -4550,11 +4758,11 @@ def create_seller():
         # a un colíder que "ya existe un Luis" cuando el Luis es de otro grupo le
         # confirma vendedores que no tiene por qué conocer
         ambito = mi_ambito(s)
+        _dentro, _par = _en_rama("owner_admin_id", ambito)
         igual = db.execute(
             "SELECT code FROM sellers WHERE deleted=0 AND hidden=0 "
-            "AND LOWER(TRIM(name))=LOWER(TRIM(?))"
-            + (" AND owner_admin_id=?" if ambito else ""),
-            ((name, ambito) if ambito else (name,))).fetchone()
+            "AND LOWER(TRIM(name))=LOWER(TRIM(?))" + _dentro,
+            (name,) + _par).fetchone()
         if igual:
             return jsonify(error=f"Ya tienes un vendedor llamado «{name}» "
                                  f"(código {igual['code']}).", duplicate=True), 409
@@ -4611,7 +4819,11 @@ def set_descuento(sid):
 
 @app.put("/api/admin/sellers/<int:sid>")
 def edit_seller(sid):
-    s = require_admin()
+    # También el líder y el colíder: por aquí pasa el TRATO de cada quien, y el trato
+    # con su gente lo pone quien la maneja. Los candados de abajo —puede_gestionar y
+    # el de la ficha propia— son los que lo mantienen dentro de su rama y le impiden
+    # subirse el suyo.
+    s = require_panel()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -4624,10 +4836,12 @@ def edit_seller(sid):
         return jsonify(error="no existe"), 404
     if not puede_gestionar(db, s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede modificar a este vendedor"), 403
-    # su propia ficha no: se quedaría sin cuenta de vendedor y su grupo sin cabeza
-    if es_colider(s) and sel["es_lider"]:
-        return jsonify(error="Tu propia cuenta no la puedes dar de baja. "
-                             "Pídeselo al organizador."), 403
+    # Su propia ficha no: ni para darse de baja —se quedaría sin cuenta de vendedor y
+    # su grupo sin cabeza— ni, sobre todo, para subirse el porcentaje. Lo de uno lo
+    # decide quien está arriba.
+    if tiene_rama(s) and sel["es_lider"] and sel["owner_admin_id"] == s["admin"]["id"]:
+        return jsonify(error="Tu propia cuenta no la puedes modificar. "
+                             "Pídeselo a quien te la dio."), 403
     name = str(b.get("name", sel["name"])).strip() or sel["name"]
     code = str(b.get("code", sel["code"])).strip()
     if code != sel["code"]:
@@ -4657,21 +4871,13 @@ def edit_seller(sid):
                 nueva = max(0.0, min(100.0, float(crudo)))
             except (TypeError, ValueError):
                 return jsonify(error="La comisión debe ser un número entre 0 y 100"), 400
-        # Dentro de un grupo el porcentaje no es de cada vendedor: es del colíder,
-        # sobre lo que junte todo el grupo. Ponerle uno propio a alguien de su equipo
-        # rompería el trato —esas ventas pagarían dos veces— así que se rechaza con
-        # su explicación en vez de guardarse a medias.
-        if es_de_colider(db, sid):
-            if sel["es_lider"]:
-                if nueva is None or nueva < COMISION_COLIDER_MIN:
-                    return jsonify(error=f"La comisión de un colíder no puede bajar de "
-                                         f"{COMISION_COLIDER_MIN:g}%. Es sobre lo que junta "
-                                         f"todo su grupo, y de ahí él reparte."), 400
-            else:
-                return jsonify(error=f"{sel['name']} es del grupo de "
-                                     f"{sel['owner_admin_name']}. En un grupo la comisión la "
-                                     f"lleva el colíder sobre el total, y él decide qué le da "
-                                     f"a su gente."), 400
+        # El trato de cada quien lo pone quien lo maneja, y ya nadie paga dos veces:
+        # desde que el porcentaje se elige EN EL CORTE, la ficha solo guarda cuánto se
+        # acordó. Por eso el veto de antes —"en un grupo la comisión la lleva el
+        # colíder"— se retiró: el vendedor de un grupo también tiene su trato escrito,
+        # y quien lo cobra decide en cada corte si se lo da o no.
+        if nueva is not None and nueva > 50:
+            return jsonify(error="El trato no puede pasar del 50%"), 400
         if nueva != sel["commission_pct"]:
             db.execute("UPDATE sellers SET commission_pct=? WHERE id=?", (nueva, sid))
             audit(db, s["admin"]["username"], "usuarios",
@@ -4698,10 +4904,12 @@ def toggle_seller(sid):
         return jsonify(error="no existe"), 404
     if not puede_gestionar(db, s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede modificar a este vendedor"), 403
-    # su propia ficha no: se quedaría sin cuenta de vendedor y su grupo sin cabeza
-    if es_colider(s) and sel["es_lider"]:
-        return jsonify(error="Tu propia cuenta no la puedes dar de baja. "
-                             "Pídeselo al organizador."), 403
+    # Su propia ficha no: ni para darse de baja —se quedaría sin cuenta de vendedor y
+    # su grupo sin cabeza— ni, sobre todo, para subirse el porcentaje. Lo de uno lo
+    # decide quien está arriba.
+    if tiene_rama(s) and sel["es_lider"] and sel["owner_admin_id"] == s["admin"]["id"]:
+        return jsonify(error="Tu propia cuenta no la puedes modificar. "
+                             "Pídeselo a quien te la dio."), 403
     new = 0 if sel["active"] else 1
     db.execute("UPDATE sellers SET active=? WHERE id=?", (new, sid))
     if not new:
@@ -4729,10 +4937,12 @@ def delete_seller(sid):
         return jsonify(error="no existe"), 404
     if not puede_gestionar(db, s["admin"], sel):
         return jsonify(error=f"Solo {sel['owner_admin_name']} (su admin) puede eliminar a este vendedor"), 403
-    # su propia ficha no: se quedaría sin cuenta de vendedor y su grupo sin cabeza
-    if es_colider(s) and sel["es_lider"]:
-        return jsonify(error="Tu propia cuenta no la puedes dar de baja. "
-                             "Pídeselo al organizador."), 403
+    # Su propia ficha no: ni para darse de baja —se quedaría sin cuenta de vendedor y
+    # su grupo sin cabeza— ni, sobre todo, para subirse el porcentaje. Lo de uno lo
+    # decide quien está arriba.
+    if tiene_rama(s) and sel["es_lider"] and sel["owner_admin_id"] == s["admin"]["id"]:
+        return jsonify(error="Tu propia cuenta no la puedes modificar. "
+                             "Pídeselo a quien te la dio."), 403
     n = db.execute("SELECT COUNT(*) c FROM tickets WHERE seller_id=?", (sid,)).fetchone()["c"]
     # RF-87: se elimina la cuenta, los boletos se conservan con su nombre
     db.execute("UPDATE sellers SET deleted=1, active=0, code=NULL WHERE id=?", (sid,))
@@ -4752,8 +4962,11 @@ def list_admins():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     rows = db.execute("""SELECT a.id, a.username, a.created_at, a.role, a.active,
+                a.parent_admin_id,
+                (SELECT username FROM admins p WHERE p.id=a.parent_admin_id) AS parent_name,
                 (SELECT COUNT(*) FROM sellers v WHERE v.owner_admin_id=a.id
-                   AND v.deleted=0 AND v.hidden=0 AND v.es_lider=0) AS vendedores
+                   AND v.deleted=0 AND v.hidden=0 AND v.es_lider=0) AS vendedores,
+                (SELECT COUNT(*) FROM admins h WHERE h.parent_admin_id=a.id) AS colideres
               FROM admins a ORDER BY a.id""").fetchall()
     return jsonify(admins=[dict(r) for r in rows], me=s["admin"]["id"])
 
@@ -4822,7 +5035,10 @@ def cerrar_sesiones():
 
 @app.post("/api/admin/admins")
 def create_admin():
-    s = require_admin()
+    # También el líder: para eso existe. El servidor decide de quién cuelga el que se
+    # crea y con qué rol, así que un líder no puede fabricarse un admin ni colgar a
+    # alguien de la rama de otro.
+    s = require_jefe()
     if not s:
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -4838,8 +5054,15 @@ def create_admin():
     if ya:
         return jsonify(error=f"Ese usuario ya existe (está guardado como «{ya['username']}»)"), 400
     rol = "colider" if b.get("role") == "colider" else "admin"
-    db.execute("INSERT INTO admins(username, pass_hash, created_at, role) VALUES(?,?,?,?)",
-               (username, hash_password(password), now_iso(), rol))
+    if es_lider(s):
+        # un líder solo crea colíderes, y siempre dentro de su propia rama
+        rol = "colider"
+    # De quién cuelga: de quien lo está creando. La dueña queda con parent NULL, así
+    # que sus colíderes cuelgan de ella y los del líder, de él.
+    padre = s["admin"]["id"]
+    db.execute("INSERT INTO admins(username, pass_hash, created_at, role, parent_admin_id) "
+               "VALUES(?,?,?,?,?)",
+               (username, hash_password(password), now_iso(), rol, padre))
     code = None
     reusado = False
     if rol == "colider":
@@ -4878,6 +5101,56 @@ def create_admin():
           + (" — se le conservó el que ya tenía" if reusado else ""))
     db.commit()
     return jsonify(ok=True, code=code, reusado=reusado)
+
+@app.post("/api/admin/admins/<int:aid>/nivel")
+def cambiar_nivel(aid):
+    """Sube un colíder a LÍDER, o lo baja de vuelta. Solo la dueña del evento.
+
+    No mueve un solo dato: la cuenta es la misma, su código de vendedor es el mismo,
+    sus vendedores siguen siendo suyos y lo que le deben sigue igual. Lo único que
+    cambia es qué puede hacer de ahí en adelante —un líder además da de alta
+    colíderes— y hasta dónde alcanza su vista.
+
+    Bajarlo es igual de reversible, con un freno: si ya tiene colíderes colgando, no
+    se baja hasta moverlos, porque esa gente quedaría colgada de alguien que ya no
+    puede verlos ni cobrarles."""
+    s = require_admin()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    if not es_admin_principal(s["admin"]):
+        return jsonify(error="Solo el administrador principal cambia los niveles"), 403
+    nivel = str((request.json or {}).get("nivel", "")).strip()
+    if nivel not in ("lider", "colider"):
+        return jsonify(error="El nivel debe ser lider o colider"), 400
+    db = get_db()
+    a = db.execute("SELECT * FROM admins WHERE id=?", (aid,)).fetchone()
+    if not a:
+        return jsonify(error="no existe"), 404
+    if (a["role"] or "admin") not in ("colider", "lider"):
+        return jsonify(error="Esa cuenta no es de colíder ni de líder"), 400
+    if (a["role"] or "") == nivel:
+        return jsonify(error=f"Ya es {nivel}"), 400
+    if nivel == "colider":
+        hijos = db.execute("SELECT COUNT(*) c FROM admins WHERE parent_admin_id=?",
+                           (aid,)).fetchone()["c"]
+        if hijos:
+            return jsonify(error=f"Tiene {hijos} colíder(es) colgando. Muévelos o "
+                                 f"dalos de baja antes de bajarlo de nivel."), 409
+    db.execute("UPDATE admins SET role=? WHERE id=?", (nivel, aid))
+    # Al subir, su guía de líder queda pendiente: la próxima vez que entre le sale
+    # sola, como le salió la de colíder en su momento. Al bajarlo se vuelve a dejar
+    # pendiente, por si algún día lo suben otra vez.
+    db.execute("UPDATE admins SET tour_lider_seen=0 WHERE id=?", (aid,))
+    # al subir de nivel se queda colgando de quien lo subió: su rama nace aquí
+    if not a["parent_admin_id"]:
+        db.execute("UPDATE admins SET parent_admin_id=? WHERE id=?",
+                   (s["admin"]["id"], aid))
+    audit(db, s["admin"]["username"], "usuarios",
+          f"{'Subió' if nivel == 'lider' else 'Bajó'} a «{a['username']}» a {nivel}"
+          + (" — ahora puede dar de alta colíderes" if nivel == "lider" else ""))
+    db.commit()
+    return jsonify(ok=True, nivel=nivel)
+
 
 @app.post("/api/admin/admins/<int:aid>/toggle")
 def toggle_admin(aid):
@@ -4963,6 +5236,19 @@ def delete_admin(aid):
     db.commit()
     return jsonify(ok=True)
 
+@app.post("/api/admin/tutorial-lider-visto")
+def tour_lider_visto():
+    """El líder terminó su guía. Se apunta en el servidor y no en el teléfono: si
+    cambia de aparato o borra los datos del navegador, ya la vio."""
+    s = require_panel()
+    if not s:
+        return jsonify(error="sin sesión"), 401
+    db = get_db()
+    db.execute("UPDATE admins SET tour_lider_seen=1 WHERE id=?", (s["admin"]["id"],))
+    db.commit()
+    return jsonify(ok=True)
+
+
 @app.post("/api/admin/tutorial-visto")
 def tutorial_panel_visto():
     """El colíder terminó su guía. No se vuelve a mostrar, ni cambiando de teléfono:
@@ -4987,10 +5273,10 @@ def grupos_colider():
         return jsonify(error="sin sesión"), 401
     db = get_db()
     duenio = mi_ambito(s)
-    lideres = db.execute("SELECT id, username, last_login FROM admins WHERE role='colider' "
-                         "ORDER BY username").fetchall()
+    lideres = db.execute("SELECT id, username, last_login, role FROM admins "
+                         "WHERE role IN ('colider','lider') ORDER BY username").fetchall()
     if duenio:
-        lideres = [l for l in lideres if l["id"] == duenio]
+        lideres = [l for l in lideres if l["id"] in duenio]
     salida = []
     for l in lideres:
         filas = db.execute(f"""
@@ -5016,8 +5302,28 @@ def grupos_colider():
         ya_cortado = suma(filas, "paid_cents") - cobrado_grupo
         gana = int(round(cobrado_grupo * pct / 100))
         repartido = repartido_por(db, l["id"])
+        # LA RAMA, solo si es líder: lo que venden sus colíderes y la gente de
+        # ellos. Sin esto su tarjeta contaba únicamente a sus vendedores directos y
+        # decía un total distinto al de su propio resumen —y la diferencia es
+        # justamente aquello por lo que cobra.
+        hijos = [r["id"] for r in db.execute(
+            "SELECT id FROM admins WHERE parent_admin_id=?", (l["id"],)).fetchall()]
+        rama = dict(boletos=0, monto=0, cobrado=0, colideres=len(hijos))
+        if hijos:
+            ids = sorted({x for h in hijos for x in subarbol(db, h)})
+            marcas = ",".join("?" * len(ids))
+            rr = db.execute(f"""
+                SELECT COUNT(t.id) AS n,
+                       COALESCE(SUM(CASE WHEN t.status!='void' THEN t.price_cents ELSE 0 END),0) AS cents,
+                       COALESCE(SUM(s.paid_cents),0) AS pagado
+                FROM sellers s LEFT JOIN tickets t ON t.seller_id=s.id AND t.status!='void'
+                WHERE s.hidden=0 AND s.owner_admin_id IN ({marcas})""", tuple(ids)).fetchone()
+            rama = dict(boletos=rr["n"] or 0, monto=money(rr["cents"] or 0),
+                        cobrado=money(rr["pagado"] or 0), colideres=len(hijos))
         salida.append(dict(
             id=l["id"], nombre=l["username"],
+            es_lider_rama=(l["role"] or "") == "lider",
+            rama=rama,
             comision_pct=pct,
             # cuánto pesa este grupo dentro de toda la venta: con seis colíderes es
             # lo primero que se compara
@@ -5042,8 +5348,9 @@ def grupos_colider():
             equipo=dict(boletos=suma(equipo, "n"), monto=money(suma(equipo, "cents")),
                         cobrado=money(suma(equipo, "paid_cents")),
                         vendedores=len([r for r in equipo if not r["deleted"]])),
-            total=dict(boletos=suma(filas, "n"), monto=money(suma(filas, "cents")),
-                       cobrado=money(suma(filas, "paid_cents"))),
+            total=dict(boletos=suma(filas, "n") + rama["boletos"],
+                       monto=money(suma(filas, "cents")) + rama["monto"],
+                       cobrado=money(suma(filas, "paid_cents")) + rama["cobrado"]),
             ultimo_acceso=l["last_login"],
             miembros=[dict(id=r["id"], name=r["name"], code=r["code"],
                            es_lider=bool(r["es_lider"]), deleted=bool(r["deleted"]),
