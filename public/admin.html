@@ -104,7 +104,7 @@
          de todos los días; dar de alta o dar de baja a un colíder se hace de vez en
          cuando y no tiene por qué estorbar mientras tanto. -->
     <details class="card mt12" id="co-box">
-      <summary class="label" style="margin:0">Dar de alta a un colíder</summary>
+      <summary class="label" style="margin:0">Dar de alta a un colíder o un líder</summary>
       <div class="muted mt8" style="margin-bottom:10px;line-height:1.55">
         Un colíder arma su propio equipo y <b style="color:var(--cream)">solo ve lo de su
         grupo</b>: ni tus ventas, ni las de los demás. Ahí dentro manda —crea vendedores,
@@ -114,8 +114,16 @@
         <b style="color:var(--cream)">no puede borrar el sistema</b>. Se le abre además su
         propio código de vendedor, para lo que venda él en persona.
       </div>
+      <!-- El nivel se elige aquí: antes había que crearlo colíder y subirlo después,
+           que son dos pasos para lo mismo. -->
+      <div class="label mt8" style="font-size:11px">¿Qué va a ser?</div>
+      <div class="row" style="gap:7px;flex-wrap:wrap;margin-bottom:10px">
+        <button type="button" class="btn sm ghost co-nivel sel" data-nivel="colider" style="width:auto">Colíder</button>
+        <button type="button" class="btn sm ghost co-nivel" data-nivel="lider" style="width:auto">Líder</button>
+        <span class="muted" id="co-nivel-x" style="font-size:11px;align-self:center">arma su equipo de vendedores</span>
+      </div>
       <div class="row" style="flex-wrap:wrap;gap:8px">
-        <input class="input grow" id="co-user" placeholder="Usuario del colíder" style="min-width:150px;padding:12px">
+        <input class="input grow" id="co-user" placeholder="Usuario" style="min-width:150px;padding:12px">
         <input class="input grow" id="co-pass" type="password" placeholder="Contraseña (mín. 8)" style="min-width:160px;padding:12px">
         <button class="btn sm" id="btn-co-create" style="padding:13px 16px">Crear colíder</button>
       </div>
@@ -134,12 +142,14 @@
          —precios, flyers, la clave de la puerta—; a quién le abres o le cierras
          el panel de un grupo se decide mirando al grupo, que es lo que hay arriba. -->
     <details class="card mt12" id="co-cuentas">
-      <summary class="label" style="margin:0">Sus cuentas: pausar o quitar</summary>
+      <summary class="label" style="margin:0">Sus cuentas: subir, pausar o quitar</summary>
       <div class="muted mt8" style="margin-bottom:10px;line-height:1.55">
-        <b style="color:var(--cream)">Desactivar</b> pone al colíder y a su equipo en pausa
-        sin borrar ni mover nada, y se deshace cuando quieras. Los boletos ya vendidos
-        siguen pasando en la puerta. <b style="color:var(--cream)">Eliminar</b> es para
-        siempre y su gente pasa a ser tuya.
+        Toca <b style="color:var(--cream)">Opciones</b> en cualquiera y ahí están las tres:
+        <b style="color:#f3d27a">Subir a líder</b> (para que él arme sus propios colíderes),
+        <b style="color:var(--cream)">Desactivar</b> —lo pone a él y a su equipo en pausa sin
+        borrar nada, y se deshace cuando quieras— y <b style="color:var(--cream)">Eliminar</b>,
+        que es para siempre y su gente pasa a ser tuya. Los boletos ya vendidos siguen
+        pasando en la puerta pase lo que pase.
       </div>
       <div id="co-list" style="display:flex;flex-direction:column;gap:8px"></div>
     </details>

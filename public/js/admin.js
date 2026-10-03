@@ -3822,38 +3822,58 @@ $('#btn-ad-create').addEventListener('click', async () => {
   } catch (e) { if (!guard(e)) $('#ad-err').textContent = e.message; }
 });
 
+// el selector de nivel de la caja de alta
+$$('.co-nivel').forEach(b => b.onclick = () => {
+  $$('.co-nivel').forEach(o => o.classList.toggle('sel', o === b));
+  const x = $('#co-nivel-x');
+  if (x) x.textContent = b.dataset.nivel === 'lider'
+    ? 'arma su equipo de colíderes, y cada uno con sus vendedores'
+    : 'arma su equipo de vendedores';
+  // el botón dice lo que va a crear, para no darle a ciegas
+  const bt = $('#btn-co-create');
+  if (bt) bt.textContent = b.dataset.nivel === 'lider' ? 'Crear líder' : 'Crear colíder';
+});
+
 $('#btn-co-create').addEventListener('click', async () => {
   $('#co-err').textContent = '';
   const usuario = $('#co-user').value.trim();
   if (!usuario) { $('#co-err').textContent = 'Ponle un usuario'; return; }
   // Se pregunta antes: crear un colíder le abre el panel a alguien de fuera, y eso no
   // debería pasar por darle sin querer a un botón que está junto al de "Crear" admin.
+  // qué nivel se eligió arriba
+  const nivelSel = ($$('.co-nivel').find(b => b.classList.contains('sel')) || {}).dataset || {};
+  const esLider = nivelSel.nivel === 'lider';
   const suCodigo = $('#co-code').value.trim();
   if (suCodigo && !/^\d{5}$/.test(suCodigo)) {
     $('#co-err').textContent = 'El código son 5 dígitos'; return;
   }
   const ok = await confirmModal({
-    title: 'Crear colíder', okLabel: 'Crear colíder',
+    title: esLider ? 'Crear líder' : 'Crear colíder',
+    okLabel: esLider ? 'Crear líder' : 'Crear colíder',
     body: `<b style="color:var(--cream)">${esc(usuario)}</b> va a poder entrar a este panel.<br><br>
       Verá <b style="color:var(--cream)">solo lo de su grupo</b>: ni tus ventas ni las de los
       demás. Dentro de ese grupo manda —crea vendedores, les cobra, les paga, anula sus
       boletos y los da de baja—, y todo queda firmado con su nombre en tus Movimientos.
       <br><br>Lo que NO toca: precios, comisiones, gastos, ajustes, el escáner de la puerta,
       a la gente de otro colíder ni a la tuya, y no puede borrar el sistema.` +
-      (suCodigo ? `<br><br>Conserva su código <b style="color:var(--cream)">${esc(suCodigo)}</b>
+      (esLider ? `<br><br><b style="color:#f3d27a">Como líder</b>, además podrá dar de alta
+        sus propios colíderes, y cada uno con sus vendedores. Lo que venda su rama completa
+        cuenta para él. Sigue sin ver tus ventas ni las de otras ramas.` : '')
+      + (suCodigo ? `<br><br>Conserva su código <b style="color:var(--cream)">${esc(suCodigo)}</b>
         y todo lo que ya vendió con él, que pasa a contar como su venta personal.`
                 : `<br><br>Se le abrirá un código de vendedor nuevo.`),
   });
   if (!ok) return;
   try {
     const r = await API.post('/api/admin/admins', {
-      username: usuario, password: $('#co-pass').value, role: 'colider',
+      username: usuario, password: $('#co-pass').value,
+      role: esLider ? 'lider' : 'colider',
       seller_code: suCodigo,
     });
     $('#co-user').value = ''; $('#co-pass').value = ''; $('#co-code').value = '';
     // su código de vendedor solo se ve aquí, en este momento: hay que copiarlo ya.
     // Va con un solo botón: no hay nada que cancelar, ya está creado.
-    modal(`<div class="h1" style="font-size:18px">Colíder creado</div>
+    modal(`<div class="h1" style="font-size:18px">${esLider ? 'Líder' : 'Colíder'} creado</div>
       <div class="muted mt8">Ya puede entrar al panel con su usuario y contraseña.</div>
       <div class="label mt16">Su código de vendedor</div>
       <div class="muted" style="font-size:11.5px">${r.reusado

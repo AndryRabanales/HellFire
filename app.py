@@ -1602,6 +1602,9 @@ def es_colider(s):
     return bool(s) and s["role"] == "admin" and (s["admin"]["role"] or "admin") == "colider"
 
 
+NOMBRE_ROL = {"colider": "colíder", "lider": "líder", "admin": "administrador"}
+
+
 def es_lider(s):
     """El jefe de una rama: crea colíderes y vendedores dentro de ella, cobra y anula
     ahí adentro, y del resto del evento no ve nada."""
@@ -5053,10 +5056,15 @@ def create_admin():
                     (username,)).fetchone()
     if ya:
         return jsonify(error=f"Ese usuario ya existe (está guardado como «{ya['username']}»)"), 400
-    rol = "colider" if b.get("role") == "colider" else "admin"
+    # Se puede crear ya como LÍDER, sin tener que crearlo colíder y subirlo después:
+    # son dos pasos para lo mismo. Pero solo la dueña: un líder únicamente crea
+    # colíderes, y siempre dentro de su propia rama.
+    pedido = b.get("role")
+    rol = pedido if pedido in ("colider", "lider") else "admin"
     if es_lider(s):
-        # un líder solo crea colíderes, y siempre dentro de su propia rama
         rol = "colider"
+    elif rol == "lider" and not es_admin_principal(s["admin"]):
+        return jsonify(error="Solo el administrador principal puede crear líderes"), 403
     # De quién cuelga: de quien lo está creando. La dueña queda con parent NULL, así
     # que sus colíderes cuelgan de ella y los del líder, de él.
     padre = s["admin"]["id"]
@@ -5065,7 +5073,7 @@ def create_admin():
                (username, hash_password(password), now_iso(), rol, padre))
     code = None
     reusado = False
-    if rol == "colider":
+    if rol in ("colider", "lider"):
         # El colíder también vende en persona, así que necesita ficha de vendedor
         # marcada es_lider: sus ventas personales se cuentan y comisionan aparte de
         # las de su equipo, sin inventar un caso especial.
@@ -5096,7 +5104,7 @@ def create_admin():
                        "created_at, es_lider) VALUES(?,?,?,?,?,1)",
                        (username, code, nuevo["id"], username, now_iso()))
     audit(db, s["admin"]["username"], "usuarios",
-          f"Creó {'colíder' if rol == 'colider' else 'administrador'} '{username}'"
+          f"Creó {NOMBRE_ROL.get(rol, 'administrador')} '{username}'"
           + (f" (su código de vendedor: {code})" if code else "")
           + (" — se le conservó el que ya tenía" if reusado else ""))
     db.commit()
