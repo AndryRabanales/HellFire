@@ -2389,6 +2389,74 @@ async function descargarEstadoCuenta(s, c) {
   a.click();
 }
 
+/* Dar de alta vendedores. Este bloque entero se perdió al traer lo de los líderes:
+   el botón «+ Crear» quedó sin nada detrás —no fallaba, simplemente no pasaba nada—
+   y con él se fueron los filtros de la lista (buscar, por admin, orden). */
+$('#sl-filter-admin').addEventListener('change', () => { _sigSellers = ''; loadSellers(); });
+$('#sl-q').addEventListener('input', () => { _sigSellers = ''; loadSellers(); });
+$('#sl-orden').addEventListener('change', () => { _sigSellers = ''; loadSellers(); });
+
+$('#btn-sl-create').addEventListener('click', async () => {
+  const btn = $('#btn-sl-create');
+  if (btn.disabled) return;   // evita doble-clic → vendedor duplicado
+  $('#sl-err').textContent = '';
+  const name = $('#sl-name').value.trim();
+  if (!name) { $('#sl-err').textContent = 'Escribe el nombre'; return; }
+  btn.disabled = true;
+  try {
+    let r;
+    try {
+      r = await API.post('/api/admin/sellers', { name });   // código siempre automático
+    } catch (e) {
+      // Nombre repetido: se avisa y se deja decidir, no se crea a ciegas. Con 30
+      // vendedores, dos "Luis" hacen que al cobrar se abra la cuenta equivocada.
+      if (!e.data || !e.data.duplicate) throw e;
+      btn.disabled = false;
+      const ok = await confirmModal({
+        title: 'Ese nombre ya existe',
+        body: `${esc(e.message)}<br><br>Si son dos personas distintas, ponles algo que
+               las distinga (apellido, apodo). Si no, al cobrar vas a abrir la cuenta equivocada.`,
+        okLabel: 'Crearlo de todos modos',
+      });
+      if (!ok) { $('#sl-err').textContent = ''; return; }
+      btn.disabled = true;
+      r = await API.post('/api/admin/sellers', { name, force: true });
+    }
+    $('#sl-name').value = '';
+    modal(`<div class="h1" style="font-size:18px">Vendedor creado</div>
+      <div class="muted mt8">Comparte su código de acceso. Es su identidad en el sistema:</div>
+      <div style="text-align:center;margin:18px 0"><span class="codechip" style="font-size:30px;padding:12px 22px">${esc(r.code)}</span></div>
+      <button class="btn" onclick="closeModal()">Listo</button>`);
+    refrescarPantalla();
+  } catch (e) { if (!guard(e)) $('#sl-err').textContent = e.message; }
+  finally { btn.disabled = false; }
+});
+
+/* Alta masiva: se pegan los nombres y salen todos con su código. Con 50 vendedores,
+   capturarlos de uno en uno son 50 formularios y 50 códigos copiados a mano. */
+$('#btn-sl-bulk').addEventListener('click', () => {
+  modal(`<div class="h1" style="font-size:18px">Cargar varios vendedores</div>
+    <div class="muted mt8" style="font-size:12px">Un nombre por línea. A cada uno se le asigna
+      su código de 5 dígitos.</div>
+    <textarea class="input mt12" id="bk-names" rows="8" placeholder="Ana Pérez
+Luis Canul
+María Chi" style="resize:vertical;line-height:1.6"></textarea>
+    <div class="err mt8" id="bk-err"></div>
+    <div class="row mt16"><button class="btn ghost grow" onclick="closeModal()">Cancelar</button>
+    <button class="btn grow" id="bk-go">Crear todos</button></div>`);
+  $('#bk-go').onclick = async () => {
+    const names = $('#bk-names').value;
+    if (!names.trim()) { $('#bk-err').textContent = 'Pega al menos un nombre'; return; }
+    $('#bk-go').disabled = true;
+    try {
+      const r = await API.post('/api/admin/sellers/bulk', { names });
+      mostrarCodigos(r.creados, r.repetidos);
+      refrescarPantalla();
+    } catch (e) { if (!guard(e)) $('#bk-err').textContent = e.message; }
+    finally { $('#bk-go').disabled = false; }
+  };
+});
+
 function mostrarCodigos(creados, repetidos) {
   const texto = creados.map(c => `${c.name}: ${c.code}`).join('\n');
   modal(`<div class="h1" style="font-size:18px">${creados.length} vendedor(es) creados</div>
