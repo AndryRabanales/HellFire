@@ -79,7 +79,7 @@
     <button class="tab" data-tab="ranking">Ranking</button>
     <button class="tab" data-tab="rendimiento">Rendimiento</button>
     <button class="tab" data-tab="grupos">Grupos</button>
-    <button class="tab" data-tab="colideres">Colíderes</button>
+    <button class="tab" data-tab="colideres">Equipo</button>
     <button class="tab" data-tab="cortesias">Cortesías</button>
     <button class="tab" data-tab="gastos">Gastos</button>
     <button class="tab" data-tab="catalogos">Catálogos</button>
@@ -141,18 +141,35 @@
     <!-- Sus cuentas: aquí y no en Ajustes. Ajustes es donde se toca el evento
          —precios, flyers, la clave de la puerta—; a quién le abres o le cierras
          el panel de un grupo se decide mirando al grupo, que es lo que hay arriba. -->
-    <details class="card mt12" id="co-cuentas">
-      <summary class="label" style="margin:0">Sus cuentas: subir, pausar o quitar</summary>
+    <!-- Dos ventanillas y no una sola lista: un líder y un colíder no son lo mismo
+         —uno arma colíderes, el otro vendedores— y mezclados en un renglón con una
+         etiqueta chiquita no se distinguían. -->
+    <details class="card mt12" id="li-cuentas">
+      <summary class="label" style="margin:0">Líderes<span class="muted" id="li-n"></span></summary>
       <div class="muted mt8" style="margin-bottom:10px;line-height:1.55">
-        Toca <b style="color:var(--cream)">Opciones</b> en cualquiera y ahí están las tres:
-        <b style="color:#f3d27a">Subir a líder</b> (para que él arme sus propios colíderes),
-        <b style="color:var(--cream)">Desactivar</b> —lo pone a él y a su equipo en pausa sin
-        borrar nada, y se deshace cuando quieras— y <b style="color:var(--cream)">Eliminar</b>,
-        que es para siempre y su gente pasa a ser tuya. Los boletos ya vendidos siguen
-        pasando en la puerta pase lo que pase.
+        Cada uno arma <b style="color:var(--cream)">sus propios colíderes</b>, y cada colíder
+        sus vendedores. Lo que venda su rama completa cuenta para él. También vende él en
+        persona, con su propio código.
+      </div>
+      <div id="li-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </details>
+
+    <details class="card mt12" id="co-cuentas">
+      <summary class="label" style="margin:0">Colíderes<span class="muted" id="co-n"></span></summary>
+      <div class="muted mt8" style="margin-bottom:10px;line-height:1.55">
+        Arman <b style="color:var(--cream)">su equipo de vendedores</b> y les cobran. No ven
+        lo tuyo ni lo de los demás. También venden ellos en persona, con su propio código.
       </div>
       <div id="co-list" style="display:flex;flex-direction:column;gap:8px"></div>
     </details>
+
+    <div class="muted mt8" style="font-size:11px;line-height:1.6">
+      En cualquiera de los dos, <b style="color:var(--cream)">Opciones</b> abre su ficha:
+      ahí lo mueves de puesto —vendedor, colíder o líder, para arriba o para abajo, sin
+      perder su código ni su historial— y ahí están también
+      <b style="color:var(--cream)">Desactivar</b> y <b style="color:var(--cream)">Eliminar</b>.
+      Los boletos ya vendidos siguen pasando en la puerta pase lo que pase.
+    </div>
   </section>
 
   <!-- ===== Cortesías: los invitados especiales, aparte de la venta ===== -->

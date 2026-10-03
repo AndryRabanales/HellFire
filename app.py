@@ -1984,7 +1984,9 @@ def me():
     if s["role"] == "seller":
         return jsonify(role="seller", name=s["seller"]["name"], **info)
     return jsonify(role="admin", name=s["admin"]["username"],
-                   admin_id=s["admin"]["id"], es_colider=es_colider(s), **info)
+                   admin_id=s["admin"]["id"], es_colider=es_colider(s),
+                   # quién mueve de puesto a la gente: solo la dueña del evento
+                   es_principal=es_admin_principal(s["admin"]), **info)
 
 def puede_gestionar(db, admin, sel):
     """¿Puede editar / desactivar / eliminar a este vendedor?
@@ -4316,6 +4318,8 @@ def list_seller_payments(sid):
         and puede_gestionar(db, s["admin"], sel)
         and not db.execute("SELECT 1 FROM sellers WHERE id=? AND es_lider=1",
                            (sid,)).fetchone())
+    # Y hasta dónde: a líder solo lo sube la dueña, igual que al crear uno de cero.
+    out["puede_subir_lider"] = bool(out["puede_subir"] and es_admin_principal(s["admin"]))
     # El trato de cada quien lo pone QUIEN LO MANEJA: la dueña con los suyos, el
     # líder con su rama y el colíder con su gente. Lo que ninguno puede es subirse el
     # suyo —su propia ficha la mueve quien está arriba de él—, porque eso sería
@@ -5110,6 +5114,43 @@ def create_admin():
     db.commit()
     return jsonify(ok=True, code=code, reusado=reusado)
 
+def _bajar_a_vendedor(db, s, a):
+    """Baja a un colíder o a un líder hasta simple vendedor: se le quita el panel y
+    se queda SOLO con su ficha de vendedor, la misma de siempre —su código, sus
+    boletos, lo que debe, su historial—. Es el escalón que faltaba: hasta ahora, para
+    quitarle el panel a alguien había que ELIMINARLO, que borra la cuenta y no se
+    deshace.
+
+    Su gente no se queda colgando de una cuenta que ya no existe: pasa a su jefe —el
+    líder de quien colgaba— y si no colgaba de nadie, a quien lo está bajando. Eso
+    vale igual para sus vendedores que para sus colíderes, si era líder.
+    """
+    aid = a["id"]
+    padre_id = a["parent_admin_id"] or s["admin"]["id"]
+    padre = db.execute("SELECT * FROM admins WHERE id=?", (padre_id,)).fetchone()
+    if not padre:
+        padre, padre_id = s["admin"], s["admin"]["id"]
+    # 1) su ficha personal se queda, pero deja de ser "la del colíder": vuelve a ser
+    #    un vendedor del montón, con la comisión general y colgando del jefe.
+    db.execute("UPDATE sellers SET es_lider=0, commission_pct=NULL, "
+               "owner_admin_id=?, owner_admin_name=? "
+               "WHERE owner_admin_id=? AND es_lider=1", (padre_id, padre["username"], aid))
+    # 2) el resto de su equipo, al jefe también
+    db.execute("UPDATE sellers SET owner_admin_id=?, owner_admin_name=? "
+               "WHERE owner_admin_id=?", (padre_id, padre["username"], aid))
+    # 3) y sus colíderes, si era líder
+    db.execute("UPDATE admins SET parent_admin_id=? WHERE parent_admin_id=?",
+               (padre_id, aid))
+    # 4) se va la cuenta del panel y se le cierra la sesión que tuviera abierta
+    db.execute("DELETE FROM admins WHERE id=?", (aid,))
+    db.execute("DELETE FROM sessions WHERE role='admin' AND user_id=?", (aid,))
+    audit(db, s["admin"]["username"], "usuarios",
+          f"Bajó a «{a['username']}» a vendedor — se le quitó el panel; "
+          f"su equipo pasó a «{padre['username']}»")
+    db.commit()
+    return jsonify(ok=True, nivel="vendedor")
+
+
 @app.post("/api/admin/admins/<int:aid>/nivel")
 def cambiar_nivel(aid):
     """Sube un colíder a LÍDER, o lo baja de vuelta. Solo la dueña del evento.
@@ -5128,8 +5169,8 @@ def cambiar_nivel(aid):
     if not es_admin_principal(s["admin"]):
         return jsonify(error="Solo el administrador principal cambia los niveles"), 403
     nivel = str((request.json or {}).get("nivel", "")).strip()
-    if nivel not in ("lider", "colider"):
-        return jsonify(error="El nivel debe ser lider o colider"), 400
+    if nivel not in ("lider", "colider", "vendedor"):
+        return jsonify(error="El nivel debe ser lider, colider o vendedor"), 400
     db = get_db()
     a = db.execute("SELECT * FROM admins WHERE id=?", (aid,)).fetchone()
     if not a:
@@ -5138,6 +5179,10 @@ def cambiar_nivel(aid):
         return jsonify(error="Esa cuenta no es de colíder ni de líder"), 400
     if (a["role"] or "") == nivel:
         return jsonify(error=f"Ya es {nivel}"), 400
+    if aid == s["admin"]["id"]:
+        return jsonify(error="No puedes cambiarte de puesto a ti misma"), 400
+    if nivel == "vendedor":
+        return _bajar_a_vendedor(db, s, a)
     if nivel == "colider":
         hijos = db.execute("SELECT COUNT(*) c FROM admins WHERE parent_admin_id=?",
                            (aid,)).fetchone()["c"]

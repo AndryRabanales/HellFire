@@ -1479,11 +1479,11 @@ button.rd-p:active{transform:scale(.97)}
 .trow.mv-cl{border-left:2px solid rgba(255,110,30,.45)}
 
 /* ---- cuentas del panel (admins y colíderes): dos botones sin aplastar el nombre ---- */
-#ad-list .trow,#co-list .trow,#dr-list .trow{flex-wrap:wrap;row-gap:8px}
-#ad-list .tmain,#co-list .tmain,#dr-list .tmain{min-width:150px}
+#ad-list .trow,#co-list .trow,#li-list .trow,#dr-list .trow{flex-wrap:wrap;row-gap:8px}
+#ad-list .tmain,#co-list .tmain,#li-list .tmain,#dr-list .tmain{min-width:150px}
 .ad-btns{display:flex;gap:6px;flex:none;margin-left:auto}
 @media (max-width:520px){
-  #ad-list .tmain,#co-list .tmain,#dr-list .tmain{flex-basis:100%}
+  #ad-list .tmain,#co-list .tmain,#li-list .tmain,#dr-list .tmain{flex-basis:100%}
   .ad-btns{margin-left:0;width:100%}
   .ad-btns .btn{flex:1;width:auto}
 }
@@ -1715,3 +1715,15 @@ button.rd-p:active{transform:scale(.97)}
   .fl-cab{flex-wrap:wrap}
   .fl-cab #fl-toggle{width:100%!important;flex:1 1 100%!important}
 }
+
+/* La escalerita de puestos: vendedor · colíder · líder. El de hoy se ve prendido y
+   apagado al mismo tiempo —es el estado, no un botón— y los otros dos sí se tocan. */
+.esc-niv{display:flex;gap:6px;margin-top:9px}
+.niv-b{flex:1;border:1px solid var(--line);border-radius:12px;padding:10px 8px;
+  background:rgba(255,255,255,.02);color:var(--cream);cursor:pointer;text-align:center;
+  display:flex;flex-direction:column;gap:2px;font-family:Manrope}
+.niv-b b{font-weight:800;font-size:12.5px}
+.niv-b span{font:600 9.5px Manrope;letter-spacing:.09em;text-transform:uppercase;color:var(--cream-45)}
+.niv-b:not(:disabled):active{transform:scale(.97)}
+.niv-b.hoy{border-color:var(--ember);background:rgba(255,122,46,.12);cursor:default;opacity:1}
+.niv-b.hoy span{color:var(--ember-soft)}

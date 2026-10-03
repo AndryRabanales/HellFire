@@ -31,12 +31,14 @@ async function login() {
 
 let ME_ID = null;   // id del admin con sesión (para saber qué es "mío")
 let SOY_COLIDER = false;  // el colíder ve el panel, pero no todo lo que hay en él
+let PRINCIPAL = false;    // la dueña del evento: la única que mueve a la gente de puesto
 async function enter(name) {
   EV = await API.get('/api/catalog');
   try {
     const yo = await API.get('/api/me');
     ME_ID = yo.admin_id ?? null;
     SOY_COLIDER = !!yo.es_colider;
+    PRINCIPAL = !!yo.es_principal;
   } catch (_) {}
   $('#who').textContent = name;
   $('#av').textContent = (EV.event_name || 'O')[0];
@@ -431,7 +433,7 @@ function aplicarColider(esCo, esLider, misColideres) {
     if (b) b.classList.toggle('hidden', esCo);
   });
   const mio = document.querySelector('#tabs .tab[data-tab="colideres"]');
-  if (mio) mio.textContent = (esCo && !esLider) ? 'Mi grupo' : 'Colíderes';
+  if (mio) mio.textContent = (esCo && !esLider) ? 'Mi grupo' : 'Equipo';
   const scan = document.querySelector('a[href="/scan"]');   // escanear quema boletos
   if (scan) scan.classList.toggle('hidden', esCo);
   const card = $('#sum-by-admin');
@@ -766,7 +768,11 @@ let _sigCol = '';
 async function loadColideres(silent) {
   // las cuentas van en la misma pestaña, plegadas al final; si fallan no se llevan
   // por delante los números de los grupos, que es a lo que se entra aquí
-  if (!_coliderAplicado) loadAdmins(silent).catch(() => {});
+  // Siempre: la lista de cuentas es de esta pestaña. Antes iba con "!_coliderAplicado",
+  // pero esa variable guarda un TEXTO —'0' para la dueña— y '0' en texto es verdadero,
+  // así que a ella justamente nunca se le cargaba y la caja de sus cuentas salía vacía.
+  // Parecía que los botones de subir, pausar y eliminar no existían.
+  loadAdmins(silent).catch(() => {});
   const r = await API.get('/api/admin/grupos');
   const sig = JSON.stringify(r.grupos);
   if (silent && sig === _sigCol) return;
@@ -2019,9 +2025,13 @@ function pintaCuenta(s, c) {
 
     ${c.puede_subir ? `
     <div class="card mt12" style="border-color:rgba(243,210,122,.4)">
-      <div class="label">Subirlo de nivel</div>
-      <div class="muted" style="margin-bottom:9px;font-size:11px">Como <b style="color:#f3d27a">colíder</b> podría dar de alta a sus propios vendedores y cobrarles. <b style="color:var(--cream)">Conserva su código ${esc(s.code || '')}, su historial y lo que debe.</b></div>
-      <button class="btn sm oro" id="cta-subir" style="width:auto">Subir a colíder</button>
+      <div class="label">Cambiarlo de puesto</div>
+      ${escalera('vendedor', c.puede_subir_lider)}
+      <div class="muted mt8" style="font-size:11px">Toca el puesto al que lo quieres mover.
+        <b style="color:var(--ok)">No se pierde nada</b>: conserva su código
+        <b style="color:var(--cream)">${esc(s.code || '')}</b>, sus boletos vendidos, lo que
+        debe y su historial. Al subirlo se le abre su cuenta del panel reusando la ficha
+        que ya tiene.</div>
     </div>` : ''}
 
     ${c.can_edit && c.balance > 0.005 ? `
@@ -2105,14 +2115,18 @@ function pintaCuenta(s, c) {
     // Subir un vendedor a colíder: se le abre cuenta de panel REUSANDO su ficha, así
     // que no pierde su código ni su historial. Antes había que ir a Colíderes y
     // teclear su código de memoria.
-    const sub = $('#cta-subir');
-    if (sub) sub.onclick = async () => {
+    // Subirlo de puesto: se le abre cuenta de panel REUSANDO su ficha, así que no
+    // pierde su código ni su historial.
+    $$('.niv-b').forEach(b => b.onclick = async () => {
+      const quiere = b.dataset.nivel;
+      const comoLider = quiere === 'lider';
       const ok = await confirmModal({
-        title: `Subir a ${s.name} a colíder`, okLabel: 'Crear su cuenta',
+        title: `Subir a ${s.name} a ${comoLider ? 'líder' : 'colíder'}`,
+        okLabel: 'Crear su cuenta',
         body: `Escribe el usuario y la contraseña con los que va a entrar al panel.
           <br><br><b style="color:var(--ok)">Conserva todo</b>: su código <b style="color:var(--cream)">${esc(s.code || '')}</b>,
           sus boletos vendidos y lo que te debe. Lo que gana es poder dar de alta a sus
-          propios vendedores y cobrarles.
+          propios ${comoLider ? 'colíderes, y cada uno con sus vendedores' : 'vendedores'} y cobrarles.
           <div class="label mt16" style="font-size:11px">Usuario</div>
           <input class="input" id="sub-user" placeholder="ej. ${esc((s.name || '').split(' ')[0].toLowerCase())}" autocomplete="off">
           <div class="label mt8" style="font-size:11px">Contraseña (mín. 8)</div>
@@ -2121,14 +2135,15 @@ function pintaCuenta(s, c) {
       if (!ok) return;
       const u = ($('#sub-user') || {}).value, pw = ($('#sub-pass') || {}).value;
       try {
-        const r = await API.post('/api/admin/admins', {
-          username: (u || '').trim(), password: pw || '', role: 'colider', seller_code: s.code,
+        await API.post('/api/admin/admins', {
+          username: (u || '').trim(), password: pw || '',
+          role: comoLider ? 'lider' : 'colider', seller_code: s.code,
         });
-        toast(`${s.name} ya es colíder ✓`);
+        toast(`${s.name} ya es ${comoLider ? 'líder' : 'colíder'} ✓`);
         closeModal();
         refrescarPantalla();
       } catch (e) { if (!guard(e)) toast(e.message); }
-    };
+    });
     $('#cta-otro').onclick = () => {
       const caja = $('#cta-otro-box');
       caja.style.display = caja.style.display === 'none' ? 'flex' : 'none';
@@ -3658,6 +3673,68 @@ $('#btn-fc-create').addEventListener('click', async () => {
    colíder se decide mirando su grupo, así que su alta y su baja viven en la pestaña
    Colíderes, debajo de los grupos. Mezclarlos obligaba a buscar a un colíder en el
    sitio donde se cambian los precios. */
+/* La escalerita de puestos: vendedor · colíder · líder, el de hoy prendido y los
+   otros dos a un toque. Es la MISMA en la ficha de un vendedor y en Opciones de una
+   cuenta, porque es la misma pregunta: a qué puesto lo muevo. Antes había dos
+   controles distintos —"Subir a colíder" en un lado, "Subir a líder / Bajar a
+   colíder" en el otro— y bajar a vendedor no existía en ninguno. */
+const NIVELES = [
+  { id: 'vendedor', t: 'Vendedor', p: 'solo vende' },
+  { id: 'colider', t: 'Colíder', p: 'arma su equipo' },
+  { id: 'lider', t: 'Líder', p: 'arma colíderes' },
+];
+function escalera(hoy, puedeLider) {
+  return `<div class="esc-niv">` + NIVELES.map(n => {
+    if (n.id === 'lider' && !puedeLider && n.id !== hoy) return '';
+    const es = n.id === hoy;
+    return `<button type="button" class="niv-b${es ? ' hoy' : ''}" data-nivel="${n.id}"
+      ${es ? 'disabled' : ''}><b>${n.t}</b><span>${es ? 'hoy' : n.p}</span></button>`;
+  }).join('') + `</div>`;
+}
+
+/* Mover a alguien de puesto, para arriba o para abajo. Sube y baja por la misma
+   puerta a propósito: antes "subir a líder" vivía en un botón y bajar a vendedor no
+   existía en ninguna parte, así que para quitarle el panel a un colíder había que
+   ELIMINARLO —definitivo, y su gente cambiaba de dueño en silencio—. */
+async function cambiaPuesto(a, destino) {
+  const rol = a.role || 'admin';
+  const n = a.vendedores || 0, nc = a.colideres || 0;
+  const gente = n === 1 ? '1 vendedor' : n + ' vendedores';
+  const jefe = a.parent_name ? esc(a.parent_name) : 'ti';
+  let cuerpo, titulo, okl, peligro = false;
+  if (destino === 'lider') {
+    titulo = `Subir a ${a.username} a líder`; okl = 'Subirlo a líder';
+    cuerpo = `Como líder podrá <b style="color:var(--cream)">dar de alta sus propios
+      colíderes</b>, y cada uno con sus vendedores. Lo que venda su rama completa cuenta
+      para él.<br><br>Seguirá SIN ver tus ventas, tus precios, tus cortesías ni a los
+      colíderes de nadie más.<br><br><b style="color:var(--ok)">No se pierde nada:</b>
+      conserva su cuenta, su código, su historial, sus ${gente} y lo que le deben.
+      <br><br>Lo puedes mover de puesto cuando quieras.`;
+  } else if (destino === 'colider') {
+    titulo = `Bajar a ${a.username} a colíder`; okl = 'Bajarlo a colíder'; peligro = true;
+    cuerpo = `Sigue con su grupo y con sus ${gente}, pero
+      <b style="color:var(--cream)">ya no podrá dar de alta colíderes</b> ni ver la rama de
+      nadie más.<br><br><b style="color:var(--ok)">No se borra ni se mueve nada.</b>`;
+  } else {
+    titulo = `Bajar a ${a.username} a vendedor`; okl = 'Quitarle el panel'; peligro = true;
+    cuerpo = `<b style="color:var(--cream)">Deja de entrar al panel.</b> Se queda solo con su
+      ficha de vendedor: mismo código, mismos boletos, mismo historial y la misma deuda.
+      Sigue vendiendo como cualquier otro.`
+      + ((n || nc) ? `<br><br>Su gente —${[n ? gente : '', nc ? nc + ' colíder' + (nc === 1 ? '' : 'es') : ''].filter(Boolean).join(' y ')}—
+         pasa a <b style="color:var(--cream)">${jefe}</b>, que es quien les va a cobrar de ahí
+         en adelante. Si después quieres jalarte a alguno, se mueve uno por uno.` : '')
+      + `<br><br>Para volver a subirlo hay que abrirle cuenta otra vez, desde su ficha de vendedor.`;
+  }
+  const ok = await confirmModal({ title: titulo, okLabel: okl, danger: peligro, body: cuerpo });
+  if (!ok) return;
+  try {
+    await API.post('/api/admin/admins/' + a.id + '/nivel', { nivel: destino });
+    toast(destino === 'lider' ? `${a.username} ya es líder ✓`
+      : destino === 'colider' ? 'Volvió a colíder' : `${a.username} ahora solo vende`);
+    refrescarPantalla();
+  } catch (e) { if (!guard(e)) toast(e.message); }
+}
+
 function filaCuenta(a, esYo) {
   const row = document.createElement('div');
   row.className = 'trow';
@@ -3687,39 +3764,6 @@ function filaCuenta(a, esYo) {
   abrir.className = 'btn sm ghost'; abrir.style.width = 'auto';
   abrir.textContent = 'Opciones';
   const acciones = [];
-  if (esCo || esLi) {
-    acciones.push({
-      id: 'nivel', clase: esLi ? 'ghost' : 'oro',
-      txt: esLi ? 'Bajar a colíder' : 'Subir a líder',
-      pie: esLi ? 'Deja de poder dar de alta colíderes. No se pierde nada.'
-                : 'Podrá dar de alta sus propios colíderes. Reversible.',
-      fn: async () => {
-      const ok = await confirmModal({
-        title: esLi ? `Bajar a ${a.username} a colíder` : `Subir a ${a.username} a líder`,
-        okLabel: esLi ? 'Bajarlo' : 'Subirlo a líder', danger: esLi,
-        body: esLi
-          ? `Vuelve a ser colíder: seguirá con sus ${gente} y con su grupo, pero
-             <b style="color:var(--cream)">ya no podrá dar de alta colíderes</b> ni ver
-             la rama de nadie más.
-             <br><br><b style="color:var(--ok)">No se borra ni se mueve nada.</b>`
-          : `Como líder podrá <b style="color:var(--cream)">dar de alta sus propios
-             colíderes</b>, y cada uno con sus vendedores. Lo que venda su rama completa
-             contará para él.
-             <br><br>Seguirá SIN ver tus ventas, tus precios, tus cortesías ni a los
-             colíderes de nadie más.
-             <br><br><b style="color:var(--ok)">No se pierde nada:</b> conserva su cuenta,
-             su código, su historial, sus ${gente} y lo que le deben.
-             <br><br>Lo puedes bajar de nivel cuando quieras.`,
-      });
-      if (!ok) return;
-      try {
-        await API.post('/api/admin/admins/' + a.id + '/nivel', { nivel: esLi ? 'colider' : 'lider' });
-        toast(esLi ? 'Volvió a colíder' : `${a.username} ya es líder ✓`);
-        refrescarPantalla();
-      } catch (e) { if (!guard(e)) toast(e.message); }
-      },
-    });
-  }
   acciones.push({
     id: 'pausa', clase: 'ghost',
     txt: apagado ? 'Reactivar' : 'Desactivar',
@@ -3773,7 +3817,13 @@ function filaCuenta(a, esYo) {
         esLi ? ' <span class="lid-chip">LÍDER</span>' : ''}</div>
       <div class="muted mt8" style="font-size:12px">${n ? gente : 'sin vendedores'}${
         nc ? ` · ${nc} colíder${nc === 1 ? '' : 'es'}` : ''}</div>
-      <div class="ad-acc mt16">${acciones.map(x => `
+      ${PRINCIPAL ? `<div class="label mt16" style="font-size:10px">Cambiarlo de puesto</div>
+      ${escalera(rol, true)}
+      <div class="muted mt8" style="font-size:11px">Toca el puesto al que lo quieres mover.
+        <b style="color:var(--ok)">No se pierde nada</b>: conserva su cuenta, su código, sus
+        boletos, lo que le deben y su historial.</div>` : ''}
+      <div class="label mt16" style="font-size:10px">Su cuenta</div>
+      <div class="ad-acc mt8">${acciones.map(x => `
         <button class="btn ${x.clase} ad-acc-b" data-ac="${x.id}">
           <span>${x.txt}</span><span class="ad-acc-p">${x.pie}</span></button>`).join('')}</div>`);
     $$('.ad-acc-b').forEach(bt => bt.onclick = () => {
@@ -3781,6 +3831,7 @@ function filaCuenta(a, esYo) {
       const ac = acciones.find(x => x.id === bt.dataset.ac);
       if (ac) setTimeout(ac.fn, 120);
     });
+    $$('.niv-b').forEach(bt => bt.onclick = () => { closeModal(); setTimeout(() => cambiaPuesto(a, bt.dataset.nivel), 120); });
   };
   caja.appendChild(abrir);
   row.appendChild(caja);
@@ -3793,21 +3844,23 @@ async function loadAdmins(silent) {
   const sig = JSON.stringify(r.admins);
   if (silent && sig === _sigAdm) return;
   _sigAdm = sig;
-  const ad = $('#ad-list'), co = $('#co-list');
-  if (ad) ad.innerHTML = '';
-  if (co) co.innerHTML = '';
-  let nCo = 0;
+  const ad = $('#ad-list'), co = $('#co-list'), li = $('#li-list');
+  [ad, co, li].forEach(x => { if (x) x.innerHTML = ''; });
+  let nCo = 0, nLi = 0;
   r.admins.forEach(a => {
-    // los líderes viven con los colíderes: son la misma lista de gente que maneja
-    // equipo, solo que uno está una grada más arriba
+    // cada quien a su ventanilla: líder y colíder no son el mismo puesto, y en una
+    // sola lista la diferencia se reducía a una etiqueta chiquita
     const rol = a.role || 'admin';
-    const deRama = rol === 'colider' || rol === 'lider';
-    const destino = deRama ? co : ad;
+    const destino = rol === 'lider' ? li : rol === 'colider' ? co : ad;
     if (!destino) return;
-    if (deRama) nCo++;
+    if (rol === 'lider') nLi++; else if (rol === 'colider') nCo++;
     destino.appendChild(filaCuenta(a, a.id === r.me));
   });
   if (co && !nCo) co.innerHTML = '<div class="muted">Todavía no has dado de alta a ningún colíder.</div>';
+  if (li && !nLi) li.innerHTML = '<div class="muted">Todavía no hay ningún líder. Se sube desde Opciones de un colíder, o se da de alta ya como líder aquí abajo.</div>';
+  const nn = $('#co-n'), nl = $('#li-n');
+  if (nn) nn.textContent = nCo ? ' · ' + nCo : '';
+  if (nl) nl.textContent = nLi ? ' · ' + nLi : '';
 }
 
 $('#btn-ad-create').addEventListener('click', async () => {
