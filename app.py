@@ -2710,11 +2710,12 @@ def require_scanner():
     """Puede escanear: un admin (siempre) o una sesión de puerta (con la clave).
     El colíder NO por ser colíder: escanear quema el boleto, y eso es irreversible.
     Si el día del evento se para en la puerta, se le pasa la clave del staff como a
-    cualquier otro."""
+    cualquier otro. El LÍDER tampoco, por lo mismo: la pregunta era "¿es colíder?" y
+    un líder no lo es, así que se colaba a la puerta sin la clave."""
     s = current_session()
     if not s or s["role"] not in ("admin", "scanner"):
         return None
-    if es_colider(s):
+    if tiene_rama(s):
         return None
     return s
 
@@ -2997,7 +2998,7 @@ def quitar_entrada(tid):
     s = require_admin()
     if not s:
         actual = current_session()
-        if actual and es_colider(actual):
+        if actual and tiene_rama(actual):
             return jsonify(error="Solo el organizador puede quitar una entrada."), 403
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -3041,7 +3042,7 @@ def toggle_botella(tid):
     s = require_admin()
     if not s:
         actual = current_session()
-        if actual and es_colider(actual):
+        if actual and tiene_rama(actual):
             return jsonify(error="Solo el organizador da botellas sueltas. Tú las "
                                  "repartes armando un grupo de 10."), 403
         return jsonify(error="sin sesión"), 401
@@ -4196,6 +4197,13 @@ def comision_pct(db, sid=None):
         r = db.execute("SELECT commission_pct FROM sellers WHERE id=?", (sid,)).fetchone()
         if r is not None and r["commission_pct"] is not None:
             return max(0.0, min(100.0, float(r["commission_pct"])))
+        # Sin número escrito, el que le toca POR SU NIVEL: líder 30, colíder 20. Antes
+        # caía al general —10— y la ficha de un líder decía 10% mientras la tarjeta de
+        # su grupo decía 30%: dos números distintos para el mismo trato, justo en la
+        # pantalla que se le enseña a él cuando se le hace su corte.
+        nivel = es_lider_de(db, sid)
+        if nivel in COMISION_POR_NIVEL:
+            return COMISION_POR_NIVEL[nivel]
     return comision_general(db)
 
 
@@ -4557,7 +4565,10 @@ def borrar_pago_equipo(pid):
     p = db.execute("SELECT * FROM team_payments WHERE id=?", (pid,)).fetchone()
     if not p:
         return jsonify(error="no existe"), 404
-    if es_colider(s) and p["colider_admin_id"] != s["admin"]["id"]:
+    # Vale para el líder igual que para el colíder: cada quien deshace los pagos que
+    # hizo él. Preguntando solo "¿es colíder?", un líder podía deshacer el pago de
+    # cualquiera, incluso de otra rama.
+    if tiene_rama(s) and p["colider_admin_id"] != s["admin"]["id"]:
         return jsonify(error="no existe"), 404
     db.execute("DELETE FROM team_payments WHERE id=?", (pid,))
     audit(db, s["admin"]["username"], "pago",
@@ -4795,7 +4806,7 @@ def set_descuento(sid):
     s = require_admin()
     if not s:
         actual = current_session()
-        if actual and es_colider(actual):
+        if actual and tiene_rama(actual):
             return jsonify(error="Solo el organizador da descuentos."), 403
         return jsonify(error="sin sesión"), 401
     db = get_db()
@@ -5464,11 +5475,33 @@ def get_audit():
     # El colíder ve SOLO lo que él mismo hizo. El registro es global —cambios de
     # precio, anulaciones, cobros de otros grupos— y enseñárselo entero sería darle
     # por la puerta de atrás justo lo que no debe ver.
-    if es_colider(s):
-        rows = db.execute("SELECT * FROM audit_log WHERE action != 'generacion' "
-                          "AND actor = ? ORDER BY id DESC LIMIT 500",
-                          (s["admin"]["username"],)).fetchall()
-        return jsonify(log=[dict(r) for r in rows], colideres=[])
+    # Vale IGUAL para el líder. Antes la pregunta era "¿es colíder?", y un líder no lo
+    # es: se caía al caso de abajo y recibía el registro ENTERO —los cortes de la
+    # dueña, sus cambios de precio, lo de ramas ajenas—. Él ve lo suyo y lo de SUS
+    # colíderes, que es justo su rama y nada más.
+    if tiene_rama(s):
+        ambito = mi_ambito(s) or [s["admin"]["id"]]
+        marcas = ",".join("?" * len(ambito))
+        # Por nombre de usuario, que es lo que guarda cada renglón. Se incluye el suyo
+        # aparte por si su cuenta cambió de nombre: el registro viejo quedó con el
+        # nombre de entonces.
+        nombres = [r["username"] for r in db.execute(
+            f"SELECT username FROM admins WHERE id IN ({marcas})", tuple(ambito)).fetchall()]
+        if s["admin"]["username"] not in nombres:
+            nombres.append(s["admin"]["username"])
+        mm = ",".join("?" * len(nombres))
+        rows = db.execute(
+            f"SELECT * FROM audit_log WHERE action != 'generacion' "
+            f"AND actor IN ({mm}) ORDER BY id DESC LIMIT 500", tuple(nombres)).fetchall()
+        # Los suyos se marcan para que los distinga de los de su gente, igual que la
+        # dueña distingue a sus colíderes.
+        yo = s["admin"]["username"]
+        lista = []
+        for r in rows:
+            d = dict(r)
+            d["es_colider"] = d["actor"] != yo
+            lista.append(d)
+        return jsonify(log=lista, colideres=[n for n in nombres if n != yo])
 
     # Para el organizador el registro viene en dos vistas. "Todo" mezcla sus propios
     # cambios de precio con lo que hacen seis colíderes, y lo que un colíder hace
