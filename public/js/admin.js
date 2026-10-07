@@ -1124,6 +1124,138 @@ async function loadTicketsTab() {
   await loadTicketsTable();
 }
 
+/* ---------------- galería de boletos ----------------
+   La tabla responde "¿quién compró y cuánto debe?". Esto responde otra cosa: "¿cómo
+   quedó el boleto?". Se ven SIN el código, que es la versión que de todos modos se
+   enseña por fuera —si una captura de esta pantalla se filtra, no se filtra una
+   entrada—. Cada uno se dibuja solo cuando asoma: con 300 boletos, dibujarlos todos
+   de golpe deja el teléfono clavado. */
+let BT_VISTA = 'lista';
+let _btObs = null;
+
+function tarjetaBoleto(t) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'bt-card' + (t.status === 'void' ? ' void' : '');
+  const sello = t.status === 'void' ? '<span class="bt-sello void">ANULADO</span>'
+    : t.status === 'used' ? '<span class="bt-sello used">INGRESÓ</span>' : '';
+  card.innerHTML = `<div class="bt-lienzo">${sello}</div>
+    <div class="bt-pie">
+      <div class="bt-n">${esc(t.buyer_name)}</div>
+      <div class="bt-f">${esc(t.folio)} · ${esc(t.type_name)}</div>
+    </div>`;
+  card.onclick = () => verBoletoGrande(t);
+  return card;
+}
+
+/* Dibuja el boleto dentro de su tarjeta. A tamaño de miniatura y COMO IMAGEN, no
+   como lienzo: un lienzo de 300×581 ocupa 700 KB de memoria viva pase lo que pase, y
+   cuatrocientos de esos son 280 MB —el teléfono se queda sin aire a media lista—. La
+   imagen pesa unos 30 KB y el navegador suelta sola la que ya no se ve. */
+async function pintaMini(card, t) {
+  if (card.dataset.pintado) return;
+  card.dataset.pintado = '1';
+  try {
+    const grande = await renderTicket(t, EV, undefined, true);
+    const mini = document.createElement('canvas');
+    const ancho = 300;
+    mini.width = ancho;
+    mini.height = Math.round(grande.height * ancho / grande.width);
+    mini.getContext('2d').drawImage(grande, 0, 0, mini.width, mini.height);
+    const img = new Image();
+    img.decoding = 'async';
+    img.alt = t.buyer_name || '';
+    img.src = mini.toDataURL('image/webp', 0.82);
+    const hueco = card.querySelector('.bt-lienzo');
+    if (hueco) hueco.appendChild(img);
+    // el lienzo grande se suelta a mano: en iPhone tarda en irse solo y son 5 MB cada uno
+    grande.width = grande.height = 0;
+    mini.width = mini.height = 0;
+  } catch (e) {
+    card.dataset.pintado = '';      // que lo reintente si vuelve a asomar
+  }
+}
+
+async function verBoletoGrande(t) {
+  modal(`<div class="h1" style="font-size:17px">${esc(t.buyer_name)}</div>
+    <div class="muted mt8" style="font-size:11.5px">${esc(t.folio)} · ${esc(t.type_name)}
+      · lo vendió ${esc(t.seller_name)}</div>
+    <div class="muted" style="font-size:11px;margin-top:10px">Así se ve sin el código.
+      El que se descarga para el comprador sí lo lleva.</div>
+    <div id="bg-lienzo" style="margin-top:12px;min-height:120px;display:flex;justify-content:center">
+      <div class="muted" style="font-size:11px">dibujando…</div></div>
+    <div class="row mt12" style="gap:7px">
+      <button class="btn sm ghost grow" id="bg-redes">Guardar sin QR</button>
+      ${t.status !== 'void' ? '<button class="btn sm grow" id="bg-dl">Guardar con QR</button>' : ''}
+    </div>
+    <button class="btn ghost mt12" onclick="closeModal()">Cerrar</button>`);
+  try {
+    const cv = await renderTicket(t, EV, undefined, true);
+    cv.style.width = '100%';
+    cv.style.maxWidth = '300px';
+    cv.style.height = 'auto';
+    cv.style.borderRadius = '12px';
+    const h = $('#bg-lienzo');
+    if (h) { h.innerHTML = ''; h.appendChild(cv); }
+  } catch (e) {
+    const h = $('#bg-lienzo');
+    if (h) h.innerHTML = '<div class="muted" style="font-size:11px">No se pudo dibujar</div>';
+  }
+  const red = $('#bg-redes');
+  if (red) red.onclick = async () => {
+    red.disabled = true;
+    try { await downloadPresumible(t, EV); } catch (e) { toast('No se pudo guardar'); }
+    finally { red.disabled = false; }
+  };
+  const dl = $('#bg-dl');
+  if (dl) dl.onclick = async () => {
+    dl.disabled = true;
+    try { await downloadTicket(t, EV); } catch (e) { toast('No se pudo guardar'); }
+    finally { dl.disabled = false; }
+  };
+}
+
+function pintaGaleria(tickets) {
+  const g = $('#bt-galeria');
+  if (!g) return;
+  if (_btObs) { _btObs.disconnect(); _btObs = null; }
+  g.innerHTML = '';
+  if (!tickets.length) return;
+  _btObs = new IntersectionObserver(entradas => {
+    entradas.forEach(e => {
+      if (!e.isIntersecting) return;
+      const i = Number(e.target.dataset.i);
+      pintaMini(e.target, tickets[i]);
+      _btObs.unobserve(e.target);
+    });
+  }, { rootMargin: '400px 0px' });   // se adelanta: al llegar ya está dibujado
+  tickets.forEach((t, i) => {
+    const c = tarjetaBoleto(t);
+    c.dataset.i = i;
+    g.appendChild(c);
+    _btObs.observe(c);
+  });
+}
+
+function aplicaVistaBoletos() {
+  const esGal = BT_VISTA === 'galeria';
+  const tabla = $('#bt-body') && $('#bt-body').closest('.tablewrap');
+  const g = $('#bt-galeria');
+  if (g) g.classList.toggle('hidden', !esGal);
+  // el "no hay nada" manda sobre las dos: si está puesto, ninguna se enseña
+  const vacio = $('#bt-vacio') && !$('#bt-vacio').classList.contains('hidden');
+  if (tabla) tabla.classList.toggle('hidden', esGal || vacio);
+  if (g && vacio) g.classList.add('hidden');
+}
+
+$$('.bt-vista').forEach(b => b.onclick = () => {
+  $$('.bt-vista').forEach(o => o.classList.toggle('sel', o === b));
+  BT_VISTA = b.dataset.vista;
+  aplicaVistaBoletos();
+  // la galería se arma al entrar, no antes: quien nunca la abre no paga el dibujo
+  if (BT_VISTA === 'galeria') { _sigTickets = ''; loadTicketsTable(); }
+});
+
 let _sigTickets = '';
 async function loadTicketsTable(silent) {
   const qs = filterQS();
@@ -1141,6 +1273,11 @@ async function loadTicketsTable(silent) {
   const vacio = $('#bt-vacio'), tabla = body.closest('.tablewrap');
   vacio.classList.toggle('hidden', r.tickets.length > 0);
   if (tabla) tabla.classList.toggle('hidden', r.tickets.length === 0);
+  // la galería lee los MISMOS boletos que la tabla: lo que filtras arriba vale para
+  // las dos vistas, que es lo que uno espera al cambiar de una a la otra
+  if (BT_VISTA === 'galeria') pintaGaleria(r.tickets);
+  else { const g = $('#bt-galeria'); if (g) g.innerHTML = ''; }
+  aplicaVistaBoletos();
   if (!r.tickets.length) {
     const hayFiltro = !!filterQS();
     vacio.innerHTML = `<div style="font:700 13px Manrope;color:var(--cream-60)">${hayFiltro

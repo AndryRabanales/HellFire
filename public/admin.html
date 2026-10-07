@@ -203,6 +203,14 @@
       <select class="input" id="fl-type" style="padding:11px"><option value="">Tipo: todos</option></select>
       <select class="input" id="fl-faculty" style="padding:11px"><option value="">Facultad: todas</option></select>
     </div>
+    <!-- Lista o galería. La tabla sirve para buscar y cobrar; la galería sirve para
+         VER cómo quedaron los boletos, que es otra pregunta. Los dos usan los mismos
+         filtros de arriba: lo que filtras en una lo ves en la otra. -->
+    <div class="row mt12" style="gap:6px">
+      <button type="button" class="btn sm ghost bt-vista sel" data-vista="lista" style="width:auto">Lista</button>
+      <button type="button" class="btn sm ghost bt-vista" data-vista="galeria" style="width:auto">Galería</button>
+      <span class="muted" style="font-size:11px;align-self:center">en galería se ven sin el QR</span>
+    </div>
     <div class="row mt12" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
       <div class="muted" id="bt-count"></div>
       <button class="btn sm" id="btn-export" style="display:inline-flex;align-items:center;gap:7px">
@@ -218,6 +226,9 @@
     <!-- El aviso de "no hay nada" va FUERA de la tabla: dentro se iba con el scroll
          horizontal y en el celular quedaba cortado a media frase. -->
     <div id="bt-vacio" class="hidden" style="padding:26px 14px;text-align:center"></div>
+    <!-- La galería. Cada boleto se dibuja solo cuando asoma en pantalla: con 300
+         vendidos, dibujarlos todos de golpe deja el teléfono clavado un minuto. -->
+    <div id="bt-galeria" class="hidden mt12"></div>
   </section>
 
   <!-- ===== Movimientos: feed de actividad visible para TODOS los admins ===== -->

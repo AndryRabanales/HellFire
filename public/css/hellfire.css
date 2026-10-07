@@ -1727,3 +1727,24 @@ button.rd-p:active{transform:scale(.97)}
 .niv-b:not(:disabled):active{transform:scale(.97)}
 .niv-b.hoy{border-color:var(--ember);background:rgba(255,122,46,.12);cursor:default;opacity:1}
 .niv-b.hoy span{color:var(--ember-soft)}
+
+/* ---- galería de boletos: ver cómo quedaron, sin el código ---- */
+#bt-galeria{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.bt-card{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:rgba(255,255,255,.02);
+  cursor:pointer;display:flex;flex-direction:column;padding:0;text-align:left}
+.bt-card:active{transform:scale(.985)}
+.bt-lienzo{width:100%;aspect-ratio:800/1550;display:block;background:
+  linear-gradient(180deg,rgba(255,122,46,.09),rgba(255,122,46,.02))}
+.bt-lienzo canvas,.bt-lienzo img{width:100%;height:100%;display:block;object-fit:cover}
+.bt-pie{padding:8px 10px 10px;border-top:1px solid var(--line)}
+.bt-pie .bt-n{font:700 12px Manrope;color:var(--cream);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.bt-pie .bt-f{font:500 9.5px "Space Grotesk";color:var(--ember-dim);letter-spacing:.06em;margin-top:2px}
+.bt-card.void{opacity:.5}
+.bt-card.void .bt-n{text-decoration:line-through}
+/* el sello de anulado/ingresó, encima de la imagen */
+.bt-lienzo{position:relative}
+.bt-sello{position:absolute;top:8px;left:8px;font:800 8.5px Manrope;letter-spacing:.12em;
+  padding:3px 7px;border-radius:99px;backdrop-filter:blur(6px)}
+.bt-sello.void{background:rgba(232,112,106,.9);color:#2a0606}
+.bt-sello.used{background:rgba(126,226,168,.9);color:#05250f}
