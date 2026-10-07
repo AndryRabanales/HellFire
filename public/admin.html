@@ -211,6 +211,12 @@
       <button type="button" class="btn sm ghost bt-vista" data-vista="galeria" style="width:auto">Galería</button>
       <span class="muted" style="font-size:11px;align-self:center">en galería se ven sin el QR</span>
     </div>
+    <!-- La barra de la galería. Solo asoma cuando estás en galería: en la lista no
+         pinta nada y ocuparía un renglón para nada. -->
+    <div id="bt-barra" class="hidden mt12">
+      <div class="bt-tipos" id="bt-tipos"></div>
+      <div class="bt-rejilla" id="bt-rejilla" role="group" aria-label="Tamaño de la cuadrícula"></div>
+    </div>
     <div class="row mt12" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
       <div class="muted" id="bt-count"></div>
       <button class="btn sm" id="btn-export" style="display:inline-flex;align-items:center;gap:7px">

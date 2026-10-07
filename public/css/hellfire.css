@@ -1754,3 +1754,31 @@ button.rd-p:active{transform:scale(.97)}
 .bt-sep>span:first-child{font:800 11px Manrope;letter-spacing:.14em;text-transform:uppercase;
   color:var(--danger)}
 .bt-sep .bt-sep-p{font:500 11px Manrope;color:var(--cream-45)}
+
+/* ---- barra de la galería: tipo de boleto y tamaño de la cuadrícula ---- */
+#bt-barra{display:flex;align-items:center;gap:10px}
+/* Los tipos se deslizan a lo largo en vez de amontonarse en tres renglones: con
+   seis categorías, apilarlas empuja la galería media pantalla hacia abajo. */
+.bt-tipos{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;mask-image:linear-gradient(90deg,#000 88%,transparent)}
+.bt-tipos::-webkit-scrollbar{display:none}
+.bt-tipo{flex:none;border:1px solid var(--line);background:rgba(255,255,255,.03);
+  color:var(--cream-60);border-radius:99px;padding:7px 13px;font:700 11.5px Manrope;
+  cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;
+  transition:border-color .15s,color .15s,background .15s}
+.bt-tipo:active{transform:scale(.96)}
+.bt-tipo .bt-tipo-n{font:700 10px "Space Grotesk";color:var(--cream-45)}
+.bt-tipo.sel{border-color:var(--ember);background:rgba(255,122,46,.14);color:var(--cream)}
+.bt-tipo.sel .bt-tipo-n{color:var(--ember-soft)}
+
+/* El tamaño de la cuadrícula se dibuja: un "2" o un "4" no dicen nada, los cuadritos
+   sí —se ve de un vistazo cuál deja los boletos más grandes—. */
+.bt-rejilla{flex:none;display:flex;gap:4px;padding:3px;border:1px solid var(--line);
+  border-radius:11px;background:rgba(255,255,255,.03)}
+.bt-rej{width:30px;height:28px;border:0;background:transparent;border-radius:8px;
+  cursor:pointer;display:grid;place-items:center;padding:0}
+.bt-rej:active{transform:scale(.94)}
+.bt-rej i{display:grid;gap:2px}
+.bt-rej i span{display:block;width:4px;height:4px;border-radius:1px;background:var(--cream-45)}
+.bt-rej.sel{background:rgba(255,122,46,.18);box-shadow:inset 0 0 0 1px var(--line-strong)}
+.bt-rej.sel i span{background:var(--ember-soft)}

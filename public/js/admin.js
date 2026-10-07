@@ -1133,6 +1133,58 @@ async function loadTicketsTab() {
 let BT_VISTA = 'lista';
 let _btObs = null;
 
+/* Cuántos boletos por renglón. Se guarda en el teléfono: quien lo pone en 2 para
+   ver los diseños grandes no quiere volver a ponerlo cada vez que entra. */
+const BT_REJ_KEY = 'onfire_bt_rejilla';
+let BT_REJ = 3;
+try { BT_REJ = Number(localStorage.getItem(BT_REJ_KEY)) || 3; } catch (e) {}
+if (![2, 3, 4].includes(BT_REJ)) BT_REJ = 3;
+
+function aplicaRejilla() {
+  const g = $('#bt-galeria');
+  if (g) g.style.gridTemplateColumns = `repeat(${BT_REJ},minmax(0,1fr))`;
+  $$('.bt-rej').forEach(b => b.classList.toggle('sel', Number(b.dataset.n) === BT_REJ));
+}
+
+function pintaRejilla() {
+  const caja = $('#bt-rejilla');
+  if (!caja || caja.dataset.listo) return;
+  caja.dataset.listo = '1';
+  caja.innerHTML = [2, 3, 4].map(n => {
+    // el icono ES la cuadrícula: n columnas por 2 renglones de cuadritos
+    const puntos = '<span></span>'.repeat(n * 2);
+    return `<button type="button" class="bt-rej" data-n="${n}" title="${n} por renglón"
+      aria-label="${n} boletos por renglón"><i style="grid-template-columns:repeat(${n},4px)">${puntos}</i></button>`;
+  }).join('');
+  $$('.bt-rej').forEach(b => b.onclick = () => {
+    BT_REJ = Number(b.dataset.n);
+    try { localStorage.setItem(BT_REJ_KEY, String(BT_REJ)); } catch (e) {}
+    aplicaRejilla();
+  });
+  aplicaRejilla();
+}
+
+/* Los tipos de boleto, como botones. El select de "Filtros" sigue existiendo y manda
+   lo mismo: aquí no se guarda un filtro aparte —dos filtros de tipo que se
+   contradicen es media lista que no aparece y nadie sabe por qué—, se mueve EL
+   MISMO, así que lo que marques aquí se ve marcado allá y al revés. */
+function pintaTipos() {
+  const caja = $('#bt-tipos'), sel = $('#fl-type');
+  if (!caja || !sel) return;
+  const actual = sel.value;
+  const opciones = [...sel.options];
+  caja.innerHTML = opciones.map(o => {
+    const esTodos = o.value === '';
+    const txt = esTodos ? 'Todos' : o.textContent;
+    return `<button type="button" class="bt-tipo${o.value === actual ? ' sel' : ''}"
+      data-v="${esc(o.value)}">${esc(txt)}</button>`;
+  }).join('');
+  $$('.bt-tipo').forEach(b => b.onclick = () => {
+    sel.value = b.dataset.v;
+    sel.dispatchEvent(new Event('change'));   // una sola puerta: la de siempre
+  });
+}
+
 function tarjetaBoleto(t) {
   const card = document.createElement('button');
   card.type = 'button';
@@ -1256,6 +1308,13 @@ function pintaGaleria(tickets) {
 
 function aplicaVistaBoletos() {
   const esGal = BT_VISTA === 'galeria';
+  const barra = $('#bt-barra');
+  if (barra) barra.classList.toggle('hidden', !esGal);
+  // El total se calla en galería: ahí se entra a VER los boletos, y es la pantalla
+  // que se le enseña a alguien de al lado. En la lista sigue, que es donde se cuenta.
+  const cuenta = $('#bt-count');
+  if (cuenta) cuenta.style.visibility = esGal ? 'hidden' : '';
+  if (esGal) { pintaRejilla(); pintaTipos(); aplicaRejilla(); }
   const tabla = $('#bt-body') && $('#bt-body').closest('.tablewrap');
   const g = $('#bt-galeria');
   if (g) g.classList.toggle('hidden', !esGal);
@@ -1292,7 +1351,7 @@ async function loadTicketsTable(silent) {
   if (tabla) tabla.classList.toggle('hidden', r.tickets.length === 0);
   // la galería lee los MISMOS boletos que la tabla: lo que filtras arriba vale para
   // las dos vistas, que es lo que uno espera al cambiar de una a la otra
-  if (BT_VISTA === 'galeria') pintaGaleria(r.tickets);
+  if (BT_VISTA === 'galeria') { pintaGaleria(r.tickets); pintaTipos(); }
   else { const g = $('#bt-galeria'); if (g) g.innerHTML = ''; }
   aplicaVistaBoletos();
   if (!r.tickets.length) {
