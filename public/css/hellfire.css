@@ -1748,3 +1748,9 @@ button.rd-p:active{transform:scale(.97)}
   padding:3px 7px;border-radius:99px;backdrop-filter:blur(6px)}
 .bt-sello.void{background:rgba(232,112,106,.9);color:#2a0606}
 .bt-sello.used{background:rgba(126,226,168,.9);color:#05250f}
+/* el corte entre los boletos buenos y los anulados */
+.bt-sep{grid-column:1/-1;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;
+  margin:14px 0 2px;padding-top:13px;border-top:1px solid var(--line)}
+.bt-sep>span:first-child{font:800 11px Manrope;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--danger)}
+.bt-sep .bt-sep-p{font:500 11px Manrope;color:var(--cream-45)}

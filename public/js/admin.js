@@ -1221,15 +1221,32 @@ function pintaGaleria(tickets) {
   if (_btObs) { _btObs.disconnect(); _btObs = null; }
   g.innerHTML = '';
   if (!tickets.length) return;
+  // Los anulados, hasta abajo. Mezclados entre los buenos ensucian la vista: se está
+  // mirando "cómo va la venta", y un boleto anulado ya no es venta. Siguen estando
+  // —hay que poder encontrarlos— pero no estorban, y van bajo su propio rótulo para
+  // que nadie los cuente de más.
+  const vivos = tickets.filter(t => t.status !== 'void');
+  const anulados = tickets.filter(t => t.status === 'void');
+  const orden = vivos.concat(anulados);
+
   _btObs = new IntersectionObserver(entradas => {
     entradas.forEach(e => {
       if (!e.isIntersecting) return;
       const i = Number(e.target.dataset.i);
-      pintaMini(e.target, tickets[i]);
+      pintaMini(e.target, orden[i]);
       _btObs.unobserve(e.target);
     });
   }, { rootMargin: '400px 0px' });   // se adelanta: al llegar ya está dibujado
-  tickets.forEach((t, i) => {
+
+  orden.forEach((t, i) => {
+    if (i === vivos.length) {
+      // el rótulo ocupa el renglón entero, para que corte la cuadrícula de verdad
+      const sep = document.createElement('div');
+      sep.className = 'bt-sep';
+      sep.innerHTML = `<span>Anulados · ${anulados.length}</span>
+        <span class="bt-sep-p">ya no cuentan en la venta</span>`;
+      g.appendChild(sep);
+    }
     const c = tarjetaBoleto(t);
     c.dataset.i = i;
     g.appendChild(c);
