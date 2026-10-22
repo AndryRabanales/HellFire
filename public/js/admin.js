@@ -175,15 +175,25 @@ function devolverPrestado() {
 $('#modal-bg').addEventListener('click', e => { if (e.target.id === 'modal-bg') closeModal(); });
 
 function confirmModal({ title, body, okLabel, danger, withReason }) {
+  // El TÍTULO y el botón se escapan aquí dentro, no en cada llamada. Son texto
+  // plano siempre —ninguna de las 40 llamadas mete etiquetas a propósito— y en
+  // cambio casi todas meten un nombre de persona: "Subir a {nombre} a colíder".
+  // Ese nombre lo escribe quien da de alta al vendedor, que puede ser un colíder;
+  // si alguien se registra como <img src=x onerror="...">, el código se ejecutaba
+  // al abrir su ficha, dentro de la sesión de la dueña y con su token a la mano.
+  // El CUERPO sí lleva HTML a propósito (negritas, saltos), así que ahí el escape
+  // va en cada llamada, como ya estaba.
+  const t = esc(title || '');
+  const ok = esc(okLabel || 'Confirmar');
   return new Promise(resolve => {
     modal(`
-      <div class="h1" style="font-size:18px">${title}</div>
+      <div class="h1" style="font-size:18px">${t}</div>
       <div class="muted mt8" style="font-size:13px;line-height:1.5">${body}</div>
       ${withReason ? '<div class="label mt12">Motivo</div><input class="input" id="cm-reason" placeholder="Ej. pago no recibido">' : ''}
       <div class="err mt8" id="cm-err"></div>
       <div class="row mt16 cm-acciones">
         <button class="btn ghost grow" id="cm-no">Cancelar</button>
-        <button class="btn ${danger ? 'danger' : ''} grow" id="cm-yes">${okLabel || 'Confirmar'}</button>
+        <button class="btn ${danger ? 'danger' : ''} grow" id="cm-yes">${ok}</button>
       </div>`);
     $('#cm-no').onclick = () => { closeModal(); resolve(null); };
     $('#cm-yes').onclick = () => {
