@@ -439,9 +439,15 @@
           </div>
           <div class="muted" style="margin:10px 0 0;font-size:11px">Escribe a cuánto queda cada boleto y préndela cuando quieras: se aplica al instante en el teléfono de todos los vendedores, y se apaga igual. El precio sale de la fase que esté corriendo, así que no hay que volver a escribirlo cada vez.</div>
           <div id="fl-tabla" class="mt12"></div>
-          <div class="label mt16" style="font-size:11px">Imagen para el sitio web</div>
+          <div class="label mt16" style="font-size:11px">Imagen para el sitio web · con la flash PRENDIDA</div>
           <div class="muted" style="font-size:11px;margin-bottom:6px">La de ESTA venta flash. Se cambia cuando quieras y solo sale en el sitio mientras la flash esté prendida.</div>
           <div class="promo-img" id="fl-img"></div>
+          <!-- La pareja de la de arriba: ocupa el MISMO lugar del sitio y sale justo
+               cuando la flash está apagada. Antes no existía, así que al apagar la
+               flash ese espacio se quedaba en blanco y no había dónde subir nada. -->
+          <div class="label mt16" style="font-size:11px">Imagen para el sitio web · con la flash APAGADA</div>
+          <div class="muted" style="font-size:11px;margin-bottom:6px">La de los <b style="color:var(--cream)">precios normales</b>. Ocupa el mismo espacio que la de arriba y sale sola en cuanto apagas la flash.</div>
+          <div class="promo-img" id="fl-img-normal"></div>
           <div class="err mt8" id="fl-err"></div>
         </div>
     </details>

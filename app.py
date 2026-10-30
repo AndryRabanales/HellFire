@@ -522,7 +522,7 @@ def set_setting(db, key, value):
     db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
 
-FLYER_VARIANTS = ("promocant", "promoprecio", "ventaflash",
+FLYER_VARIANTS = ("promocant", "promoprecio", "ventaflash", "preciosnormales",
                   "uady", "externo", "vip", "grupo10", "ultravip", "backstage",
                   "grupo10vip", "grupo10ultra",
                   "cortesiaexterno", "cortesiavip", "cortesiaultra", "cortesiabackstage",
@@ -531,6 +531,7 @@ FLYER_VARIANTS = ("promocant", "promoprecio", "ventaflash",
 FLYER_LABEL = {"promocant": "Promoción por cantidad",
                "promoprecio": "Promoción de precio",
                "ventaflash": "Venta flash",
+               "preciosnormales": "Precios normales",
                "uady": "UADY", "externo": "Externo", "vip": "VIP",
                "grupo10": "Grupo de 10", "ultravip": "Ultra VIP",
                "grupo10vip": "Grupo de 10 · VIP", "grupo10ultra": "Grupo de 10 · Ultra VIP",
@@ -1856,8 +1857,15 @@ def precios_publicos():
     # Solo una de las dos puede estar prendida, así que aquí sale una o ninguna.
     # La imagen de la venta flash: cambia con cada flash, así que se manda solo
     # mientras esté prendida.
+    hay_flash = flash_manual(db)
     flash_img = ("/flyer?v=ventaflash"
-                 if flash_manual(db) and setting(db, "flyer_data_ventaflash") else None)
+                 if hay_flash and setting(db, "flyer_data_ventaflash") else None)
+    # La de precios normales es la pareja de la de flash: ocupa el mismo lugar del
+    # sitio y sale justo cuando la flash está apagada. Antes no existía, así que al
+    # apagar la flash ese espacio se quedaba en blanco y no había dónde subir nada.
+    normales_img = (None if hay_flash
+                    else ("/flyer?v=preciosnormales"
+                          if setting(db, "flyer_data_preciosnormales") else None))
     promo = None
     _pc = promo_cantidad(db)
     if _pc:
@@ -1878,6 +1886,9 @@ def precios_publicos():
         "evento": setting(db, "event_name"),
         "flash_activa": flash_manual(db),
         "flash_imagen": flash_img,
+        "normales_imagen": normales_img,
+        # la que el sitio debe pintar en ese espacio, sin tener que elegir
+        "imagen_precios": flash_img or normales_img,
         "promocion": promo,
         "ventas_cerradas": ventas_cerradas(db),
         "actualizado": now_iso(),
@@ -2229,6 +2240,7 @@ def catalog():
             "promo_cant_img": bool(setting(db, "flyer_data_promocant")),
             "promo_precio_img": bool(setting(db, "flyer_data_promoprecio")),
             "flash_img": bool(setting(db, "flyer_data_ventaflash")),
+            "normales_img": bool(setting(db, "flyer_data_preciosnormales")),
         }
 
     # ¿le falta el tutorial? Va aquí y no solo en la respuesta del login: si el
@@ -6156,7 +6168,12 @@ def serve_flyer():
     if not data:
         return "", 404
     resp = Response(base64.b64decode(data), mimetype=mime)
-    resp.headers["Cache-Control"] = "no-cache"
+    # no-store y no no-cache: con "no-cache" el navegador todavía guarda la copia y
+    # solo pregunta si cambió; cualquier proxy en medio se la quedaba igual, y al
+    # cambiar el flyer el sitio seguía enseñando el viejo. Con "no-store" nadie la
+    # guarda, que es lo que hace falta en una imagen que se cambia a media venta.
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
     return resp
 
 # ---------------------------------------------------------------- estáticos

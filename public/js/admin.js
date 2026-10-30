@@ -3665,6 +3665,7 @@ function montaPromos(cat, tipos, guarda) {
   // La venta flash también lleva la suya: cada flash es otra oferta y otra imagen.
   if ($('#fl-img')) {
     montaImagenPromo('#fl-img', 'ventaflash', cat.flash_img);
+    montaImagenPromo('#fl-img-normal', 'preciosnormales', cat.normales_img);
   }
 
   // ---- ventanilla 2: por precio ----
@@ -3715,6 +3716,7 @@ function montaImagenPromo(sel, variant, hay) {
     <label class="btn sm ghost" style="width:auto;display:inline-flex;cursor:pointer">
       ${hay ? 'Cambiar imagen' : 'Subir imagen'}
       <input type="file" accept="image/*" hidden></label>
+    ${hay ? `<button class="btn sm ghost im-ref" style="width:auto">Actualizar el sitio</button>` : ''}
     <span class="muted" style="font-size:10.5px">JPG o PNG \u00b7 sale en el sitio web</span>
     <div class="err" style="margin-top:6px"></div>`;
   const inp = caja.querySelector('input[type=file]');
@@ -3728,10 +3730,35 @@ function montaImagenPromo(sel, variant, hay) {
     fd.append('variant', variant);
     try {
       await API.post('/api/admin/flyer', fd);
-      toast('Imagen guardada \u2713');
-      montaImagenPromo(sel, variant, true);
+      // Se vuelve a pedir el catálogo: así la vista previa sale de lo que el
+      // servidor YA tiene guardado y no de lo que acabamos de mandar. Si algo
+      // falló al guardar, aquí se nota en vez de enterarse por el sitio.
+      await refrescaImagenes();
+      toast('Imagen guardada y sitio actualizado \u2713');
     } catch (e) { if (!guard(e)) err.textContent = e.message; }
   };
+  // Forzar el refresco sin volver a subir: sirve cuando el sitio quedó con la
+  // imagen vieja guardada en el teléfono de alguien.
+  const ref = caja.querySelector('.im-ref');
+  if (ref) ref.onclick = async () => {
+    ref.disabled = true;
+    try {
+      await refrescaImagenes();
+      toast('Sitio actualizado \u2713');
+    } catch (e) { if (!guard(e)) err.textContent = e.message; }
+    finally { ref.disabled = false; }
+  };
+}
+
+/* Vuelve a leer el catálogo y repinta las tres imágenes con lo que el servidor
+   tiene guardado AHORA. La marca de tiempo del src cambia en cada pintada, así
+   que el navegador no puede enseñar la vieja. */
+async function refrescaImagenes() {
+  const cat = await API.get('/api/catalog');
+  if ($('#fl-img')) montaImagenPromo('#fl-img', 'ventaflash', cat.flash_img);
+  if ($('#fl-img-normal')) montaImagenPromo('#fl-img-normal', 'preciosnormales', cat.normales_img);
+  if ($('#pc-img')) montaImagenPromo('#pc-img', 'promocant', cat.promo_cant_img);
+  if ($('#pp-img')) montaImagenPromo('#pp-img', 'promoprecio', cat.promo_precio_img);
 }
 
 async function loadCatalogs() {
