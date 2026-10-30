@@ -1348,7 +1348,7 @@ def _ticket_row(t):
         t["voided_by"] or "", t["void_reason"] or "",
     ]
 
-def build_workbook(rows, summary=None):
+def build_workbook(rows, summary=None, equipo=None):
     wb = Workbook()
     ws = wb.active
     ws.title = "Boletos"
@@ -1383,7 +1383,44 @@ def build_workbook(rows, summary=None):
         for row in ws2.iter_rows(min_row=2, min_col=6, max_col=7):
             for c in row:
                 c.number_format = '"$"#,##0.00'
+    # Tercera hoja: QUIÉN CUELGA DE QUIÉN. La de arriba dice el jefe directo de cada
+    # vendedor, pero no si ese jefe es colíder de alguien más. Sin esto, fuera del
+    # sistema no se puede rearmar la rama líder → colíder → vendedor, que es como se
+    # reparte el trabajo y como se hacen los cortes.
+    if equipo is not None:
+        ws3 = wb.create_sheet("Equipo")
+        ws3.append(["Usuario", "Nivel", "Cuelga de", "Su código de vendedor", "Activo"])
+        for c in ws3[1]:
+            c.fill, c.font = header_fill, header_font
+        for a in equipo:
+            ws3.append([a["username"], a["nivel"], a["parent_name"] or "—",
+                        a["code"] or "—", "Sí" if a["active"] else "En pausa"])
+        for i, w in enumerate([22, 14, 20, 20, 10], 1):
+            ws3.column_dimensions[get_column_letter(i)].width = w
     return wb
+
+
+def equipo_resumen(db):
+    """Las cuentas del panel con su nivel y de quién cuelgan.
+
+    El nivel va con la palabra que se usa al hablar —líder, colíder— y no con la que
+    guarda la base, para que la hoja se lea sin tener que traducir nada."""
+    NOMBRE = {"lider": "Líder", "colider": "Colíder", "admin": "Administrador"}
+    filas = []
+    for a in db.execute("SELECT * FROM admins ORDER BY username").fetchall():
+        padre = None
+        if a["parent_admin_id"]:
+            pa = db.execute("SELECT username FROM admins WHERE id=?",
+                            (a["parent_admin_id"],)).fetchone()
+            padre = pa["username"] if pa else None
+        ficha = db.execute("SELECT code FROM sellers WHERE owner_admin_id=? AND es_lider=1 "
+                           "AND deleted=0", (a["id"],)).fetchone()
+        filas.append({"username": a["username"],
+                      "nivel": NOMBRE.get(a["role"] or "admin", "Administrador"),
+                      "parent_name": padre,
+                      "code": ficha["code"] if ficha else None,
+                      "active": a["active"]})
+    return filas
 
 def seller_summary(db):
     return [dict(r) for r in db.execute("""
@@ -1403,8 +1440,9 @@ def sync_excel():
         rows = db.execute(
             f"SELECT * FROM tickets WHERE {NOT_GUEST} ORDER BY id").fetchall()
         summary = seller_summary(db)
+        equipo = equipo_resumen(db)
         db.close()
-        wb = build_workbook(rows, summary)
+        wb = build_workbook(rows, summary, equipo)
         # el temporal lleva el id del hilo: si dos sincronizaciones se cruzan, cada
         # una escribe el suyo y ninguna se queda sin archivo al renombrar
         tmp = f"{XLSX}.{threading.get_ident()}.tmp"
@@ -5709,7 +5747,7 @@ def export_xlsx():
     db = get_db()
     where, params = ticket_filters()   # RF-93: respeta filtros
     rows = db.execute("SELECT * FROM tickets" + where + " ORDER BY id", params).fetchall()
-    wb = build_workbook(rows, seller_summary(db))
+    wb = build_workbook(rows, seller_summary(db), equipo_resumen(db))
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
