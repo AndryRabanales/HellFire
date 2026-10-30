@@ -3,6 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+  /* CRÍTICO, y va aquí dentro a propósito: de estas dos reglas depende que la
+     página no se vea "en crudo" mientras carga. Todo arranca con class="hidden"
+     —el login, el panel y las doce pestañas—, y esa clase vivía SOLO en
+     /css/hellfire.css. Si esa hoja tardaba (red lenta, Railway despertando, la
+     fuente de Google adelante en la fila), el navegador pintaba el HTML sin
+     estilos: como "hidden" todavía no significaba nada, salía TODO de golpe,
+     login y panel encima, con las listas una tras otra. Escrito aquí se aplica
+     al instante, sin esperar a ningún archivo. */
+  .hidden{display:none!important}
+  html,body{margin:0;background:#050302;color:#f6f1e7;
+    font-family:Manrope,system-ui,-apple-system,sans-serif}
+</style>
 <title>OnFire · Panel de vendedor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
