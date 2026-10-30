@@ -40,13 +40,14 @@ _write_lock = threading.Lock()
 def revalidate_assets(resp):
     # el navegador revalida HTML/JS/CSS en cada carga → nunca sirve una versión vieja
     ct = resp.headers.get("Content-Type", "")
-    if any(t in ct for t in ("text/html", "javascript", "text/css")):
+    ya = "Cache-Control" in resp.headers      # lo que la ruta ya decidió, manda
+    if not ya and any(t in ct for t in ("text/html", "javascript", "text/css")):
         resp.headers["Cache-Control"] = "no-cache"
     # Las respuestas de la API no se guardan NUNCA. Sin esto el navegador puede
     # decidir por su cuenta reusar un /api/catalog viejo —no lleva fecha de
     # caducidad, así que se la inventa— y el vendedor se queda con el precio de
     # antes hasta que refresca a mano. Con dinero de por medio eso no es opcional.
-    elif "application/json" in ct:
+    elif not ya and "application/json" in ct:
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
@@ -6205,7 +6206,14 @@ def pagina(nombre):
     with open(os.path.join(PUBLIC, nombre), encoding="utf-8") as fh:
         html = fh.read()
     html = _RE_ASSET.sub(lambda m: f'{m.group("a")}{m.group("p")}?v={ASSET_V}"', html)
-    return Response(html, mimetype="text/html")
+    resp = Response(html, mimetype="text/html")
+    # La PÁGINA nunca se guarda. Iba sin ninguna instrucción, así que el navegador
+    # decidía por su cuenta cuánto quedársela: después de desplegar había que forzar
+    # la recarga con Ctrl+F5 para ver los cambios, y el teléfono podía seguir días
+    # con la versión vieja. Son 40 KB y trae adentro el sello de versión del CSS y
+    # del JS, así que pedirla siempre no cuesta nada y es lo que mantiene todo al día.
+    resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    return resp
 
 @app.get("/")
 def index():
@@ -6244,7 +6252,14 @@ def static_files(path):
     # por el mismo sellado, o cargarían el CSS viejo
     if path in ("index.html", "admin.html", "scan.html"):
         return pagina(path)
-    return send_from_directory(PUBLIC, path)
+    resp = send_from_directory(PUBLIC, path)
+    # Al revés que la página: el CSS y el JS SÍ se guardan, y por mucho tiempo. Su
+    # dirección lleva el sello ?v=, así que al cambiarlos cambia la dirección y el
+    # navegador se baja la nueva sin que nadie recargue nada. Guardarlos un año
+    # ahorra bajar 300 KB en cada visita —y en Railway, ancho de banda—.
+    if request.args.get("v") and path.split(".")[-1] in ("css", "js"):
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return resp
 
 # ---------------------------------------------------------------- arranque
 
