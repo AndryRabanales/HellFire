@@ -2732,6 +2732,67 @@ def scan_recent():
         f"SELECT COUNT(*) c FROM tickets WHERE status='used' AND {NOT_GUEST}").fetchone()["c"]
     return jsonify(total=total, entradas=[dict(r) for r in filas])
 
+@app.get("/api/scan/contador")
+def scan_contador():
+    """El contador de la puerta, calculado por el SERVIDOR.
+
+    Nació viviendo en el teléfono, y con un solo escáner funcionaba. Con tres no:
+    cada teléfono llevaba su propia cuenta y ninguno sabía de los otros, así que la
+    puerta A decía 400, la B 350 y la C 300 — y ninguno de los tres era el número.
+    Aquí se cuenta una sola vez, sobre los boletos que de verdad están marcados como
+    ingresados, y los tres ven lo mismo.
+
+    De paso deja de importar que un teléfono se quede sin batería, se recargue o lo
+    cambien a media noche: la cuenta no estaba ahí.
+
+    GRATIS no es "sin valor": es cortesía o precio cero —lo que salió gratis de una
+    promoción entra aquí—. Esos cuentan como persona adentro pero no como boleto de
+    pago, que es lo que pide la fórmula."""
+    if not require_scanner():
+        return jsonify(error="clave requerida"), 401
+    db = get_db()
+    r = db.execute(
+        f"""SELECT
+              COUNT(*) AS real_,
+              SUM(CASE WHEN es_cortesia=1 OR price_cents<=0 THEN 1 ELSE 0 END) AS gratis
+            FROM tickets WHERE status='used' AND {NOT_GUEST}""").fetchone()
+    real = r["real_"] or 0
+    gratis = r["gratis"] or 0
+    pago = real - gratis
+    umbral = int(setting(db, "contador_umbral") or 300)
+    cada = max(2, int(setting(db, "contador_cada") or 3))
+    # El ajustado se calcula ENTERO cada vez, no se va sumando: si se cambia la
+    # fórmula a media noche, el número se corrige completo en vez de quedar mitad
+    # con una regla y mitad con otra.
+    if pago <= umbral:
+        ajustado = pago
+    else:
+        extra = pago - umbral
+        ajustado = umbral + (extra - extra // cada)
+    return jsonify(real=real, pago=pago, gratis=gratis, ajustado=ajustado,
+                   umbral=umbral, cada=cada)
+
+
+@app.post("/api/scan/contador")
+def scan_contador_set():
+    """Cambiar la fórmula desde la puerta. Se guarda en el servidor para que los tres
+    teléfonos usen la misma: con cada uno llevando la suya, los números no se podrían
+    ni sumar."""
+    if not require_scanner():
+        return jsonify(error="clave requerida"), 401
+    b = request.json or {}
+    db = get_db()
+    try:
+        if "umbral" in b:
+            set_setting(db, "contador_umbral", max(0, min(99999, int(b["umbral"]))))
+        if "cada" in b:
+            set_setting(db, "contador_cada", max(2, min(20, int(b["cada"]))))
+    except (TypeError, ValueError):
+        return jsonify(error="Esos valores no son números"), 400
+    db.commit()
+    return jsonify(ok=True)
+
+
 @app.post("/api/scan-login")
 def scan_login():
     """Entrada del staff de la puerta: la clave de 6 dígitos que el organizador

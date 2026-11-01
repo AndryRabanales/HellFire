@@ -203,44 +203,15 @@ function leyendo() {
 
 
 /* ---------------- el contador de la puerta ----------------
-   Lleva DOS cuentas a la vez, y eso es a propósito:
+   Lo calcula el SERVIDOR, no este teléfono. Con un solo escáner daba igual, pero
+   con tres cada uno llevaba su propia cuenta y ninguno sabía de los otros: la
+   puerta A decía 400, la B 350, la C 300, y ninguno era el número. Ahora los tres
+   preguntan lo mismo y ven lo mismo.
 
-     · REAL      — cuántas personas hay adentro. Es el número que importa si esta
-                   noche pasa cualquier cosa, y por eso no se toca nunca.
-     · AJUSTADO  — el mismo recuento pasado por la fórmula: los primeros N cuentan
-                   todos y de ahí en adelante se salta uno de cada CADA.
-
-   Lo que NO suma al ajustado: cortesías, boletos de $0 y todo lo que salió gratis
-   de una promoción. Esos sí cuentan como persona —entraron— pero no como boleto
-   de pago.
-
-   Vive en el teléfono (localStorage) porque la puerta no siempre tiene señal: si
-   la página se recarga a media fila, el contador no se reinicia. */
-const C_KEY = 'onfire_contador';
-let CONT = { vistos: [], real: 0, pago: 0, gratis: 0, umbral: 300, cada: 3 };
-
-function contCargar() {
-  try {
-    const g = JSON.parse(localStorage.getItem(C_KEY) || 'null');
-    if (g && typeof g === 'object') CONT = Object.assign(CONT, g);
-  } catch (_) {}
-  if (!Array.isArray(CONT.vistos)) CONT.vistos = [];
-}
-function contGuardar() {
-  try { localStorage.setItem(C_KEY, JSON.stringify(CONT)); } catch (_) {}
-}
-
-/* El ajustado se RECALCULA desde el total de pagados en vez de irse sumando solo.
-   Así, si cambias la fórmula a media noche, el número se corrige entero en vez de
-   quedar mitad con una regla y mitad con otra. */
-function contAjustado() {
-  const u = Math.max(0, CONT.umbral | 0);
-  const c = Math.max(2, CONT.cada | 0);
-  const p = CONT.pago;
-  if (p <= u) return p;
-  const extra = p - u;
-  return u + (extra - Math.floor(extra / c));
-}
+   Se muestran DOS cuentas a la vez, y eso es a propósito: la REAL —cuánta gente hay
+   adentro, el número que importa si esta noche pasa cualquier cosa— y la AJUSTADA
+   con la fórmula. El ajustado nunca borra el real. */
+let CONT = { real: 0, pago: 0, gratis: 0, ajustado: 0, umbral: 300, cada: 3 };
 
 function esGratis(t) {
   if (!t) return false;
@@ -249,50 +220,51 @@ function esGratis(t) {
   return !isNaN(p) && p <= 0.005;
 }
 
-/* Suma una entrada. Solo la primera vez que se ve ese boleto: en la puerta se
-   escanea dos veces sin querer todo el tiempo, y un contador que se mueve con el
-   segundo escaneo no sirve para nada. */
-function contSuma(t) {
-  if (!t || t.id == null) return;
-  const id = String(t.id);
-  if (CONT.vistos.indexOf(id) !== -1) return;
-  CONT.vistos.push(id);
-  CONT.real += 1;
-  if (esGratis(t)) CONT.gratis += 1; else CONT.pago += 1;
-  contGuardar();
-  contPinta();
+async function contRefresca() {
+  try {
+    const r = await fetch('/api/scan/contador', { headers: { 'Authorization': 'Bearer ' + tokenDePuerta() } });
+    if (!r.ok) return;
+    CONT = Object.assign(CONT, await r.json());
+    contPinta();
+  } catch (_) { /* sin señal: se queda el último número bueno, no en cero */ }
 }
 
 function contPinta() {
-  const n = document.getElementById('cont-num');
-  if (n) n.textContent = contAjustado();
   const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-  set('c-ajustado', contAjustado());
+  set('cont-num', CONT.ajustado);
+  set('c-ajustado', CONT.ajustado);
   set('c-real', CONT.real);
   set('c-pago', CONT.pago);
   set('c-gratis', CONT.gratis);
   const sub = document.getElementById('cont-sub');
-  if (sub) sub.textContent = `${CONT.real} escaneados · ${CONT.gratis} gratis no cuentan`;
+  if (sub) sub.textContent = `${CONT.real} adentro · ${CONT.gratis} gratis no cuentan · igual en todas las puertas`;
   const ex = document.getElementById('c-explica');
-  if (ex) {
-    const u = Math.max(0, CONT.umbral | 0), c = Math.max(2, CONT.cada | 0);
-    ex.textContent = `De ${CONT.pago} boletos de pago, el contador marca ${contAjustado()}.`
-      + (CONT.pago > u ? ` Pasando los ${u}, se salta uno de cada ${c}.` : '');
-  }
+  if (ex) ex.textContent = `De ${CONT.pago} boletos de pago, el contador marca ${CONT.ajustado}.`
+    + (CONT.pago > CONT.umbral ? ` Pasando los ${CONT.umbral}, se salta uno de cada ${CONT.cada}.` : '');
+}
+
+async function contManda(campo, valor) {
+  try {
+    await fetch('/api/scan/contador', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json',
+                 'Authorization': 'Bearer ' + tokenDePuerta() },
+      body: JSON.stringify({ [campo]: valor }),
+    });
+  } catch (_) {}
+  contRefresca();
 }
 
 function contAbrir() {
   const u = document.getElementById('c-umbral'), c = document.getElementById('c-cada');
   if (u) u.value = CONT.umbral;
   if (c) c.value = CONT.cada;
-  contPinta();
   document.getElementById('contador').classList.remove('hidden');
+  contRefresca();
 }
 function contCerrar() { document.getElementById('contador').classList.add('hidden'); }
 
-contCargar();
 document.addEventListener('DOMContentLoaded', () => {
-  contPinta();
   const b = document.getElementById('btn-cont');
   if (b) b.onclick = contAbrir;
   const x = document.getElementById('cont-cerrar');
@@ -301,14 +273,16 @@ document.addEventListener('DOMContentLoaded', () => {
   if (caja) caja.addEventListener('click', e => { if (e.target.id === 'contador') contCerrar(); });
   const u = document.getElementById('c-umbral');
   const c = document.getElementById('c-cada');
-  if (u) u.oninput = () => { CONT.umbral = Math.max(0, parseInt(u.value || '0', 10) || 0); contGuardar(); contPinta(); };
-  if (c) c.oninput = () => { CONT.cada = Math.max(2, parseInt(c.value || '2', 10) || 2); contGuardar(); contPinta(); };
+  // al soltar el campo, no en cada tecla: escribir "300" mandaría 3, 30 y 300
+  if (u) u.onchange = () => contManda('umbral', Math.max(0, parseInt(u.value || '0', 10) || 0));
+  if (c) c.onchange = () => contManda('cada', Math.max(2, parseInt(c.value || '2', 10) || 2));
   const r = document.getElementById('c-reset');
-  if (r) r.onclick = () => {
-    if (!confirm('¿Poner el contador en cero? Esto no se puede deshacer.')) return;
-    CONT.vistos = []; CONT.real = 0; CONT.pago = 0; CONT.gratis = 0;
-    contGuardar(); contPinta();
-  };
+  // El contador ya no se "pone en cero" desde aquí: sale de los boletos que de
+  // verdad entraron, así que ponerlo en cero sería borrar entradas reales. Se
+  // queda el botón pero explica dónde se hace.
+  if (r) r.remove();
+  contRefresca();
+  setInterval(contRefresca, 15000);
 });
 
 function render(r) {
