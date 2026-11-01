@@ -88,6 +88,26 @@
     border-radius:20px;border:1px solid rgba(255,120,40,.35);background:rgba(255,110,30,.1);
     transition:transform .1s ease,background .14s}
   .ent-btn:active{transform:scale(.94);background:rgba(255,110,30,.2)}
+  #contador{position:fixed;inset:0;z-index:40;background:rgba(5,3,2,.88);
+    display:flex;align-items:flex-end;justify-content:center;padding:0}
+  .cont-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 4px}
+  .cont-caja{border:1px solid var(--line);border-radius:13px;padding:12px 10px;
+    background:rgba(255,255,255,.03);text-align:center}
+  .cont-caja b{display:block;font:800 26px "Space Grotesk";color:var(--cream)}
+  .cont-caja span{font:600 9.5px Manrope;letter-spacing:.11em;text-transform:uppercase;
+    color:var(--cream-45)}
+  .cont-caja.grande{grid-column:1/-1;border-color:var(--ember);background:rgba(255,122,46,.12)}
+  .cont-caja.grande b{font-size:40px;color:var(--ember-soft)}
+  .cont-cfg{padding:14px 16px 18px;border-top:1px solid var(--line);margin-top:12px}
+  .cont-lbl{font:800 10px Manrope;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--cream-45);margin-bottom:9px}
+  .cont-fila{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;
+    font:500 12.5px Manrope;color:var(--cream-60)}
+  .cont-fila input{width:74px;padding:8px;border-radius:9px;border:1px solid var(--line);
+    background:rgba(255,255,255,.05);color:var(--cream);font:700 15px "Space Grotesk";
+    text-align:center}
+  #result .r-precio{font:700 13px "Space Grotesk";color:var(--ember-soft);margin-top:2px}
+  #result .r-gratis{font:800 12px Manrope;letter-spacing:.12em;color:#7ee2a8}
   .ent-btn b{font:800 14px "Space Grotesk";color:var(--ember-soft);font-variant-numeric:tabular-nums}
   .ent-btn span{font:600 10px Manrope;color:var(--cream-45)}
 
@@ -146,6 +166,7 @@
     </div>
     <div class="row" style="gap:9px">
       <button class="ent-btn" id="btn-ent"><b id="ent-num">0</b><span>entradas</span></button>
+      <button class="ent-btn" id="btn-cont" title="Contador"><b id="cont-num">0</b><span>contador</span></button>
       <div class="live" id="live"><span class="dot"></span><span id="live-text">En vivo</span></div>
     </div>
   </div>
@@ -154,6 +175,50 @@
     <div id="cam-frame"></div>
     <div id="cam-status">Apunta la cámara al código QR</div>
     <div id="result"></div>
+  </div>
+
+  <!-- El contador. Lleva DOS cuentas a la vez y eso es a propósito: la de gente
+       real —cuántas personas hay adentro, que es lo que importa si pasa algo esta
+       noche— y la ajustada con la fórmula. Perder la real para quedarse solo con la
+       ajustada dejaría la puerta sin saber cuánta gente tiene dentro. -->
+  <div id="contador" class="hidden">
+    <div class="ent-card">
+      <div class="ent-cab">
+        <div style="min-width:0">
+          <div class="ent-tit">Contador</div>
+          <div class="muted" id="cont-sub" style="font-size:11px;margin-top:3px"></div>
+        </div>
+        <button class="volver" id="cont-cerrar">Volver a escanear</button>
+      </div>
+      <div class="cont-grid">
+        <div class="cont-caja grande">
+          <b id="c-ajustado">0</b><span>contador</span>
+        </div>
+        <div class="cont-caja">
+          <b id="c-real">0</b><span>personas adentro</span>
+        </div>
+        <div class="cont-caja">
+          <b id="c-pago">0</b><span>de pago</span>
+        </div>
+        <div class="cont-caja">
+          <b id="c-gratis">0</b><span>gratis</span>
+        </div>
+      </div>
+      <div class="cont-cfg">
+        <div class="cont-lbl">La fórmula</div>
+        <div class="cont-fila">
+          <span>Los primeros</span>
+          <input id="c-umbral" type="number" min="0" max="9999" step="1" inputmode="numeric">
+          <span>cuentan todos.</span>
+        </div>
+        <div class="cont-fila">
+          <span>Después, no cuenta 1 de cada</span>
+          <input id="c-cada" type="number" min="2" max="20" step="1" inputmode="numeric">
+        </div>
+        <div class="muted" id="c-explica" style="font-size:11px;line-height:1.5"></div>
+        <button class="volver danger" id="c-reset" style="margin-top:12px;width:100%">Poner el contador en cero</button>
+      </div>
+    </div>
   </div>
 
   <!-- Quiénes ya entraron. Se abre desde el contador de arriba y se cierra tocando

@@ -201,6 +201,116 @@ function leyendo() {
     + '<div class="r-meta">No lo dejes pasar todavía</div>';
 }
 
+
+/* ---------------- el contador de la puerta ----------------
+   Lleva DOS cuentas a la vez, y eso es a propósito:
+
+     · REAL      — cuántas personas hay adentro. Es el número que importa si esta
+                   noche pasa cualquier cosa, y por eso no se toca nunca.
+     · AJUSTADO  — el mismo recuento pasado por la fórmula: los primeros N cuentan
+                   todos y de ahí en adelante se salta uno de cada CADA.
+
+   Lo que NO suma al ajustado: cortesías, boletos de $0 y todo lo que salió gratis
+   de una promoción. Esos sí cuentan como persona —entraron— pero no como boleto
+   de pago.
+
+   Vive en el teléfono (localStorage) porque la puerta no siempre tiene señal: si
+   la página se recarga a media fila, el contador no se reinicia. */
+const C_KEY = 'onfire_contador';
+let CONT = { vistos: [], real: 0, pago: 0, gratis: 0, umbral: 300, cada: 3 };
+
+function contCargar() {
+  try {
+    const g = JSON.parse(localStorage.getItem(C_KEY) || 'null');
+    if (g && typeof g === 'object') CONT = Object.assign(CONT, g);
+  } catch (_) {}
+  if (!Array.isArray(CONT.vistos)) CONT.vistos = [];
+}
+function contGuardar() {
+  try { localStorage.setItem(C_KEY, JSON.stringify(CONT)); } catch (_) {}
+}
+
+/* El ajustado se RECALCULA desde el total de pagados en vez de irse sumando solo.
+   Así, si cambias la fórmula a media noche, el número se corrige entero en vez de
+   quedar mitad con una regla y mitad con otra. */
+function contAjustado() {
+  const u = Math.max(0, CONT.umbral | 0);
+  const c = Math.max(2, CONT.cada | 0);
+  const p = CONT.pago;
+  if (p <= u) return p;
+  const extra = p - u;
+  return u + (extra - Math.floor(extra / c));
+}
+
+function esGratis(t) {
+  if (!t) return false;
+  if (t.es_cortesia) return true;
+  const p = Number(t.price);
+  return !isNaN(p) && p <= 0.005;
+}
+
+/* Suma una entrada. Solo la primera vez que se ve ese boleto: en la puerta se
+   escanea dos veces sin querer todo el tiempo, y un contador que se mueve con el
+   segundo escaneo no sirve para nada. */
+function contSuma(t) {
+  if (!t || t.id == null) return;
+  const id = String(t.id);
+  if (CONT.vistos.indexOf(id) !== -1) return;
+  CONT.vistos.push(id);
+  CONT.real += 1;
+  if (esGratis(t)) CONT.gratis += 1; else CONT.pago += 1;
+  contGuardar();
+  contPinta();
+}
+
+function contPinta() {
+  const n = document.getElementById('cont-num');
+  if (n) n.textContent = contAjustado();
+  const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  set('c-ajustado', contAjustado());
+  set('c-real', CONT.real);
+  set('c-pago', CONT.pago);
+  set('c-gratis', CONT.gratis);
+  const sub = document.getElementById('cont-sub');
+  if (sub) sub.textContent = `${CONT.real} escaneados · ${CONT.gratis} gratis no cuentan`;
+  const ex = document.getElementById('c-explica');
+  if (ex) {
+    const u = Math.max(0, CONT.umbral | 0), c = Math.max(2, CONT.cada | 0);
+    ex.textContent = `De ${CONT.pago} boletos de pago, el contador marca ${contAjustado()}.`
+      + (CONT.pago > u ? ` Pasando los ${u}, se salta uno de cada ${c}.` : '');
+  }
+}
+
+function contAbrir() {
+  const u = document.getElementById('c-umbral'), c = document.getElementById('c-cada');
+  if (u) u.value = CONT.umbral;
+  if (c) c.value = CONT.cada;
+  contPinta();
+  document.getElementById('contador').classList.remove('hidden');
+}
+function contCerrar() { document.getElementById('contador').classList.add('hidden'); }
+
+contCargar();
+document.addEventListener('DOMContentLoaded', () => {
+  contPinta();
+  const b = document.getElementById('btn-cont');
+  if (b) b.onclick = contAbrir;
+  const x = document.getElementById('cont-cerrar');
+  if (x) x.onclick = contCerrar;
+  const caja = document.getElementById('contador');
+  if (caja) caja.addEventListener('click', e => { if (e.target.id === 'contador') contCerrar(); });
+  const u = document.getElementById('c-umbral');
+  const c = document.getElementById('c-cada');
+  if (u) u.oninput = () => { CONT.umbral = Math.max(0, parseInt(u.value || '0', 10) || 0); contGuardar(); contPinta(); };
+  if (c) c.oninput = () => { CONT.cada = Math.max(2, parseInt(c.value || '2', 10) || 2); contGuardar(); contPinta(); };
+  const r = document.getElementById('c-reset');
+  if (r) r.onclick = () => {
+    if (!confirm('¿Poner el contador en cero? Esto no se puede deshacer.')) return;
+    CONT.vistos = []; CONT.real = 0; CONT.pago = 0; CONT.gratis = 0;
+    contGuardar(); contPinta();
+  };
+});
+
 function render(r) {
   const box = document.getElementById('result'), t = r.ticket;
   let cls = 'bad', title = '✕ NO ENTRA', meta = '';
@@ -221,8 +331,22 @@ function render(r) {
   // decía nada —y el de la botella se reconoce justo aquí—.
   const type = t ? etiquetasDe(t) : '';
 
+  // El precio SIEMPRE a la vista, y bien grande si entró gratis. En la puerta eso
+  // es lo que distingue a quien pagó de quien va de cortesía o de promoción, y es
+  // justo lo que el contador no suma.
+  let precio = '';
+  if (t) {
+    precio = esGratis(t)
+      ? '<div class="r-gratis">BOLETO GRATIS · no cuenta</div>'
+      : `<div class="r-precio">$${Number(t.price || 0).toLocaleString('es-MX')}</div>`;
+  }
+
+  // Solo suma si de verdad entró. Un "ya se usó", un anulado o un falso no son una
+  // persona nueva adentro.
+  if (r.result === 'valido') contSuma(t);
+
   box.className = 'show ' + cls;
-  box.innerHTML = `<div class="r-title">${title}</div>${name}${type}` +
+  box.innerHTML = `<div class="r-title">${title}</div>${name}${type}${precio}` +
     (meta ? `<div class="r-meta">${esc(meta)}</div>` : '') +
     '<div class="r-bar"><i></i></div>';   // barra que drena: se ve cuánto le queda
   // se limpia solo, para que nunca quede un resultado viejo confundiendo en la puerta
